@@ -552,6 +552,8 @@ def ftest_module_file_extension_EQ :
            "The argument is parsed as blockname:major:minor:hashed:user info">;
 def fconcepts_ts : Flag<["-"], "fconcepts-ts">,
   HelpText<"Enable C++ Extensions for Concepts.">;
+def templight_profile : Flag<["-"], "templight-profile">,
+  HelpText<"Add timestamps to the templight-dump output">;
 
 let Group = Action_Group in {
 

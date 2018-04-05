@@ -27,6 +27,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
+#include <chrono>
 #include <memory>
 #include <system_error>
 
@@ -354,19 +355,14 @@ struct TemplightEntry {
   std::string Event;
   std::string DefinitionLocation;
   std::string PointOfInstantiation;
+  Optional<std::chrono::high_resolution_clock::rep> TimeStamp;
 };
 } // namespace
 
 namespace llvm {
 namespace yaml {
 template <> struct MappingTraits<TemplightEntry> {
-  static void mapping(IO &io, TemplightEntry &fields) {
-    io.mapRequired("name", fields.Name);
-    io.mapRequired("kind", fields.Kind);
-    io.mapRequired("event", fields.Event);
-    io.mapRequired("orig", fields.DefinitionLocation);
-    io.mapRequired("poi", fields.PointOfInstantiation);
-  }
+  static void mapping(IO &io, TemplightEntry &fields);
 };
 } // namespace yaml
 } // namespace llvm
@@ -378,19 +374,46 @@ class DefaultTemplateInstCallback : public TemplateInstantiationCallback {
 public:
   void initialize(const Sema &) override {}
 
-  void finalize(const Sema &) override {}
+  void finalize(const Sema &) override {
+    if(isProfilingEnabled())
+      for(auto &Entry : *TemplightEntries)
+        displayTemplightEntry(llvm::outs(), Entry);
+  }
 
   void atTemplateBegin(const Sema &TheSema,
                        const CodeSynthesisContext &Inst) override {
-    displayTemplightEntry<true>(llvm::outs(), TheSema, Inst);
+    TemplightEntry Entry = getTemplightEntry<true>(TheSema, Inst);
+
+    if(isProfilingEnabled())
+      TemplightEntries->push_back(std::move(Entry));
+    else
+      displayTemplightEntry(llvm::outs(), Entry);
   }
 
   void atTemplateEnd(const Sema &TheSema,
                      const CodeSynthesisContext &Inst) override {
-    displayTemplightEntry<false>(llvm::outs(), TheSema, Inst);
+    TemplightEntry Entry = getTemplightEntry<false>(TheSema, Inst);
+
+    if(isProfilingEnabled())
+      TemplightEntries->push_back(std::move(Entry));
+    else
+      displayTemplightEntry(llvm::outs(), Entry);
+  }
+  
+  void enableProfiling() {
+    TemplightEntries = std::vector<TemplightEntry>();
+  }
+  
+  bool isProfilingEnabled() {
+    return TemplightEntries.hasValue();
   }
 
+  static const std::chrono::time_point<std::chrono::high_resolution_clock> start;
+
 private:
+
+  Optional<std::vector<TemplightEntry>> TemplightEntries = None;
+  
   static std::string toString(CodeSynthesisContext::SynthesisKind Kind) {
     switch (Kind) {
     case CodeSynthesisContext::TemplateInstantiation:
@@ -421,15 +444,12 @@ private:
     return "";
   }
 
-  template <bool BeginInstantiation>
-  static void displayTemplightEntry(llvm::raw_ostream &Out, const Sema &TheSema,
-                                    const CodeSynthesisContext &Inst) {
+  void displayTemplightEntry(llvm::raw_ostream &Out, 
+                                              TemplightEntry& Entry) {
     std::string YAML;
     {
       llvm::raw_string_ostream OS(YAML);
       llvm::yaml::Output YO(OS);
-      TemplightEntry Entry =
-          getTemplightEntry<BeginInstantiation>(TheSema, Inst);
       llvm::yaml::EmptyContext Context;
       llvm::yaml::yamlize(YO, Entry, true, Context);
     }
@@ -437,9 +457,13 @@ private:
   }
 
   template <bool BeginInstantiation>
-  static TemplightEntry getTemplightEntry(const Sema &TheSema,
+  TemplightEntry getTemplightEntry(const Sema &TheSema,
                                           const CodeSynthesisContext &Inst) {
     TemplightEntry Entry;
+    if (isProfilingEnabled()){
+      auto end = std::chrono::high_resolution_clock::now();
+      Entry.TimeStamp = std::chrono::nanoseconds(end-start).count();
+    }
     Entry.Kind = toString(Inst.Kind);
     Entry.Event = BeginInstantiation ? "Begin" : "End";
     if (auto *NamedTemplate = dyn_cast_or_null<NamedDecl>(Inst.Entity)) {
@@ -462,7 +486,26 @@ private:
     return Entry;
   }
 };
+
+const std::chrono::time_point<std::chrono::high_resolution_clock> 
+  DefaultTemplateInstCallback::start = std::chrono::high_resolution_clock::now();
+
 } // namespace
+
+namespace llvm {
+namespace yaml {
+void MappingTraits<TemplightEntry>::mapping(IO &io, TemplightEntry &fields)
+{
+  io.mapRequired("name", fields.Name);
+  io.mapRequired("kind", fields.Kind);
+  io.mapRequired("event", fields.Event);
+  io.mapRequired("orig", fields.DefinitionLocation);
+  io.mapRequired("poi", fields.PointOfInstantiation);
+  if(fields.TimeStamp)
+    io.mapRequired("stamp", fields.TimeStamp.getValue());
+}
+} // namespace yaml
+} // namespace llvm
 
 std::unique_ptr<ASTConsumer>
 TemplightDumpAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
@@ -478,8 +521,12 @@ void TemplightDumpAction::ExecuteAction() {
   // here so the source manager would be initialized.
   EnsureSemaIsCreated(CI, *this);
 
-  CI.getSema().TemplateInstCallbacks.push_back(
-      std::make_unique<DefaultTemplateInstCallback>());
+  auto D = std::make_unique<DefaultTemplateInstCallback>();
+  if(CI.getFrontendOpts().TemplightProfile)
+    D->enableProfiling();
+  
+  CI.getSema().TemplateInstCallbacks.push_back(std::move(D));
+
   ASTFrontendAction::ExecuteAction();
 }
 
