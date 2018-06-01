@@ -24,6 +24,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Allocator.h"
+#include "InternalInfo.h"
 #include <cassert>
 #include <deque>
 #include <iterator>
@@ -387,12 +388,16 @@ private:
   bool LastInMainSourceFile = false;
 
   /// A constant string that can be used to tag the PathDiagnosticPiece,
-  /// typically with the identification of the creator.  The actual pointer
+  /// typically with the identification of the creator. The actual pointer
   /// value is meant to be an identifier; the string itself is useful for
   /// debugging.
   StringRef Tag;
 
   std::vector<SourceRange> ranges;
+
+public:
+  /// Internal info, that can optionally be dumped.
+  InternalInfoMap InternalInfos;
 
 protected:
   PathDiagnosticPiece(StringRef s, Kind k, DisplayHint hint = Below);
@@ -465,6 +470,10 @@ public:
     flattenTo(Result, Result, ShouldFlattenMacros);
     return Result;
   }
+
+  iterator erase(const_iterator Pos);
+
+  iterator erase(const_iterator first, const_iterator last) = delete;
 
   void dump() const;
 };

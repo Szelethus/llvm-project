@@ -29,6 +29,7 @@
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/InternalInfo.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExplodedGraph.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
@@ -44,6 +45,7 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "InternalInfoImplementations.h"
 #include <cassert>
 #include <cstring>
 #include <memory>
@@ -115,6 +117,38 @@ void PathPieces::flattenTo(PathPieces &Primary, PathPieces &Current,
       break;
     }
   }
+}
+
+
+PathPieces::iterator PathPieces::erase(PathPieces::const_iterator Pos) {
+  using PathPiecesImpl = std::list<std::shared_ptr<PathDiagnosticPiece>>;
+
+  if (Pos == end())
+    return PathPiecesImpl::erase(Pos);
+
+  // By the end of this function, PrevMap will be destructed.
+  InternalInfoMap &PrevMap = (*Pos)->InternalInfos;
+  if (!PrevMap.isEnabled<ConstraintInfo>())
+    return PathPiecesImpl::erase(Pos);
+
+  // By the end of this function, the element referenced by PrevPos will be
+  // destructed.
+  auto PrevPos = Pos++;
+  if (Pos == end())
+    return PathPiecesImpl::erase(PrevPos);
+
+  InternalInfoMap &CurrMap = (*Pos)->InternalInfos;
+
+  // Before we delete PrevPos, we'll pass information from its ConstraintInfo
+  // to the next.
+  // FIXME: We should use copy ctor instead of inserting an empty ConstraintInfo
+  // into the map, but for some reason it crashes.
+  if (!CurrMap.isEnabled<ConstraintInfo>())
+    CurrMap.getOrInsert<ConstraintInfo>();
+
+  CurrMap.get<ConstraintInfo>().copyContents(PrevMap.get<ConstraintInfo>());
+
+  return PathPiecesImpl::erase(PrevPos);
 }
 
 PathDiagnostic::~PathDiagnostic() = default;

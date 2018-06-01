@@ -58,6 +58,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/raw_ostream.h"
+#include "InternalInfoImplementations.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
@@ -261,6 +262,8 @@ private:
   PathDiagnosticLocation
   ExecutionContinues(llvm::raw_string_ostream &os,
                      const PathDiagnosticConstruct &C) const;
+
+  void AddInternalInfoToPathDiagnosticPiece(PathDiagnosticConstruct &C) const;
 
   const BugReport *getBugReport() const { return R; }
 };
@@ -1891,6 +1894,28 @@ static void dropFunctionEntryEdge(const PathDiagnosticConstruct &C,
   Path.pop_front();
 }
 
+void PathDiagnosticBuilder::AddInternalInfoToPathDiagnosticPiece(
+    PathDiagnosticConstruct &C) const {
+
+  if (C.getActivePath().empty())
+    return;
+
+  InternalInfoMap &Map = C.getActivePath().front()->InternalInfos;
+  auto &Opts = getAnalyzerOptions();
+  ProgramStateRef State = C.getCurrentNode()->getState();
+
+  if (Opts.ShouldDumpStateInfo) {
+    StateInfo &SI = Map.getOrInsert<StateInfo>();
+    if (SI.isEmpty())
+      SI.addStateInfoFromState(State);
+  }
+
+  if (Opts.ShouldDumpConstraintInfo) {
+    ConstraintInfo &CurrC = Map.getOrInsert<ConstraintInfo>();
+    CurrC.addConstraintsFromState(State);
+  }
+}
+
 /// Populate executes lines with lines containing at least one diagnostics.
 static void updateExecutedLinesWithDiagnosticPieces(PathDiagnostic &PD) {
 
@@ -1952,6 +1977,7 @@ PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) const {
     LastPiece = BugReporterVisitor::getDefaultEndPath(*this, ErrorNode,
                                                       *getBugReport());
   }
+  AddInternalInfoToPathDiagnosticPiece(Construct);
   Construct.PD->setEndOfPath(LastPiece);
 
   PathDiagnosticLocation PrevLoc = Construct.PD->getLocation();
@@ -1959,6 +1985,8 @@ PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) const {
   // report.
   while (Construct.ascendToPrevNode()) {
     generatePathDiagnosticsForNode(Construct, PrevLoc);
+
+    AddInternalInfoToPathDiagnosticPiece(Construct);
 
     auto VisitorNotes = VisitorsDiagnostics->find(Construct.getCurrentNode());
     if (VisitorNotes == VisitorsDiagnostics->end())
