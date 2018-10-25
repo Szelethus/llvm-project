@@ -257,32 +257,61 @@ bool ento::shouldRegisterCallGraphDumper(const LangOptions &LO) {
 
 namespace {
 class ConfigDumper : public Checker< check::EndOfTranslationUnit > {
-  typedef AnalyzerOptions::ConfigTable Table;
 
-  static int compareEntry(const Table::MapEntryTy *const *LHS,
-                          const Table::MapEntryTy *const *RHS) {
-    return (*LHS)->getKey().compare((*RHS)->getKey());
+  static constexpr size_t getNonCheckerConfigCount() {
+#define ANALYZER_OPTION_DEPENDS_ON_USER_MODE(TYPE, NAME, CMDFLAG, DESC,        \
+                                             SHALLOW_VAL, DEEP_VAL)            \
+  ANALYZER_OPTION(TYPE, NAME, CMDFLAG, DESC, SHALLOW_VAL)
+
+  return 0
+#define ANALYZER_OPTION(TYPE, NAME, CMDFLAG, DESC, DEFAULT_VAL)                \
+           + 1
+#include "clang/StaticAnalyzer/Core/AnalyzerOptions.def"
+              ;
+#undef ANALYZER_OPTION
+#undef ANALYZER_OPTION_DEPENDS_ON_USER_MODE
+  }
+
+  static std::string getStr(unsigned U) {
+    return std::to_string(U);
+  }
+
+  static std::string getStr(bool B) {
+    return B ? "true" : "false";
+  }
+
+  static std::string getStr(StringRef Str) {
+    return Str.empty() ? "\"\"" : Str;
   }
 
 public:
   void checkEndOfTranslationUnit(const TranslationUnitDecl *TU,
                                  AnalysisManager& mgr,
                                  BugReporter &BR) const {
-    const Table &Config = mgr.options.Config;
-
-    SmallVector<const Table::MapEntryTy *, 32> Keys;
-    for (Table::const_iterator I = Config.begin(), E = Config.end(); I != E;
-         ++I)
-      Keys.push_back(&*I);
-    llvm::array_pod_sort(Keys.begin(), Keys.end(), compareEntry);
-
     llvm::errs() << "[config]\n";
-    for (unsigned I = 0, E = Keys.size(); I != E; ++I)
-      llvm::errs() << Keys[I]->getKey() << " = "
-                   << (Keys[I]->second.empty() ? "\"\"" : Keys[I]->second)
-                   << '\n';
 
-    llvm::errs() << "[stats]\n" << "num-entries = " << Keys.size() << '\n';
+    const AnalyzerOptions &AnOpts = mgr.getAnalyzerOptions();
+
+    std::string Options[] = {
+#define ANALYZER_OPTION_DEPENDS_ON_USER_MODE(TYPE, NAME, CMDFLAG, DESC,        \
+                                             SHALLOW_VAL, DEEP_VAL)            \
+  ANALYZER_OPTION(TYPE, NAME, CMDFLAG, DESC, SHALLOW_VAL)
+
+#define ANALYZER_OPTION(TYPE, NAME, CMDFLAG, DESC, DEFAULT_VAL)                \
+     (llvm::Twine(CMDFLAG " = ") + getStr(AnOpts.NAME.getValue())).str(),
+
+#include "clang/StaticAnalyzer/Core/AnalyzerOptions.def"
+#undef ANALYZER_OPTION
+#undef ANALYZER_OPTION_DEPENDS_ON_USER_MODE
+    };
+
+    std::sort(std::begin(Options), std::end(Options));
+
+    for (const std::string &Option : Options)
+      llvm::errs() << Option << '\n';
+
+    llvm::errs() << "[stats]\n" << "num-entries = "
+                 << getNonCheckerConfigCount() << '\n';
   }
 };
 }
