@@ -45,6 +45,7 @@ Following this, the compilation goes on as usual. The fastest way of obtaining t
 An example configuration:
 
 .. code-block:: bash
+
   cmake \
     -G "Ninja" \
     -DCMAKE_BUILD_TYPE=Release \
@@ -53,6 +54,7 @@ An example configuration:
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DLLVM_ENABLE_ASSERTIONS=ON \
     -DLLVM_ENABLE_SPHINX=ON \
+    -DSPHINX_WARNINGS_AS_ERROS=OFF \
     -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_C_COMPILER=clang \
     -DLLVM_USE_LINKER=lld \
@@ -66,9 +68,10 @@ Invocation
 
 Currently, the only Static Analyzer related command line option for the driver (without the use of ``-cc1`` or ``-Xclang``) is ``--analyze``. This will run the analyzer on the supplied files with a default configuration.
 
-If you'd like to configure the analyzer, you can view the options that belong to clang's frontend via ``clang -cc1 --help | grep analyze``. The minimum you'll need for running the analyzer with `-cc1`:
+If you'd like to configure the analyzer, you can view the options that belong to clang's frontend via ``clang -cc1 --help | grep analyze``. The minimum you'll need for running the analyzer with ``-cc1``:
 
 .. code-block:: bash
+
   clang -cc1 -analyze -analyzer-checker=core filename.c
 
 Although we don't support running the analyzer without enabling the entire core package, it is possible, but might lead to crashes and incorrect reports.
@@ -78,7 +81,7 @@ Initializing the analyzer
 
 The following section is always subject to change!
 
-First, ``ParseAnalyzerArgs`` in ``(clang repository)/lib/Frontend/CompilerInvocation.cpp`` parses every analyzer related command line configurations, and validates them, with the exception of checker options.
+First, ``ParseAnalyzerArgs`` in ``(clang repository)/lib/Frontend/CompilerInvocation.cpp`` parses every analyzer related command line arguments, validates them, with the exception of checker options.
 
 Later, in ``(clang repository)/lib/FrontendTool/ExecuteCompilerInvocation.cpp``, ``AnalysisAction`` is created, which creates an ``AnalysisConsumer``. It's constructor will inspect ``AnalyzerOptions`` and set up all initialization functions according to it. These functions will be called in ``AnalysisConsumer::Initialize``, which will create all the necessary classes needed for the actual analysis. The most important among these is ``CheckerManager`` and ``AnalysisManager``.
 
@@ -88,11 +91,14 @@ Checker registration is handled mostly by the ``CheckerRegistry`` class, which i
 
 The actual analysis begins after ``AnalysisConsumer::Initialize()`` is executed.
 
+Checkers and checker registration
+---------------------------------
+
 Terminology
-------------
+^^^^^^^^^^^
 
 Common file names
-^^^^^^^^^^^^^^^^^^
+*****************
 
 The short file names (as of writing this document) will refer to the following files:
 
@@ -107,11 +113,13 @@ The short file names (as of writing this document) will refer to the following f
 .. _Checkers.inc:
 
 * ``Checkers.inc``: ``(build directory)/tools/clang/include/clang/StaticAnalyzer/Checkers/Checkers.inc``
-.. _ClangSACheckersEmitter.cpp
+
+.. _ClangSACheckersEmitter.cpp:
+
 * ``ClangSACheckersEmitter.cpp`` : ``(clang repository)/utils/TableGen/ClangSACheckersEmitter.cpp``
 
 "Registering a checker"
-^^^^^^^^^^^^^^^^^^^^^^^
+***********************
 
 The term "registering" will be used quite a bit in this document, so it's important to note that what we actually mean under it. Unfortunately, in the code, "registering a checker" can misleadingly mean a couple different things, like
 
@@ -120,7 +128,7 @@ The term "registering" will be used quite a bit in this document, so it's import
 * When ``CheckerRegistry::addChecker`` is called, we will call this "adding a checker".
 
 "Builtin" and "plugin" checkers
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+*******************************
 
 We call a checker "builtin", if it has an entry in Checkers.td_. A checker is a "plugin checker", if it was loaded from a plugin runtime. 
 
@@ -131,12 +139,12 @@ The analyzer also supports loading plugins runtime, but that does come at the co
 There is a third category of checkers in this regard, that do not have an entry in the TableGen file, but neither is a plugin checker, for example in ``(clang repository)/unittests/StaticAnalyzer/RegisterCustomCheckersTest.cpp``. These go through the same process are builtin checkers, but without the code being generated for them.
 
 The use of TableGen for builtin checkers
-----------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 During the compilation of the analyzer, Checkers.td_ will be processed by TableGen, which will generate the Checkers.inc_ file according to how the generation was specified in ``(clang repository)/utils/TableGen/ClangSACheckersEmitter.cpp``. CheckerBase.td_ (basically the header file of Checkers.td_) defines the actual structure of a checker entry.
 
-The package system
-^^^^^^^^^^^^^^^^^^
+The parts of a checker
+**********************
 
 Packages are used to bundle checkers into logical categories. Every checker is a part of a package, and any package can be a subpackage of another. If checker ``X`` is within the package ``Y``, its *full name* is ``Y.X``, and it's *name* is ``X``.
 
@@ -158,7 +166,7 @@ We'll define checkers inside packages:
   } // end "core.builtin"
 
 Checker entries
-^^^^^^^^^^^^^^^
+***************
 
 .. code-block:: c++
 
@@ -176,9 +184,9 @@ An entry will have
 * *Documentation state specifier*, which specifies whether the checker has documentation, and is needed for certain output types.
 
 Runtime: from invoking the analyzer to the beginning of the analysis
---------------------------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The CheckerRegistry class
-^^^^^^^^^^^^^^^^^^^^^^^^^
+*************************
 
 This class is responsible for parsing the generated ``Checkers.inc`` file and registering the checkers into the ``CheckerManager`` class accordingly. This is done by creating a ``CheckerRegistry::CheckerInfo`` object for each entry.
