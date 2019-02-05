@@ -94,8 +94,22 @@ The actual analysis begins after ``AnalysisConsumer::Initialize()`` is executed.
 Checkers and checker registration
 ---------------------------------
 
+This section will detail
+
+* What we actually mean under the term "checker",
+* How are they registered (and what registering actually means!),
+* How can the user load checkers from plugins,
+* How can we establish dependencies in between checkers,
+* How can we add checker options.
+
+If you are only developing a single checker, chances are that you won't need to read this entire document. However, if you are a long term developer of maintainer in the Static Analyzer, the more you know the better.
+
 Terminology
 ^^^^^^^^^^^
+
+As the analyzer matured over the years, specific terms that described one specific function can now mean a variety of different things. For example, in the early 2010s, we used the term "checks" (similarly to clang-tidy) instead of "checkers", and there still are some remnants of this in class/object names and documentation. Among the most commonly misused words is "registration".
+
+This section aims to clarify most of these things. It will talk about things that will only be detailed later on, so feel free to skip some parts if they are unclear just yet.
 
 Common file names
 *****************
@@ -127,28 +141,63 @@ The term "registering" will be used quite a bit in this document, so it's import
 * When you add a new entry to Checkers.td_, we will call this "making an entry for a builtin checker",
 * When ``CheckerRegistry::addChecker`` is called, we will call this "adding a checker".
 
+Checkers
+********
+
+Checkers are basically the bread and butter of the analyzer. When specific events (such as a call to a function) happen, checkers may register to that event by implementing a callback (a method), that will be called.
+
+The parts of a checker
+""""""""""""""""""""""
+
+Most checkers have their own file in ``(clang repository)/lib/StaticAnalyzer/Checkers/``, which will contain a *checker class* on the top and a *checker registry function* on the bottom. The latter creates a single instance of the checker class called the *checker object*, which is owned by ``CheckerManager``.
+
+A *package* is not much more than a single string, used for bundling checkers into logical categories. Every checker is a part of a package, and any package can be a *subpackage* of another. If package ``builtin`` is a subpackge of ``core``, it's *full name* will be ``core.builtin``, and it's *name* will be ``builtin``. Similarly if checker ``X`` is within the package ``Y``, its *full name* is ``Y.X``, and it's *name* is ``X``.
+
+Checkers can depend on one another. If a dependency is disabled, so must be every checker that depends on it.
+
 "Builtin" and "plugin" checkers
-*******************************
+"""""""""""""""""""""""""""""""
 
-We call a checker "builtin", if it has an entry in Checkers.td_. A checker is a "plugin checker", if it was loaded from a plugin runtime. 
-
-Creating a new builtin checker is an easy process, as the code required for adding a checker, ensuring that it's dependencies are registered beforehand, and few other things are generated from the TableGen file according to the entry that was made for it.
-
-The analyzer also supports loading plugins runtime, but that does come at the cost of having to do these things manually.
+We call a checker *builtin*, if it has an entry in Checkers.td_. A checker is a *plugin checker*, if it was loaded from a plugin runtime. 
 
 There is a third category of checkers in this regard, that do not have an entry in the TableGen file, but neither is a plugin checker, for example in ``(clang repository)/unittests/StaticAnalyzer/RegisterCustomCheckersTest.cpp``. These go through the same process are builtin checkers, but without the code being generated for them.
 
-The use of TableGen for builtin checkers
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Similarly, *builtin packages* have an entry in Checkers.td_, and *plugin packages* are loaded from a plugin runtime.
+
+Subcheckers
+"""""""""""
+
+As stated earlier, *most* checkers have a single checker object, but not all. *Subcehckers* do not have one on their own, as they are most commonly built in another checker that does. For example, many checkers are implemented by having a checker object which models something (like dynamic memory allocation), and enabling certain subcheckers of it will make the modeling part emit certain reports (like emitting a report for double delete errors). Practically, subcheckers most of the time can be regarded as checker options to the *main checker*.
+
+Command line options
+""""""""""""""""""""
+
+Both checkers and packages can possess *options*. Each package option transitively belongs to all of its subpackages and checkers. These of these options must be preceded by ``-analyzer-config`` and must have the following format:
+
+.. code-block:: bash
+
+  -analyzer-config CheckerOrPackageFullName:OptionName=Value
+
+Checker registration
+^^^^^^^^^^^^^^^^^^^^
+
+The checker registration, or initialization process begins when the ``CheckerRegistry`` object is created. It will store a ``CheckerRegisty::CheckerInfo`` object for each checker containing their full name, a pointer to their checker registry function, and some other things that we will detail later. It'll parse the user's input about which checker should be enabled, resolves dependencies, validates checker options, and eventually calls the checker registry functions by supplying each with a ``CheckerManager`` object. By the time the ``CheckerRegistry`` object is destructed, all necessary checker objects have been created and initialized.
+
+Generating code for builtin checkers
+************************************
+
+Creating a new builtin checker is an easy process, as the code required for adding a checker, ensuring that it's dependencies are registered beforehand, and few other things are generated from TableGen files according to the entry that was made for it.
 
 During the compilation of the analyzer, Checkers.td_ will be processed by TableGen, which will generate the Checkers.inc_ file according to how the generation was specified in ``(clang repository)/utils/TableGen/ClangSACheckersEmitter.cpp``. CheckerBase.td_ (basically the header file of Checkers.td_) defines the actual structure of a checker entry.
 
-The parts of a checker
-**********************
+Creating a basic entry for a builtin package
+""""""""""""""""""""""""""""""""""""""""""""
 
-Packages are used to bundle checkers into logical categories. Every checker is a part of a package, and any package can be a subpackage of another. If checker ``X`` is within the package ``Y``, its *full name* is ``Y.X``, and it's *name* is ``X``.
+A builtin plugin entry will have
 
-Just like a checker, *builtin plugins* can be registered in Checkers.td_, and can be enabled (making every checker inside the package, and every subpackage enabled), or disabled, but only if the package is non-empty. For example, the following entries define the "core" package, and a subpackage of it, the "core.builtin" package.
+* A *name*,
+* (optional) A parent package, which expects a package as an argument. This is how one can express that this entry is a subpacke.
+* (optional) Package options (detiled in a later section).
 
 .. code-block:: c++
 
@@ -165,8 +214,8 @@ We'll define checkers inside packages:
   
   } // end "core.builtin"
 
-Checker entries
-***************
+Creating a basic entry for a builtin checker
+********************************************
 
 .. code-block:: c++
 
