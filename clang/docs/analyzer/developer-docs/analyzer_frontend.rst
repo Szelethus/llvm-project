@@ -193,22 +193,38 @@ During the compilation of the analyzer, Checkers.td_ will be processed by TableG
 Creating a basic entry for a builtin package
 """"""""""""""""""""""""""""""""""""""""""""
 
-A builtin plugin entry will have
+A builtin plugin entry will have a
 
-* A *name*,
-* (optional) A parent package, which expects a package as an argument. This is how one can express that this entry is a subpacke.
-* (optional) Package options (detiled in a later section).
+* *Name*,
+* (optional) Parent package, which expects a package as an argument. This is how one can express that this entry is a subpacke.
+* (optional) Package options (detailed in a later section).
 
 .. code-block:: c++
 
-  def Core : Package<"core">;
-  def CoreBuiltin : Package<"builtin">, ParentPackage<Core>;
+  def PackageClassName : Package<"PackageName">;
+
+With all optional fields:
+
+.. code-block:: c++
+
+  def AnotherPackage : Package<"AnotherPackage">,
+    ParentPackage<PackageClassName>,
+    PackageOptions<[
+      CmdLineOption<CommandLineOptionType,
+                    "OptionName",
+                    "OptionDescription",
+                    "DefaultValue">,
+      CmdLineOption<CommandLineOptionType2,
+                    "OptionName2",
+                    "OptionDescription2",
+                    "DefaultValue2">,
+    ]>;
 
 We'll define checkers inside packages:
 
 .. code-block:: c++
 
-  let ParentPackage = CoreBuiltin in {
+  let ParentPackage = AnotherPackage in {
   
   // List of checker entries for the "core.builtin" package...
   
@@ -217,25 +233,41 @@ We'll define checkers inside packages:
 Creating a basic entry for a builtin checker
 ********************************************
 
-.. code-block:: c++
-
-  def ClassName : Checker<"CheckerName">,
-    HelpText<"Description">,
-    Dependencies<[AnotherClassName]>,
-    Documentation<DocumentationStateSpecifier>;
-
-An entry will have
+An builtin checker entry will have a
 
 * *Class name*, that will be used for function name generation,
 * *Checker name*, that specifies the name of the checker, which will be used to generate the checker's full name,
 * *Description*, which will be displayed for ``-analyzer-checker-help``,
 * (optional) *Dependencies*, which specifies that what other checkers need to be registered before the current one,
-* *Documentation state specifier*, which specifies whether the checker has documentation, and is needed for certain output types.
+* (optional) Checker options (detailed in a later section).
+* *Documentation state specifier*, which specifies whether the checker has documentation, and is needed for certain output types (detailed in a later section).
 
-Runtime: from invoking the analyzer to the beginning of the analysis
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. code-block:: c++
 
-The CheckerRegistry class
-*************************
+  def ClassName : Checker<"CheckerName">,
+    HelpText<"Description">,
+    Documentation<DocumentationStateSpecifier>;
 
-This class is responsible for parsing the generated ``Checkers.inc`` file and registering the checkers into the ``CheckerManager`` class accordingly. This is done by creating a ``CheckerRegistry::CheckerInfo`` object for each entry.
+With all optional fields:
+
+.. code-block:: c++
+
+  def ClassName : Checker<"CheckerName">,
+    HelpText<"Description">,
+    Dependencies<[AnotherClassName, YetAnotherClassName]>,
+    CheckerOptions<[
+      CmdLineOption<CommandLineOptionType,
+                    "OptionName",
+                    "OptionDescription",
+                    "DefaultValue">,
+      CmdLineOption<CommandLineOptionType2,
+                    "OptionName2",
+                    "OptionDescription2",
+                    "DefaultValue2">,
+    ]>,
+    Documentation<DocumentationStateSpecifier>;
+
+Establishing dependencies in between checkers
+*********************************************
+
+
