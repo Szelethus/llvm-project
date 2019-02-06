@@ -19,6 +19,7 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/DynamicLibrary.h"
+#include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -539,4 +540,76 @@ void CheckerRegistry::printEnabledCheckerList(raw_ostream &Out) const {
 
   for (const auto *i : EnabledCheckers)
     Out << i->FullName << '\n';
+}
+
+// Some global constants to help with printing.
+constexpr size_t MinLineWidth = 90;
+constexpr size_t PadForOpt = 2;
+constexpr size_t OptionWidth = 50;
+constexpr size_t PadForDesc = PadForOpt + OptionWidth;
+static_assert(MinLineWidth > PadForDesc, "MinLineWidth must be greater!");
+
+static void printCmdLineOption(llvm::formatted_raw_ostream &FOut,
+                               StringRef CheckerOrPackageFullName,
+                               const CheckerRegistry::CmdLineOption &Option) {
+      FOut.PadToColumn(PadForOpt) << CheckerOrPackageFullName << ':'
+                                  << Option.OptionName;
+
+      // If the buffer's length is greater then PadForDesc, print a newline.
+      if (FOut.getColumn() > PadForDesc)
+        FOut << '\n';
+
+      FOut.PadToColumn(PadForDesc) << "(" << Option.OptionType << ") ";
+
+      for (char C : Option.Description) {
+        if (FOut.getColumn() > MinLineWidth && C == ' ') {
+          FOut << '\n';
+          FOut.PadToColumn(PadForDesc);
+          continue;
+        }
+        FOut << C;
+      }
+
+      if (!Option.Description.empty())
+        FOut << ' ';
+      if (FOut.getColumn() > MinLineWidth) {
+        FOut << '\n';
+        FOut.PadToColumn(PadForDesc);
+      }
+      FOut << "(default: "
+           << (Option.DefaultValStr.empty() ? "\"\"" : Option.DefaultValStr)
+           << ")\n\n";
+}
+
+void CheckerRegistry::printCheckerOptionList(raw_ostream &Out) const {
+  Out << "OVERVIEW: Clang Static Analyzer Checker and Package Option List\n\n";
+  Out << "USAGE: clang -cc1 [CLANG_OPTIONS] -analyzer-config "
+                                        "<OPTION1=VALUE,OPTION2=VALUE,...>\n\n";
+  Out << "       clang -cc1 [CLANG_OPTIONS] -analyzer-config OPTION1=VALUE, "
+                                      "-analyzer-config OPTION2=VALUE, ...\n\n";
+  Out << "       clang [CLANG_OPTIONS] -Xclang -analyzer-config -Xclang"
+                                        "<OPTION1=VALUE,OPTION2=VALUE,...>\n\n";
+  Out << "       clang [CLANG_OPTIONS] -Xclang -analyzer-config -Xclang "
+                              "OPTION1=VALUE, -Xclang -analyzer-config -Xclang "
+                              "OPTION2=VALUE, ...\n\n";
+  Out << "OPTIONS:\n\n";
+
+  llvm::formatted_raw_ostream FOut(Out);
+
+  std::multimap<StringRef, const CmdLineOption &> OptionMap;
+
+  for (const CheckerInfo &Checker : Checkers) {
+    for (const CmdLineOption &Option : Checker.CmdLineOptions) {
+      OptionMap.insert({Checker.FullName, Option});
+    }
+  }
+
+  for (const PackageInfo &Package : Packages) {
+    for (const CmdLineOption &Option : Package.CmdLineOptions) {
+      OptionMap.insert({Package.FullName, Option});
+    }
+  }
+
+  for (const std::pair<StringRef, const CmdLineOption &> &Entry : OptionMap)
+      printCmdLineOption(FOut, Entry.first, Entry.second);
 }

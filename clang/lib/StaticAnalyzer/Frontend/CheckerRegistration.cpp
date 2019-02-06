@@ -65,6 +65,15 @@ void ento::printEnabledCheckerList(raw_ostream &out,
       .printEnabledCheckerList(out);
 }
 
+void ento::printCheckerConfigList(raw_ostream &OS,
+                                  ArrayRef<std::string> plugins,
+                                  AnalyzerOptions &opts,
+                                  DiagnosticsEngine &diags,
+                                  const LangOptions &LangOpts) {
+  CheckerRegistry(plugins, diags, opts, LangOpts)
+      .printCheckerOptionList(OS);
+}
+
 void ento::printAnalyzerConfigList(raw_ostream &out) {
   out << "OVERVIEW: Clang Static Analyzer -analyzer-config Option List\n\n";
   out << "USAGE: clang -cc1 [CLANG_OPTIONS] -analyzer-config "
