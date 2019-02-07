@@ -341,7 +341,3 @@ Loading checker plugins
 ***********************
 
 Should you choose not to add a checker to the official Clang repository (possibly due to security of confidentiality reasons), you can still create checkers that you can load runtime. These checkers can access the same functionality as regular builtin checkers.
-
-Creating a checker plugin
-"""""""""""""""""""""""""
-If a checker depends on another (for example, DynamicMemoryModeling depends on CStringModeling to model calls to ``strcmp``), these dependencies can be declared in Checkers.td_,
