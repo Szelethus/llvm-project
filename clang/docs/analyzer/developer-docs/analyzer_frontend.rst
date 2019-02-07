@@ -160,7 +160,7 @@ Checkers can depend on one another. If a dependency is disabled, so must be ever
 
 Should we imagine checker dependencies as a graph, it would be a directed forest, where the nodes are checkers: each directed tree describes a group of checker's dependencies, a node's parent would be it's dependency, and is ensured to be registered before it's children.
 
-Currently, we don't allow directed circles within this graph, but it would certainly be a great addition.
+Currently, we don't allow directed circles within this graph, but it would certainly be a great addition. Depending on packages, and packages dependning on either packages or checkers also isn't supported yet.
 
 "Builtin" and "plugin" checkers
 """""""""""""""""""""""""""""""
@@ -176,6 +176,8 @@ Subcheckers
 
 As stated earlier, *most* checkers have a single checker object, but not all. *Subcehckers* do not have one on their own, as they are most commonly built in another checker that does. For example, many checkers are implemented by having a checker object which models something (like dynamic memory allocation), and enabling certain subcheckers of it will make the modeling part emit certain reports (like emitting a report for double delete errors). Practically, subcheckers most of the time can be regarded as checker options to the *main checker*.
 
+Natually, all subcheckers depend on their main checkers.
+
 Command line options
 """"""""""""""""""""
 
@@ -187,22 +189,65 @@ Both checkers and packages can possess *options*. Each package option transitive
 
 Should the user supply the same option multiple times (with possibly different values), only the last one will be regarded. If compatibility mode (which is implicitly enabled in driver mode) is disabled, these options will be verified, and additional verifications can be added to the checker's registry function.
 
+Creating a checker plugin
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+*Checker plugins* can be compiled on their own, but can only be used with a specific clang version. At the very least, it is a dynamic library that exports ``clang_analyzerAPIVersionString``. This should be defined as follows:
+
+.. code-block:: c++
+
+  extern "C"
+  const char clang_analyzerAPIVersionString[] =
+      CLANG_ANALYZER_API_VERSION_STRING;
+
+This is used to check whether the current version of the analyzer compatible with the plugin. Attempting to load plugins with incompatible version strings, or without a version string at all, will result in warnings and the plugins not being loaded.
+
+To add a custom checker to the analyzer, the plugin must also define the function ``clang_registerCheckers``.
+
+.. code-block:: c++
+
+   extern "C"
+   void clang_registerCheckers (CheckerRegistry &registry) {
+     registry.addChecker<MainCallChecker>(
+         "example.MainCallChecker", "Disallows calls to functions called main");
+
+     // Register more checkers, plugins, checker dependencies, options...
+   }
+
+The ``clang_registerCheckers`` function may add any number of checkers to the registry. We'll later discuss in detail the usage of ``CheckerRegistry``.
+
+To load a checker plugin, specify the full path to the dynamic library as the argument to the ``-load`` option to the frontend.
+
+.. code-block:: bash
+
+  clang -cc1 -load </path/to/plugin.dylib> -analyze
+    -analyzer-checker=<example.MainCallChecker>
+
+  clang -Xclang -load -Xclang </path/to/plugin.dylib> --analyze
+    -Xclang -analyzer-checker=example.MainCallChecker
+
+You can then enable your custom checker using the ``-analyzer-checker``:
+For a complete working example, see examples/analyzer-plugin.
+
 Checker registration
 ^^^^^^^^^^^^^^^^^^^^
 
 The checker registration, or initialization process begins when the ``CheckerRegistry`` object is created. It will store a ``CheckerRegisty::CheckerInfo`` object for each checker containing their full name, a pointer to their checker registry function, and some other things that we will detail later. It'll parse the user's input about which checker should be enabled, resolves dependencies, validates checker options, and eventually calls the checker registry functions by supplying each with a ``CheckerManager`` object. By the time the ``CheckerRegistry`` object is destructed, all necessary checker objects have been created and initialized.
 
-In the following subsections, we'll investigate how one can use ``CheckerRegistry``'s interface to add new checkers and packages to it. For builtin checkers, there's no need to interact with ``CheckerRegistry`` at all.
+Registering non-builtin checkers
+********************************
+
+Both statically linked- and plugin checkers have to a ``CheckerRegistry`` object, through which they can register themselves.
 
 Registering a package
-*********************
+"""""""""""""""""""""
 
 A new package can be added via ``CheckerRegistry::addPackage()``, which expect a package full name.
 
 A new package option can be added via ``CheckerRegistry::addPackageOption``, which expects the package's full name, the option's name, the default value of it, a human-readable description and the option's type. You can add several package options to a single package by supplying the same package full name when calling ``addPackageOption`` again.
 
 Registering a checker
-*********************
+"""""""""""""""""""""
 
 A new checker can be added via the ``CheckerRegisty::addChecker`` template method, which expects a full checker name, a human-readable description, a pointer to the checker registry function, a pointer to the checker's ``shouldRegister`` function, a (preferably existing) link to the checker's documentation page as regular parameters and the checker class as a template parameter.
 
@@ -292,54 +337,11 @@ With all optional fields:
     ]>,
     Documentation<DocumentationStateSpecifier>;
 
-Creating and loading checker plugins
-************************************
+Loading checker plugins
+***********************
 
 Should you choose not to add a checker to the official Clang repository (possibly due to security of confidentiality reasons), you can still create checkers that you can load runtime. These checkers can access the same functionality as regular builtin checkers.
 
 Creating a checker plugin
 """""""""""""""""""""""""
-
-*Checker plugins* can be compiled on their own, but can only be used with a specific clang version. At the very least, it is a dynamic library that exports ``clang_analyzerAPIVersionString``. This should be defined as follows:
-
-.. code-block:: c++
-
-  extern "C"
-  const char clang_analyzerAPIVersionString[] =
-      CLANG_ANALYZER_API_VERSION_STRING;
-
-This is used to check whether the current version of the analyzer compatible with the plugin. Attempting to load plugins with incompatible version strings, or without a version string at all, will result in warnings and the plugins not being loaded.
-
-To add a custom checker to the analyzer, the plugin must also define the function ``clang_registerCheckers``.
-
-.. code-block:: c++
-
-   extern "C"
-   void clang_registerCheckers (CheckerRegistry &registry) {
-     registry.addChecker<MainCallChecker>(
-         "example.MainCallChecker", "Disallows calls to functions called main");
-
-     // Register more checkers, plugins, checker dependencies, options...
-   }
-
-The first method argument is the full name of the checker, including its enclosing package. The second method argument is a short human-readable description of the checker.
-
-The ``clang_registerCheckers`` function may add any number of checkers to the registry. If any checkers require additional initialization, use the three-argument form of CheckerRegistry::addChecker.
-
-To load a checker plugin, specify the full path to the dynamic library as the argument to the ``-load`` option to the frontend.
-
-.. code-block:: bash
-
-  clang -cc1 -load </path/to/plugin.dylib> -analyze
-    -analyzer-checker=<example.MainCallChecker>
-
-  clang -Xclang -load -Xclang </path/to/plugin.dylib> --analyze
-    -Xclang -analyzer-checker=example.MainCallChecker
-
-You can then enable your custom checker using the ``-analyzer-checker``:
-For a complete working example, see examples/analyzer-plugin.
-
-Establishing dependencies in between checkers
-*********************************************
-
 If a checker depends on another (for example, DynamicMemoryModeling depends on CStringModeling to model calls to ``strcmp``), these dependencies can be declared in Checkers.td_,
