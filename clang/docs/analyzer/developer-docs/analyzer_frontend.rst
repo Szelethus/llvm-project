@@ -153,7 +153,14 @@ Most checkers have their own file in ``(clang repository)/lib/StaticAnalyzer/Che
 
 A *package* is not much more than a single string, used for bundling checkers into logical categories. Every checker is a part of a package, and any package can be a *subpackage* of another. If package ``builtin`` is a subpackge of ``core``, it's *full name* will be ``core.builtin``, and it's *name* will be ``builtin``. Similarly if checker ``X`` is within the package ``Y``, its *full name* is ``Y.X``, and it's *name* is ``X``.
 
+Checker dependencies
+""""""""""""""""""""
+
 Checkers can depend on one another. If a dependency is disabled, so must be every checker that depends on it.
+
+Should we imagine checker dependencies as a graph, it would be a directed forest, where the nodes are checkers: each directed tree describes a group of checker's dependencies, a node's parent would be it's dependency, and is ensured to be registered before it's children.
+
+Currently, we don't allow directed circles within this graph, but it would certainly be a great addition.
 
 "Builtin" and "plugin" checkers
 """""""""""""""""""""""""""""""
@@ -178,26 +185,45 @@ Both checkers and packages can possess *options*. Each package option transitive
 
   -analyzer-config CheckerOrPackageFullName:OptionName=Value
 
+Should the user supply the same option multiple times (with possibly different values), only the last one will be regarded. If compatibility mode (which is implicitly enabled in driver mode) is disabled, these options will be verified, and additional verifications can be added to the checker's registry function.
+
 Checker registration
 ^^^^^^^^^^^^^^^^^^^^
 
 The checker registration, or initialization process begins when the ``CheckerRegistry`` object is created. It will store a ``CheckerRegisty::CheckerInfo`` object for each checker containing their full name, a pointer to their checker registry function, and some other things that we will detail later. It'll parse the user's input about which checker should be enabled, resolves dependencies, validates checker options, and eventually calls the checker registry functions by supplying each with a ``CheckerManager`` object. By the time the ``CheckerRegistry`` object is destructed, all necessary checker objects have been created and initialized.
 
+In the following subsections, we'll investigate how one can use ``CheckerRegistry``'s interface to add new checkers and packages to it. For builtin checkers, there's no need to interact with ``CheckerRegistry`` at all.
+
+Registering a package
+*********************
+
+A new package can be added via ``CheckerRegistry::addPackage()``, which expect a package full name.
+
+A new package option can be added via ``CheckerRegistry::addPackageOption``, which expects the package's full name, the option's name, the default value of it, a human-readable description and the option's type. You can add several package options to a single package by supplying the same package full name when calling ``addPackageOption`` again.
+
+Registering a checker
+*********************
+
+A new checker can be added via the ``CheckerRegisty::addChecker`` template method, which expects a full checker name, a human-readable description, a pointer to the checker registry function, a pointer to the checker's ``shouldRegister`` function, a (preferably existing) link to the checker's documentation page as regular parameters and the checker class as a template parameter.
+
+A new checker option can be added via ``CheckerRegistry::addCheckerOption``, which expects the checker's full name, the option's name, the default value of it, a human-readable description and the option's type. You can add several checker options to a single checker by supplying the same checker full name when calling ``addCheckerOption`` again.
+
+One can establish dependencies in between checkers by calling ``CheckerRegistry::addDependency``, which expects in order the dependendt checker's full name, and the dependency-checker's full name.
+
 Generating code for builtin checkers
 ************************************
 
-Creating a new builtin checker is an easy process, as the code required for adding a checker, ensuring that it's dependencies are registered beforehand, and few other things are generated from TableGen files according to the entry that was made for it.
+Creating a new builtin checker is an easy process, as the code required for adding a checker, ensuring that it's dependencies are registered beforehand, and few other things are generated from TableGen files according to the entry that was made for it. Usually, adding 5-10 lines to Checkers.td_ is all you need to do.
 
 During the compilation of the analyzer, Checkers.td_ will be processed by TableGen, which will generate the Checkers.inc_ file according to how the generation was specified in ``(clang repository)/utils/TableGen/ClangSACheckersEmitter.cpp``. CheckerBase.td_ (basically the header file of Checkers.td_) defines the actual structure of a checker entry.
 
 Creating a basic entry for a builtin package
 """"""""""""""""""""""""""""""""""""""""""""
 
-A builtin plugin entry will have a
-
 * *Name*,
-* (optional) Parent package, which expects a package as an argument. This is how one can express that this entry is a subpacke.
-* (optional) Package options (detailed in a later section).
+* (optional) *Parent package*, which expects a package as an argument. This is how one can express that this entry is a subpacke, and is used for generating the plugin's full name,
+* (optional) *Package options* (detailed in a later section).
+
 
 .. code-block:: c++
 
@@ -231,10 +257,9 @@ We'll define checkers inside packages:
   } // end "core.builtin"
 
 Creating a basic entry for a builtin checker
-********************************************
+""""""""""""""""""""""""""""""""""""""""""""
 
-An builtin checker entry will have a
-
+* *Parent package*, which specified that which package dies this checker belong to. This is assigned implicitly according to which ``let ParentPackage = ??? in { /* checker entry */ }`` block was the checker defined in.
 * *Class name*, that will be used for function name generation,
 * *Checker name*, that specifies the name of the checker, which will be used to generate the checker's full name,
 * *Description*, which will be displayed for ``-analyzer-checker-help``,
@@ -270,37 +295,48 @@ With all optional fields:
 Creating and loading checker plugins
 ************************************
 
-FIXME: move this information to an HTML file in docs/. At the very least, a checker plugin is a dynamic library that exports clang_analyzerAPIVersionString. This should be defined as follows:
+Should you choose not to add a checker to the official Clang repository (possibly due to security of confidentiality reasons), you can still create checkers that you can load runtime. These checkers can access the same functionality as regular builtin checkers.
+
+Creating a checker plugin
+"""""""""""""""""""""""""
+
+*Checker plugins* can be compiled on their own, but can only be used with a specific clang version. At the very least, it is a dynamic library that exports ``clang_analyzerAPIVersionString``. This should be defined as follows:
 
 .. code-block:: c++
 
   extern "C"
   const char clang_analyzerAPIVersionString[] =
-    CLANG_ANALYZER_API_VERSION_STRING;
+      CLANG_ANALYZER_API_VERSION_STRING;
 
-This is used to check whether the current version of the analyzer is known to be incompatible with a plugin. Plugins with incompatible version strings, or without a version string at all, will not be loaded.
+This is used to check whether the current version of the analyzer compatible with the plugin. Attempting to load plugins with incompatible version strings, or without a version string at all, will result in warnings and the plugins not being loaded.
 
-To add a custom checker to the analyzer, the plugin must also define the function clang_registerCheckers. For example:
+To add a custom checker to the analyzer, the plugin must also define the function ``clang_registerCheckers``.
 
 .. code-block:: c++
 
    extern "C"
    void clang_registerCheckers (CheckerRegistry &registry) {
-     registry.addChecker<MainCallChecker>("example.MainCallChecker",
-       "Disallows calls to functions called main");
+     registry.addChecker<MainCallChecker>(
+         "example.MainCallChecker", "Disallows calls to functions called main");
+
+     // Register more checkers, plugins, checker dependencies, options...
    }
 
-The first method argument is the full name of the checker, including its enclosing package. By convention, the registered name of a checker is the name of the associated class (the template argument). The second method argument is a short human-readable description of the checker.
+The first method argument is the full name of the checker, including its enclosing package. The second method argument is a short human-readable description of the checker.
 
-The clang_registerCheckers function may add any number of checkers to the registry. If any checkers require additional initialization, use the three-argument form of CheckerRegistry::addChecker.
+The ``clang_registerCheckers`` function may add any number of checkers to the registry. If any checkers require additional initialization, use the three-argument form of CheckerRegistry::addChecker.
 
-To load a checker plugin, specify the full path to the dynamic library as the argument to the -load option in the cc1 frontend. You can then enable your custom checker using the -analyzer-checker:
+To load a checker plugin, specify the full path to the dynamic library as the argument to the ``-load`` option to the frontend.
 
 .. code-block:: bash
 
   clang -cc1 -load </path/to/plugin.dylib> -analyze
     -analyzer-checker=<example.MainCallChecker>
 
+  clang -Xclang -load -Xclang </path/to/plugin.dylib> --analyze
+    -Xclang -analyzer-checker=example.MainCallChecker
+
+You can then enable your custom checker using the ``-analyzer-checker``:
 For a complete working example, see examples/analyzer-plugin.
 
 Establishing dependencies in between checkers
