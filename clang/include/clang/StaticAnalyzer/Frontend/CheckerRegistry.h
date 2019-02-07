@@ -16,46 +16,6 @@
 #include <cstddef>
 #include <vector>
 
-// FIXME: move this information to an HTML file in docs/.
-// At the very least, a checker plugin is a dynamic library that exports
-// clang_analyzerAPIVersionString. This should be defined as follows:
-//
-//   extern "C"
-//   const char clang_analyzerAPIVersionString[] =
-//     CLANG_ANALYZER_API_VERSION_STRING;
-//
-// This is used to check whether the current version of the analyzer is known to
-// be incompatible with a plugin. Plugins with incompatible version strings,
-// or without a version string at all, will not be loaded.
-//
-// To add a custom checker to the analyzer, the plugin must also define the
-// function clang_registerCheckers. For example:
-//
-//    extern "C"
-//    void clang_registerCheckers (CheckerRegistry &registry) {
-//      registry.addChecker<MainCallChecker>("example.MainCallChecker",
-//        "Disallows calls to functions called main");
-//    }
-//
-// The first method argument is the full name of the checker, including its
-// enclosing package. By convention, the registered name of a checker is the
-// name of the associated class (the template argument).
-// The second method argument is a short human-readable description of the
-// checker.
-//
-// The clang_registerCheckers function may add any number of checkers to the
-// registry. If any checkers require additional initialization, use the three-
-// argument form of CheckerRegistry::addChecker.
-//
-// To load a checker plugin, specify the full path to the dynamic library as
-// the argument to the -load option in the cc1 frontend. You can then enable
-// your custom checker using the -analyzer-checker:
-//
-//   clang -cc1 -load </path/to/plugin.dylib> -analyze
-//     -analyzer-checker=<example.MainCallChecker>
-//
-// For a complete working example, see examples/analyzer-plugin.
-
 #ifndef CLANG_ANALYZER_API_VERSION_STRING
 // FIXME: The Clang version string is not particularly granular;
 // the analyzer infrastructure can change a lot between releases.
