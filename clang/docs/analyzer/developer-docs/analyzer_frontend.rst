@@ -15,11 +15,10 @@ This document will describe the frontend of the Static Analyzer, basically every
 * How crucial objects of the analyzer are initialized before the actual analysis begins, like
 
   * The `AnalyzerOptions` class, which entails how the command line options are parsed,
-  * The `CheckerManager` class, which entails how the checkers of the analyzer are registered and loaded into it
+  * The `CheckerManager` class, which entails how the checkers of the analyzer are registered and loaded into it,
   * No list is complete without at least a third item.
 
-* How certain errors are handled with regards to backward compatibility
-
+* How certain errors are handled with regards to backward compatibility,
 
 starting from how an entry in the TableGen gets processed during the compilation of the project, how this process begins runtime when the analyzer is invoked, up to the point where the actual analysis begins.
 
@@ -27,6 +26,8 @@ The document will rely on the reader having a basic understanding about what che
 
 Overview
 ^^^^^^^^
+
+The following section is sort of a summary, and severeral items will be later revisited in greater detail.
 
 Compilation
 ***********
@@ -98,6 +99,25 @@ Currently, the only Static Analyzer related command line option for the driver i
   clang -cc1 -analyze -analyzer-checker=core filename.c
 
 Although we don't support running the analyzer without enabling the entire core package, it is possible, but might lead to crashes and incorrect reports.
+
+Analyzer configurations
+"""""""""""""""""""""""
+
+Two of the frontend analyzer flags, ``-analyzer-config-help`` and ``-analyzer-checker-option-help`` shows even more *configuration options* (or *config options*), that when specified in the command line, has to be preceded by ``-analyzer-config``:
+
+.. code-block:: bash
+
+   clang -cc1 [analyzer flags] -analyzer-config notes-as-events=true -analyzer-config unix.DynamicMemoryModeling:Optimistic=true
+
+One can always retrieve from a given analyzer invocation the full configuration, by enabling the ``debug.ConfigDumper`` checker:
+
+.. code-block:: bash
+
+   clang -cc1 [analyzer flags] -analyzer=checker=debug.ConfigDumper
+
+For backward compatibility reasons, these options will always be verified by default in frontend mode, but not in driver mode. This is configurable by the ``analyzer-config-compatibility-mode`` frontend flag.
+
+Should the user supply the same option multiple times (with possibly different values), only the last one will be regarded.
 
 Initializing the analyzer
 *************************
@@ -284,7 +304,7 @@ Registering builtin checkers
 
 Creating a new builtin checker is an easy process, as the code required for adding a checker, ensuring that it's dependencies are registered beforehand, and few other things are generated from TableGen files according to the entry that was made for it. Usually, adding 5-10 lines to Checkers.td_ is all you need to do.
 
-During the compilation of the analyzer, Checkers.td_ will be processed by TableGen, which will generate the Checkers.inc_ file according to how the generation was specified in ``(clang repository)/utils/TableGen/ClangSACheckersEmitter.cpp``. CheckerBase.td_ (basically the header file of Checkers.td_) defines the actual structure of a checker entry.
+During the compilation of the analyzer, Checkers.td_ will be processed by TableGen, which will generate the Checkers.inc_ file according to how the generation was specified in ClangSACheckersEmitter.cpp_. CheckerBase.td_ (basically the header file of Checkers.td_) defines the actual structure of a checker entry.
 
 Creating a basic entry for a builtin package
 """"""""""""""""""""""""""""""""""""""""""""
@@ -363,3 +383,10 @@ With all optional fields:
                     "DefaultValue2">,
     ]>,
     Documentation<DocumentationStateSpecifier>;
+
+Model injector
+--------------
+
+Work in progress
+
+.. TODO
