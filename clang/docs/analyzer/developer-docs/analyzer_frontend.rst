@@ -173,6 +173,10 @@ The short file names (as of writing this document) will refer to the following f
 
 * ``ClangSACheckersEmitter.cpp`` : ``(clang repository)/utils/TableGen/ClangSACheckersEmitter.cpp``
 
+.. _RegisterCustomCheckersTest.cpp:
+
+* ``RegisterCustomCheckersTest.cpp`` : ``(clang repository)/unittests/StaticAnalyzer/RegisterCustomCheckersTest.cpp``
+
 "Registering a checker"
 ***********************
 
@@ -190,7 +194,7 @@ Checkers are basically the bread and butter of the analyzer. When specific event
 The parts of a checker
 """"""""""""""""""""""
 
-Most checkers have their own file in ``(clang repository)/lib/StaticAnalyzer/Checkers/``, which will contain a *checker class* on the top and a *checker registry function* on the bottom. The latter creates a single instance of the checker class called the *checker object*, which is owned by ``CheckerManager``.
+Most checkers have their own file in ``(clang repository)/lib/StaticAnalyzer/Checkers/``, which will contain a *checker class* on the top, a *checker registry function* and a *checker shouldRegister function* on the bottom. If the latter return with true, the checker registry function creates a single instance of the checker class called the *checker object*, which is owned by ``CheckerManager``.
 
 A *package* is not much more than a single string, used for bundling checkers into logical categories. Every checker is a part of a package, and any package can be a *subpackage* of another. If package ``builtin`` is a subpackge of ``core``, it's *full name* will be ``core.builtin``, and it's *name* will be ``builtin``. Similarly if checker ``X`` is within the package ``Y``, its *full name* is ``Y.X``, and it's *name* is ``X``.
 
@@ -208,7 +212,7 @@ Currently, we don't allow directed circles within this graph, but it would certa
 
 We call a checker *builtin*, if it has an entry in Checkers.td_. A checker is a *plugin checker*, if it was loaded from a plugin runtime. 
 
-There is a third category of checkers in this regard, that do not have an entry in the TableGen file, but neither is a plugin checker, for example in ``(clang repository)/unittests/StaticAnalyzer/RegisterCustomCheckersTest.cpp``. These go through the same process are builtin checkers, but without the code being generated for them.
+There is a third category of checkers in this regard, that do not have an entry in the TableGen file, but neither is a plugin checker, for example in RegisterCustomCheckersTest.cpp_. These go through the same process are builtin checkers, but without the code being generated for them.
 
 Similarly, *builtin packages* have an entry in Checkers.td_, and *plugin packages* are loaded from a plugin runtime.
 
@@ -272,6 +276,55 @@ To load a checker plugin, specify the full path to the dynamic library as the ar
   clang -cc1 -load </path/to/plugin.dylib> -analyze -analyzer-checker=example.MainCallChecker
 
   clang -Xclang -load -Xclang </path/to/plugin.so> --analyze -Xclang -analyzer-checker=example.MainCallChecker
+
+Non-generated, statically linked checkers
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+We briefly touched on a class called ``AnalysisAction``, but that's nowhere near the entire story. ``AnalysisAction`` is a derived class of ``ASTFrontendAction``, that as of now houses a single overriden method ``CreateASTConsumer``, that at the end of the day creates an ``AnalysisConsumer``. However, any ``ASTFrontendAction`` descendant that does at least this much can run the analyzer.
+
+A prime example of this can be found in RegisterCustomCheckersTest.cpp_, which does this for unittesting purposes.
+
+.. code-block:: c++
+
+  class TestAction : public ASTFrontendAction {
+    class DiagConsumer : public PathDiagnosticConsumer {
+      llvm::raw_ostream &Output;
+  
+    public:
+      DiagConsumer(llvm::raw_ostream &Output) : Output(Output) {}
+      void FlushDiagnosticsImpl(std::vector<const PathDiagnostic *> &Diags,
+                                FilesMade *filesMade) override {
+        for (const auto *PD : Diags)
+          Output << PD->getCheckName() << ":" << PD->getShortDescription();
+      }
+  
+      StringRef getName() const override { return "Test"; }
+    };
+  
+    llvm::raw_ostream &DiagsOutput;
+  
+  public:
+    TestAction(llvm::raw_ostream &DiagsOutput) : DiagsOutput(DiagsOutput) {}
+  
+    std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &Compiler,
+                                                   StringRef File) override {
+      std::unique_ptr<AnalysisASTConsumer> AnalysisConsumer =
+          CreateAnalysisConsumer(Compiler);
+      AnalysisConsumer->AddDiagnosticConsumer(new DiagConsumer(DiagsOutput));
+      Compiler.getAnalyzerOpts()->CheckersControlList = {
+          {"custom.CustomChecker", true}};
+      AnalysisConsumer->AddCheckerRegistrationFn([](CheckerRegistry &Registry) {
+        Registry.addChecker<CheckerT>("custom.CustomChecker", "Description", "");
+      });
+      return std::move(AnalysisConsumer);
+    }
+  };
+  
+  bool runCheckerOnCode(const std::string &Code, std::string &Diags) {
+    llvm::raw_string_ostream OS(Diags);
+    return tooling::runToolOnCode(new TestAction<CheckerT>(OS), Code);
+  }
+
 
 Checker registration
 ^^^^^^^^^^^^^^^^^^^^
