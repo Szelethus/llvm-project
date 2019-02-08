@@ -31,7 +31,7 @@ Overview
 Compilation
 ***********
 
-The Static Analyzer consists of 3 libraries, ``libStaticAnalyzerCore``, ``libStaticAnalyzerCheckers`` and ``libStaticAnalyzerFrontend``. The checker library depends on core, and frontend depends on both. Before any of them are compiled, TableGen is run on Checkers.td_, according to the rules defined in ClangSACheckersEmitter.cpp_, and generates the file Checkers.inc. By using the preprocessor, this, and other definition files (with the extension ``*.def``) are converted into actual code, such as fields within ``AnalyzerOptions`` and function calls for registering checkers in ``CheckerRegistry``.
+The Static Analyzer consists of 3 libraries, ``libStaticAnalyzerCore``, ``libStaticAnalyzerCheckers`` and ``libStaticAnalyzerFrontend``. The checker library depends on core, and frontend depends on both. Before any of them are compiled, TableGen is run on Checkers.td_, according to the rules defined in ClangSACheckersEmitter.cpp_, and generates the file Checkers.inc_. By using the preprocessor, this, and other definition files (with the extension ``*.def``) are converted into actual code, such as fields within ``AnalyzerOptions`` and function calls for registering checkers in ``CheckerRegistry``.
 
 Following this, the compilation goes on as usual. The fastest way of obtaining the analyzer for development is by configuring CMake with the following options:
 
@@ -66,9 +66,32 @@ If you want to build the analyzer and nothing else, compile the target ``clang``
 Invocation
 **********
 
-Currently, the only Static Analyzer related command line option for the driver (without the use of ``-cc1`` or ``-Xclang``) is ``--analyze``. This will run the analyzer on the supplied files with a default configuration.
+Other documents detail the difference between the *driver* and the *frontend* of clang far more precisely, but we'll touch on this briefly: When you input ``clang`` into the command line, you invoke the driver. This compiler driver has the "look and feel" of a standard GCC compiler -- it invokes several compiler components, collectively called the *frontend*, with options appropriate for your system, which is for example why you don't have to specify where the standard libraries are. The Static Analyzer itself is a compiler component, or *frontend action*. You can tell the driver to invoke it with a default set of options with the ``--analyze`` flag:
 
-If you'd like to configure the analyzer, you can view the options that belong to clang's frontend via ``clang -cc1 --help | grep analyze``. The minimum you'll need for running the analyzer with ``-cc1``:
+.. code-block:: bash
+
+  # We might as well use the -c flag too, in order to skip code generation.
+  clang myfile.c --analyze
+
+You won't be able to see the command line options for frontend actions with the regular ``--help`` flag, nor will you be able to use them -- for that, you'll have to enter clang's "frontend mode" with the ``-cc1`` flag:
+
+.. code-block:: bash
+
+   # Display all command line options
+   clang -cc1 --help
+
+   # Display all Static Analyzer options
+   clang -cc1 --help | grep analyze
+
+You can, however, use the driver mode and still pass some options to the frontend, if you use ``-Xclang`` before *each* frontend command line option.
+
+.. code-block:: bash
+
+   clang myfile.c --analyze -Xclang -analyzer-output=html
+
+Every driver option is implicitly a frontend option too, so with ``-cc1``, you can use whatever option you'd like without ``-Xclang`` or anything similar.
+
+Currently, the only Static Analyzer related command line option for the driver is ``--analyze``. Note that in frontend mode, clang doesn't use a default set of options, so the bare minimum you'll need is enabling the Static Analyzer frontend action with ``-analyze``, enable at least a single checker, and specify an input file.
 
 .. code-block:: bash
 
@@ -78,8 +101,6 @@ Although we don't support running the analyzer without enabling the entire core 
 
 Initializing the analyzer
 *************************
-
-The following section is always subject to change!
 
 First, ``ParseAnalyzerArgs`` in ``(clang repository)/lib/Frontend/CompilerInvocation.cpp`` parses every analyzer related command line arguments, validates them, with the exception of checker options.
 
