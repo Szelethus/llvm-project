@@ -254,7 +254,7 @@ To add a custom checker to the analyzer, the plugin must also define the functio
    extern "C"
    void clang_registerCheckers(CheckerRegistry &registry) {
      registry.addChecker<MainCallChecker>(
-         "example.MainCallChecker", "Disallows calls to functions called main");
+         "example.MainCallChecker", "Disallows calls to functions called main", "");
 
      // Register more checkers, plugins, checker dependencies, options...
    }
@@ -310,21 +310,25 @@ A prime example of this can be found in RegisterCustomCheckersTest.cpp_, which d
                                                    StringRef File) override {
       std::unique_ptr<AnalysisASTConsumer> AnalysisConsumer =
           CreateAnalysisConsumer(Compiler);
+
       AnalysisConsumer->AddDiagnosticConsumer(new DiagConsumer(DiagsOutput));
-      Compiler.getAnalyzerOpts()->CheckersControlList = {
-          {"custom.CustomChecker", true}};
+
       AnalysisConsumer->AddCheckerRegistrationFn([](CheckerRegistry &Registry) {
         Registry.addChecker<CheckerT>("custom.CustomChecker", "Description", "");
+     
+        // Register more checkers, plugins, checker dependencies, options...
       });
+
       return std::move(AnalysisConsumer);
     }
   };
   
   bool runCheckerOnCode(const std::string &Code, std::string &Diags) {
     llvm::raw_string_ostream OS(Diags);
-    return tooling::runToolOnCode(new TestAction<CheckerT>(OS), Code);
+    return tooling::runToolOnCode(new TestAction(OS), Code);
   }
 
+Using ``AnalysisConsumer::AddCheckerRegistrationFn``, the user can gain access to a a ``CheckerRegisrty`` object, from which point checker registration is pretty much the same with plugin checkers.
 
 Checker registration
 ^^^^^^^^^^^^^^^^^^^^
@@ -436,6 +440,13 @@ With all optional fields:
                     "DefaultValue2">,
     ]>,
     Documentation<DocumentationStateSpecifier>;
+
+Analyzer Outputs
+----------------
+
+Work in progress
+
+.. TODO
 
 Model injector
 --------------
