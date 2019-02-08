@@ -119,11 +119,11 @@ This section will detail
 
 * What we actually mean under the term "checker",
 * How are they registered (and what registering actually means!),
-* How can the user load checkers from plugins,
+* How can the user create and load checker plugins,
 * How can we establish dependencies in between checkers,
 * How can we add checker options.
 
-If you are only developing a single checker, chances are that you won't need to read this entire document. However, if you are a long term developer of maintainer in the Static Analyzer, the more you know the better.
+If you are only developing a single checker, chances are that you won't need to read this entire document. However, if you are a long term developer or maintainer in the Static Analyzer, the more you know the better.
 
 Terminology
 ^^^^^^^^^^^
@@ -228,7 +228,7 @@ To add a custom checker to the analyzer, the plugin must also define the functio
 .. code-block:: c++
 
    extern "C"
-   void clang_registerCheckers (CheckerRegistry &registry) {
+   void clang_registerCheckers(CheckerRegistry &registry) {
      registry.addChecker<MainCallChecker>(
          "example.MainCallChecker", "Disallows calls to functions called main");
 
@@ -237,18 +237,21 @@ To add a custom checker to the analyzer, the plugin must also define the functio
 
 The ``clang_registerCheckers`` function may add any number of checkers to the registry. We'll later discuss in detail the usage of ``CheckerRegistry``.
 
-To load a checker plugin, specify the full path to the dynamic library as the argument to the ``-load`` option to the frontend.
+Compiling a plugin
+******************
+
+Compilation should be done with the help of an LLVM tool called ``llvm-config``, and additionally, linked against ``libStaticAnalyzerCore``. Please refer to it's documentation page for details. We've created a github repository that contains a very minimal out-of-tree (not within the Clang repository) Static Analyzer plugin: `<https://github.com/Szelethus/minimal_csa_plugin/>`_. For an in-tree implementation, see ``examples/analyzer-plugin``.
+
+Loading a plugin
+****************
+
+To load a checker plugin, specify the full path to the dynamic library as the argument to the ``-load`` frontend option.
 
 .. code-block:: bash
 
-  clang -cc1 -load </path/to/plugin.dylib> -analyze
-    -analyzer-checker=<example.MainCallChecker>
+  clang -cc1 -load </path/to/plugin.dylib> -analyze -analyzer-checker=example.MainCallChecker
 
-  clang -Xclang -load -Xclang </path/to/plugin.dylib> --analyze
-    -Xclang -analyzer-checker=example.MainCallChecker
-
-You can then enable your custom checker using the ``-analyzer-checker``:
-For a complete working example, see examples/analyzer-plugin.
+  clang -Xclang -load -Xclang </path/to/plugin.so> --analyze -Xclang -analyzer-checker=example.MainCallChecker
 
 Checker registration
 ^^^^^^^^^^^^^^^^^^^^
@@ -258,7 +261,7 @@ The checker registration, or initialization process begins when the ``CheckerReg
 Registering non-builtin checkers
 ********************************
 
-Both statically linked- and plugin checkers have to a ``CheckerRegistry`` object, through which they can register themselves.
+Both statically linked- and plugin checkers have to access to ``CheckerRegistry`` object, through which they can register themselves.
 
 Registering a package
 """""""""""""""""""""
@@ -276,8 +279,8 @@ A new checker option can be added via ``CheckerRegistry::addCheckerOption``, whi
 
 One can establish dependencies in between checkers by calling ``CheckerRegistry::addDependency``, which expects in order the dependendt checker's full name, and the dependency-checker's full name.
 
-Generating code for builtin checkers
-************************************
+Registering builtin checkers
+****************************
 
 Creating a new builtin checker is an easy process, as the code required for adding a checker, ensuring that it's dependencies are registered beforehand, and few other things are generated from TableGen files according to the entry that was made for it. Usually, adding 5-10 lines to Checkers.td_ is all you need to do.
 
@@ -286,10 +289,11 @@ During the compilation of the analyzer, Checkers.td_ will be processed by TableG
 Creating a basic entry for a builtin package
 """"""""""""""""""""""""""""""""""""""""""""
 
+A package entry has a
+
 * *Name*,
 * (optional) *Parent package*, which expects a package as an argument. This is how one can express that this entry is a subpacke, and is used for generating the plugin's full name,
-* (optional) *Package options* (detailed in a later section).
-
+* (optional) *Package options*.
 
 .. code-block:: c++
 
@@ -325,12 +329,14 @@ We'll define checkers inside packages:
 Creating a basic entry for a builtin checker
 """"""""""""""""""""""""""""""""""""""""""""
 
+A checker entry has a
+
 * *Parent package*, which specified that which package dies this checker belong to. This is assigned implicitly according to which ``let ParentPackage = ??? in { /* checker entry */ }`` block was the checker defined in.
 * *Class name*, that will be used for function name generation,
 * *Checker name*, that specifies the name of the checker, which will be used to generate the checker's full name,
 * *Description*, which will be displayed for ``-analyzer-checker-help``,
 * (optional) *Dependencies*, which specifies that what other checkers need to be registered before the current one,
-* (optional) Checker options (detailed in a later section).
+* (optional) Checker options.
 * *Documentation state specifier*, which specifies whether the checker has documentation, and is needed for certain output types (detailed in a later section).
 
 .. code-block:: c++
@@ -357,8 +363,3 @@ With all optional fields:
                     "DefaultValue2">,
     ]>,
     Documentation<DocumentationStateSpecifier>;
-
-Loading checker plugins
-***********************
-
-Should you choose not to add a checker to the official Clang repository (possibly due to security of confidentiality reasons), you can still create checkers that you can load runtime. These checkers can access the same functionality as regular builtin checkers.
