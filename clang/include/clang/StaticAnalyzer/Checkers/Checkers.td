@@ -1232,8 +1232,7 @@ def ExplodedGraphViewer : Checker<"ViewExplodedGraph">,
 
 def ReportMacroLocations : Checker<"ReportMacroLocations">,
   HelpText<"Emits a warning for every macro expansion. Used for testing macro "
-           "expansions for the plist output. Use with `-analyzer-config "
-           "expand-macros=true`!">,
+           "expansions for several output types.">,
   Documentation<NotDocumented>;
 
 def ReportStmts : Checker<"ReportStmts">,
