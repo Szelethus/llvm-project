@@ -242,7 +242,6 @@ static json::Object createResult(const PathDiagnostic &Diag, json::Array &Files,
   auto Iter = RuleMapping.find(Diag.getCheckName());
   assert(Iter != RuleMapping.end() && "Rule ID is not in the array index map?");
 
-  assert(Diag.getLocation().asLocation().getFileEntry());
   return json::Object{
       {"message", createMessage(Diag.getVerboseDescription())},
       {"codeFlows", json::Array{createCodeFlow(Path, Files)}},
