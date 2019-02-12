@@ -1230,6 +1230,12 @@ def ExplodedGraphViewer : Checker<"ViewExplodedGraph">,
   HelpText<"View Exploded Graphs using GraphViz">,
   Documentation<NotDocumented>;
 
+def ReportMacroLocations : Checker<"ReportMacroLocations">,
+  HelpText<"Emits a warning for every macro expansion. Used for testing macro "
+           "expansions for the plist output. Use with `-analyzer-config "
+           "expand-macros=true`!">,
+  Documentation<NotDocumented>;
+
 def ReportStmts : Checker<"ReportStmts">,
   HelpText<"Emits a warning for every statement.">,
   Documentation<NotDocumented>;

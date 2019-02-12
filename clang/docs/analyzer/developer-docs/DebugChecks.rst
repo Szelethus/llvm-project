@@ -289,6 +289,11 @@ least one bug report per function) may actually change the values reported by
 Output testing checkers
 =======================
 
+- debug.ReportMacroLocations is specifically designed for testing the macro
+  expansions in various output types, like html, or plist if the analyzer config
+  ``expand-macros`` is set to true, and will emit a report for each ``Stmt``
+  whose ``SourceLocation`` is a macro ID.
+
 - debug.ReportStmts reports a warning at **every** statement, making it a very
   useful tool for testing thoroughly bug report construction and output
   emission.

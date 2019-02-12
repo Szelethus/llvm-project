@@ -268,6 +268,85 @@ bool ento::shouldRegisterExplodedGraphViewer(const LangOptions &LO) {
 }
 
 //===----------------------------------------------------------------------===//
+// Macro expansion testing for several output types.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+class ReportMacroLocations : public Checker<check::PreStmt<Stmt>> {
+  std::unique_ptr<BuiltinBug> BT_macroLoc;
+
+  mutable llvm::SmallPtrSet<const void *, 30> ReportedExpansionLocations;
+
+public:
+  ReportMacroLocations() : BT_macroLoc(new BuiltinBug(this, "Macro expansion")) {}
+
+  void checkPreStmt(const Stmt *S, CheckerContext &C) const {
+    SourceLocation SLoc = S->getBeginLoc();
+    if (!SLoc.isMacroID())
+      return;
+
+    // Deduplicate with the expansion location, so we only emit one warning per
+    // macro expansion.
+    if (!ReportedExpansionLocations
+            .insert(C.getSourceManager().getExpansionLoc(SLoc)
+                        .getPtrEncoding()).second)
+      return;
+
+    ExplodedNode *Node = C.generateNonFatalErrorNode();
+    if (!Node)
+      return;
+
+    auto Report = llvm::make_unique<BugReport>(
+        *BT_macroLoc, "Statement was expanded from a macro", Node);
+
+    C.emitReport(std::move(Report));
+  }
+};
+
+} // end of anonymous namespace
+
+void ento::registerReportMacroLocations(CheckerManager &mgr) {
+  auto *Checker = mgr.registerChecker<ReportMacroLocations>();
+
+  AnalyzerOptions &Opts = mgr.getAnalyzerOptions();
+
+  DiagnosticsEngine &Diags = mgr.getASTContext().getDiagnostics();
+  const unsigned ID = Diags.getCustomDiagID(DiagnosticsEngine::Warning,
+      "Explicitly enabled checker '%0' creates a "
+      "PathDiagnosticMacroPiece for each statement that is expanded from "
+      "a macro, but %1");
+
+  switch (Opts.AnalysisDiagOpt) {
+    case PD_HTML:
+    case PD_HTML_SINGLE_FILE:
+      // HTML outputs display macro expansions by default.
+      break;
+
+    case PD_PLIST:
+    case PD_PLIST_MULTI_FILE:
+    case PD_PLIST_HTML:
+      if (!Opts.ShouldDisplayMacroExpansions) {
+        Diags.Report({}, ID) << Checker->getTagDescription()
+          << "the plist output only displays macro expansions if "
+             "the analyzer config 'expand-macros' is set to true";
+      }
+      break;
+
+    default:
+      DiagnosticsEngine &Diags = mgr.getASTContext().getDiagnostics();
+      Diags.Report({}, ID) << Checker->getTagDescription()
+          << "the current output type doesn't support macro expansions; use "
+             "plist or html";
+      break;
+  }
+}
+
+bool ento::shouldRegisterReportMacroLocations(const LangOptions &LO) {
+  return true;
+}
+
+//===----------------------------------------------------------------------===//
 // Emits a report for every Stmt that the analyzer visits.
 //===----------------------------------------------------------------------===//
 
