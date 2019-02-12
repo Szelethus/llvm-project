@@ -312,7 +312,7 @@ void ento::registerReportMacroLocations(CheckerManager &mgr) {
   AnalyzerOptions &Opts = mgr.getAnalyzerOptions();
 
   DiagnosticsEngine &Diags = mgr.getASTContext().getDiagnostics();
-  const unsigned ID = Diags.getCustomDiagID(DiagnosticsEngine::Warning,
+  const unsigned ID = Diags.getCustomDiagID(DiagnosticsEngine::Error,
       "Explicitly enabled checker '%0' creates a "
       "PathDiagnosticMacroPiece for each statement that is expanded from "
       "a macro, but %1");
