@@ -189,6 +189,20 @@ public:
   const FieldRegion *getUninitRegion() const { return getHead().getRegion(); }
 
   void printNoteMsg(llvm::raw_ostream &Out) const;
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  LLVM_DUMP_METHOD void dump() { printNoteMsg(llvm::errs()); }
+
+  LLVM_DUMP_METHOD void dumpElementRegions() {
+    unsigned Count = 0;
+    for (const FieldNode &Node : Chain) {
+      llvm::errs().indent(Count);
+      Count += 2;
+      Node.getRegion()->dump();
+      llvm::errs() << '\n';
+    }
+  }
+#endif // !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
 };
 
 using UninitFieldMap = std::map<const FieldRegion *, llvm::SmallString<50>>;
