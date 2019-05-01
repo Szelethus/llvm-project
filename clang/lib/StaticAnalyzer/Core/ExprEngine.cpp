@@ -2235,6 +2235,7 @@ void ExprEngine::processEndOfFunction(NodeBuilderContext& BC,
           // The comment above only pardons us for not cleaning up a
           // temporary destructor. If any other statements are found here,
           // it must be a separate problem.
+          llvm::errs() << ConstructionContextItem::getKindAsString(I.first.getItem().getKind()) << '\n';
           assert(I.first.getItem().getKind() ==
                      ConstructionContextItem::TemporaryDestructorKind ||
                  I.first.getItem().getKind() ==
