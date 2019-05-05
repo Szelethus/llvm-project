@@ -2230,19 +2230,24 @@ void ExprEngine::processEndOfFunction(NodeBuilderContext& BC,
     const LocationContext *LC = FromLC;
     while (LC != ToLC) {
       assert(LC && "ToLC must be a parent of FromLC!");
-      for (auto I : State->get<ObjectsUnderConstruction>())
+      for (auto I : State->get<ObjectsUnderConstruction>()) {
         if (I.first.getLocationContext() == LC) {
           // The comment above only pardons us for not cleaning up a
           // temporary destructor. If any other statements are found here,
           // it must be a separate problem.
           llvm::errs() << ConstructionContextItem::getKindAsString(I.first.getItem().getKind()) << '\n';
+          LC->getDecl()->dump();
+          llvm::errs() << '\n';
+          I.second.getAsRegion()->getAs<VarRegion>()->getValueType()->dump();
           assert(I.first.getItem().getKind() ==
                      ConstructionContextItem::TemporaryDestructorKind ||
                  I.first.getItem().getKind() ==
                      ConstructionContextItem::ElidedDestructorKind);
           State = State->remove<ObjectsUnderConstruction>(I.first);
         }
-      LC = LC->getParent();
+        
+        LC = LC->getParent();
+      }
     }
   }
 
