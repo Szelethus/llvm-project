@@ -2245,9 +2245,9 @@ void ExprEngine::processEndOfFunction(NodeBuilderContext& BC,
                      ConstructionContextItem::ElidedDestructorKind);
           State = State->remove<ObjectsUnderConstruction>(I.first);
         }
-        
-        LC = LC->getParent();
       }
+        
+      LC = LC->getParent();
     }
   }
 
