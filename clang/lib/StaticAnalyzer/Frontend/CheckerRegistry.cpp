@@ -19,7 +19,6 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/DynamicLibrary.h"
-#include "llvm/Support/FormattedStream.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -519,17 +518,8 @@ void CheckerRegistry::printCheckerWithDescList(raw_ostream &Out,
     if (!AnOpts.ShowCheckerHelpHidden && Checker.IsHidden)
       continue;
 
-    Out.indent(InitialPad) << Checker.FullName;
-
-    int Pad = OptionFieldWidth - Checker.FullName.size();
-
-    // Break on long option names.
-    if (Pad < 0) {
-      Out << '\n';
-      Pad = OptionFieldWidth + InitialPad;
-    }
-    Out.indent(Pad + 2) << Checker.Desc;
-
+    AnalyzerOptions::printFormattedEntry(Out, {Checker.FullName, Checker.Desc},
+                                         InitialPad, OptionFieldWidth);
     Out << '\n';
   }
 }
@@ -542,59 +532,12 @@ void CheckerRegistry::printEnabledCheckerList(raw_ostream &Out) const {
     Out << i->FullName << '\n';
 }
 
-// Some global constants to help with printing.
-constexpr size_t MinLineWidth = 90;
-constexpr size_t PadForOpt = 2;
-constexpr size_t OptionWidth = 50;
-constexpr size_t PadForDesc = PadForOpt + OptionWidth;
-static_assert(MinLineWidth > PadForDesc, "MinLineWidth must be greater!");
-
-static void printCmdLineOption(llvm::formatted_raw_ostream &FOut,
-                               StringRef CheckerOrPackageFullName,
-                               const CheckerRegistry::CmdLineOption &Option) {
-      FOut.PadToColumn(PadForOpt) << CheckerOrPackageFullName << ':'
-                                  << Option.OptionName;
-
-      // If the buffer's length is greater then PadForDesc, print a newline.
-      if (FOut.getColumn() > PadForDesc)
-        FOut << '\n';
-
-      FOut.PadToColumn(PadForDesc) << "(" << Option.OptionType << ") ";
-
-      for (char C : Option.Description) {
-        if (FOut.getColumn() > MinLineWidth && C == ' ') {
-          FOut << '\n';
-          FOut.PadToColumn(PadForDesc);
-          continue;
-        }
-        FOut << C;
-      }
-
-      if (!Option.Description.empty())
-        FOut << ' ';
-      if (FOut.getColumn() > MinLineWidth) {
-        FOut << '\n';
-        FOut.PadToColumn(PadForDesc);
-      }
-      FOut << "(default: "
-           << (Option.DefaultValStr.empty() ? "\"\"" : Option.DefaultValStr)
-           << ")\n\n";
-}
-
 void CheckerRegistry::printCheckerOptionList(raw_ostream &Out) const {
   Out << "OVERVIEW: Clang Static Analyzer Checker and Package Option List\n\n";
-  Out << "USAGE: clang -cc1 [CLANG_OPTIONS] -analyzer-config "
-                                        "<OPTION1=VALUE,OPTION2=VALUE,...>\n\n";
-  Out << "       clang -cc1 [CLANG_OPTIONS] -analyzer-config OPTION1=VALUE, "
-                                      "-analyzer-config OPTION2=VALUE, ...\n\n";
-  Out << "       clang [CLANG_OPTIONS] -Xclang -analyzer-config -Xclang"
-                                        "<OPTION1=VALUE,OPTION2=VALUE,...>\n\n";
-  Out << "       clang [CLANG_OPTIONS] -Xclang -analyzer-config -Xclang "
-                              "OPTION1=VALUE, -Xclang -analyzer-config -Xclang "
-                              "OPTION2=VALUE, ...\n\n";
+  Out << "USAGE: -analyzer-config <OPTION1=VALUE,OPTION2=VALUE,...>\n\n";
+  Out << "       -analyzer-config OPTION1=VALUE, -analyzer-config "
+         "OPTION2=VALUE, ...\n\n";
   Out << "OPTIONS:\n\n";
-
-  llvm::formatted_raw_ostream FOut(Out);
 
   std::multimap<StringRef, const CmdLineOption &> OptionMap;
 
@@ -610,6 +553,19 @@ void CheckerRegistry::printCheckerOptionList(raw_ostream &Out) const {
     }
   }
 
-  for (const std::pair<StringRef, const CmdLineOption &> &Entry : OptionMap)
-      printCmdLineOption(FOut, Entry.first, Entry.second);
+  for (const std::pair<StringRef, const CmdLineOption &> &Entry : OptionMap) {
+    const CmdLineOption &Option = Entry.second;
+    std::string FullOption = (Entry.first + ":" + Option.OptionName).str();
+
+    std::string Desc =
+        ("(" + Option.OptionType + ") " + Option.Description + " (default: " +
+         (Option.DefaultValStr.empty() ? "\"\"" : Option.DefaultValStr) + ")")
+            .str();
+
+    AnalyzerOptions::printFormattedEntry(Out, {FullOption, Desc},
+                                         /*InitialPad*/ 2,
+                                         /*EntryWidth*/ 50,
+                                         /*MinLineWidth*/ 90);
+    Out << "\n\n";
+  }
 }

@@ -166,6 +166,29 @@ public:
   static std::vector<StringRef>
   getRegisteredCheckers(bool IncludeExperimental = false);
 
+  /// Convenience function for printing options or checkers and their
+  /// description in a formatted manner. If \p MinLineWidth is set to 0, no line
+  /// breaks are introduced for the description.
+  ///
+  /// Format, depending whether the option name's length is less then
+  /// \p OptionWidth:
+  ///
+  ///   <padding>EntryName<padding>Description
+  ///   <---------padding--------->Description
+  ///   <---------padding--------->Description
+  ///
+  ///   <padding>VeryVeryLongOptionName
+  ///   <---------padding--------->Description
+  ///   <---------padding--------->Description
+  ///   ^~~~~~~~ InitialPad
+  ///   ^~~~~~~~~~~~~~~~~~~~~~~~~~ EntryWidth
+  ///   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~MinLineWidth
+  static void printFormattedEntry(
+      llvm::raw_ostream &Out,
+      std::pair<StringRef, StringRef> EntryDescPair,
+      size_t EntryWidth, size_t InitialPad, size_t MinLineWidth = 0);
+
+
   /// Pair of checker name and enable/disable.
   std::vector<std::pair<std::string, bool>> CheckersControlList;
 

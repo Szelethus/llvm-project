@@ -2,17 +2,10 @@
 
 // CHECK: OVERVIEW: Clang Static Analyzer Checker and Package Option List
 //
-// CHECK: USAGE: clang -cc1 [CLANG_OPTIONS] -analyzer-config <OPTION1=VALUE,OPTION2=VALUE,...>
+// CHECK: USAGE: -analyzer-config <OPTION1=VALUE,OPTION2=VALUE,...>
 //
-// CHECK:        clang -cc1 [CLANG_OPTIONS] -analyzer-config OPTION1=VALUE,
-// CHECK-SAME:     -analyzer-config OPTION2=VALUE, ...
-//
-// CHECK:        clang [CLANG_OPTIONS] -Xclang -analyzer-config
-// CHECK-SAME:     -Xclang<OPTION1=VALUE,OPTION2=VALUE,...>
-//
-// CHECK:        clang [CLANG_OPTIONS] -Xclang -analyzer-config
-// CHECK-SAME:     -Xclang OPTION1=VALUE, -Xclang -analyzer-config
-// CHECK-SAME:     -Xclang OPTION2=VALUE, ...
+// CHECK:        -analyzer-config OPTION1=VALUE, -analyzer-config
+// CHECK-SAME:   OPTION2=VALUE, ...
 //
 // CHECK: OPTIONS:
 //
