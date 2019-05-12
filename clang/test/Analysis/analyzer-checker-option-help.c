@@ -9,7 +9,7 @@
 //
 // CHECK: OPTIONS:
 //
-// CHECK:   alpha.clone.CloneChecker:MinimumCloneComplexity  
+// CHECK:   alpha.clone.CloneChecker:MinimumCloneComplexity
 // CHECK-SAME:   (int) Ensures that every clone has at least
 // CHECK:        the given complexity. Complexity is here
 // CHECK:        defined as the total amount of children
