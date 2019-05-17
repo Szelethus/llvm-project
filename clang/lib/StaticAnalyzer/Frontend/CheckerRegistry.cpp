@@ -514,13 +514,34 @@ void CheckerRegistry::printCheckerWithDescList(raw_ostream &Out,
   }
 
   const size_t InitialPad = 2;
-  for (const auto &Checker : Checkers) {
-    if (!AnOpts.ShowCheckerHelpHidden && Checker.IsHidden)
-      continue;
 
-    AnalyzerOptions::printFormattedEntry(Out, {Checker.FullName, Checker.Desc},
+  auto Print = [=](llvm::raw_ostream &Out, const CheckerInfo &Checker,
+                   StringRef Description) {
+    AnalyzerOptions::printFormattedEntry(Out, {Checker.FullName, Description},
                                          InitialPad, OptionFieldWidth);
     Out << '\n';
+  };
+
+  for (const auto &Checker : Checkers) {
+    if (Checker.IsHidden) {
+      if (AnOpts.ShowCheckerHelpDeveloper)
+        Print(Out, Checker, Checker.Desc);
+      continue;
+    }
+
+    if (Checker.FullName.startswith("alpha")) {
+      if (AnOpts.ShowCheckerHelpAlpha)
+        Print(Out, Checker,
+              ("(Enable only for development!) " + Checker.Desc).str());
+      continue;
+    }
+
+    if (AnOpts.ShowCheckerHelp) {
+      if (Checker.FullName.startswith("beta"))
+        Print(Out, Checker, ("(Experimental) " + Checker.Desc).str());
+      else
+        Print(Out, Checker, Checker.Desc);
+    }
   }
 }
 
