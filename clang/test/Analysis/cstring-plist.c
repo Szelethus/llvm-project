@@ -1,7 +1,7 @@
 // RUN: rm -f %t
 // RUN: %clang_analyze_cc1 -fblocks \
 // RUN:   -analyzer-checker=core,unix.Malloc,unix.cstring.NullArg \
-// RUN:   -analyzer-disable-checker=alpha.unix.cstring.OutOfBounds \
+// RUN:   -analyzer-disable-checker=beta.unix.cstring.OutOfBounds \
 // RUN:   -analyzer-output=plist -o %t %s
 // RUN: FileCheck -input-file %t %s
 

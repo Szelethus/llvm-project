@@ -12,12 +12,19 @@ include "CheckerBase.td"
 // Packages.
 //===----------------------------------------------------------------------===//
 
-// The Alpha package is for checkers that have too many false positives to be
-// turned on by default. The hierarchy under Alpha should be organized in the
-// hierarchy checkers would have had if they were truly at the top level.
-// (For example, a Cocoa-specific checker that is alpha should be in
-// alpha.osx.cocoa).
+// The Alpha package is for checkers that are unstable, incomplet have too many
+// false positives to be turned on by default. The hierarchy under Alpha should
+// be organized in the hierarchy checkers would have had if they were truly at
+// the top level. (For example, a Cocoa-specific checker that is alpha should be
+// in alpha.osx.cocoa).
 def Alpha : Package<"alpha">;
+
+// Beta checkers are considered stable, but need some finishing touches,
+// might have a not ideal false positive/false negative ratio, but are
+// usable in production.
+// Beta checkers checkers at minimum must be able to analyze several large open
+// source projects without crashes, and have a reasonable FP/TP ratio.
+def Beta : Package<"beta">;
 
 def Core : Package<"core">;
 def CoreBuiltin : Package<"builtin">, ParentPackage<Core>, Hidden;
@@ -72,8 +79,10 @@ def Taint : Package<"taint">, ParentPackage<SecurityAlpha>;
 
 def Unix : Package<"unix">;
 def UnixAlpha : Package<"unix">, ParentPackage<Alpha>;
+def UnixBeta : Package<"unix">, ParentPackage<Beta>;
 def CString : Package<"cstring">, ParentPackage<Unix>;
 def CStringAlpha : Package<"cstring">, ParentPackage<UnixAlpha>;
+def CStringBeta : Package<"cstring">, ParentPackage<UnixBeta>;
 
 def OSX : Package<"osx">;
 def OSXAlpha : Package<"osx">, ParentPackage<Alpha>;
@@ -358,11 +367,6 @@ def CStringSyntaxChecker : Checker<"BadSizeArg">,
 
 let ParentPackage = CStringAlpha in {
 
-def CStringOutOfBounds : Checker<"OutOfBounds">,
-  HelpText<"Check for out-of-bounds access in string functions">,
-  Dependencies<[CStringModeling]>,
-  Documentation<HasAlphaDocumentation>;
-
 def CStringBufferOverlap : Checker<"BufferOverlap">,
   HelpText<"Checks for overlap in two buffer arguments">,
   Dependencies<[CStringModeling]>,
@@ -374,6 +378,15 @@ def CStringNotNullTerm : Checker<"NotNullTerminated">,
   Documentation<HasAlphaDocumentation>;
 
 } // end "alpha.unix.cstring"
+
+let ParentPackage = CStringBeta in {
+
+def CStringOutOfBounds : Checker<"OutOfBounds">,
+  HelpText<"Check for out-of-bounds access in string functions">,
+  Dependencies<[CStringModeling]>,
+  Documentation<HasAlphaDocumentation>;
+
+} // end "beta.unix.cstring"
 
 let ParentPackage = Unix in {
 
