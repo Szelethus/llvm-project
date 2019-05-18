@@ -523,6 +523,12 @@ void CheckerRegistry::printCheckerWithDescList(raw_ostream &Out,
   };
 
   for (const auto &Checker : Checkers) {
+    // The order of this if branches is significant, we wouldn't like to display
+    // developer checkers even in the alpha output. For example,
+    // alpha.cplusplus.IteratorModeling is a modeling checker, hence it's hidden
+    // by default, and users (even when the user is a developer of an alpha
+    // checker) shouldn't normally tinker with whether they should be enabled.
+
     if (Checker.IsHidden) {
       if (AnOpts.ShowCheckerHelpDeveloper)
         Print(Out, Checker, Checker.Desc);

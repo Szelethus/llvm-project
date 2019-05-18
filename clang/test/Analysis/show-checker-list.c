@@ -28,6 +28,11 @@
 // CHECK-DEVELOPER-NOT: alpha.unix.Chroot
 // CHECK-ALPHA:         alpha.unix.Chroot
 
+// Note that alpha.cplusplus.IteratorModeling is not only an alpha, but also a
+// hidden checker. In this case, we'd only like to see it in the developer list.
+// CHECK-ALPHA-NOT: alpha.cplusplus.IteratorModeling
+// CHECK-DEVELOPER: alpha.cplusplus.IteratorModeling
+
 // CHECK-STABLE:        core.DivideZero
 // CHECK-DEVELOPER-NOT: core.DivideZero
 // CHECK-ALPHA-NOT:     core.DivideZero
