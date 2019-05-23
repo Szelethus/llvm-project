@@ -542,12 +542,8 @@ void CheckerRegistry::printCheckerWithDescList(raw_ostream &Out,
       continue;
     }
 
-    if (AnOpts.ShowCheckerHelp) {
-      if (Checker.FullName.startswith("beta"))
-        Print(Out, Checker, ("(Experimental) " + Checker.Desc).str());
-      else
+    if (AnOpts.ShowCheckerHelp)
         Print(Out, Checker, Checker.Desc);
-    }
   }
 }
 
