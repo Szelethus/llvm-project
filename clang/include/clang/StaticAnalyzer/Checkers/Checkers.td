@@ -532,7 +532,7 @@ def UninitializedObjectChecker: Checker<"UninitializedObject">,
                   "the pointee of pointer/reference fields, and will only "
                   "check whether the object itself is initialized.",
                   "false",
-                  InBeta>,
+                  InAlpha>,
     CmdLineOption<String,
                   "IgnoreRecordsWithField",
                   "If supplied, the checker will not analyze "

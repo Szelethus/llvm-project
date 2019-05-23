@@ -23,25 +23,18 @@ def Boolean : CmdLineOptionTypeEnum<2>;
 
 /// Describes the state of the entry. We wouldn't like to display, for example,
 /// developer only entries for a list meant for end users.
-class DevelopmentStageEnum<bits<2> val> {
-  bits<2> Val = val;
+class DevelopmentStageEnum<bits<1> val> {
+  bits<1> Val = val;
 }
 
 /// Alpha entries are under development, might be incomplet, inkorrekt and
 /// unstable.
 def InAlpha : DevelopmentStageEnum<0>;
 
-/// Beta entries are considered stable, but need some finishing touches,
-/// might have a not ideal false positive/false negative ratio, but are
-/// usable in production.
-/// Beta checkers checkers at minimum must be able to analyze the LLVM project
-/// without crashes, and have a reasonable FP/TP ratio.
-def InBeta : DevelopmentStageEnum<1>;
-
 /// Released entries are stable, produce minimal, if any false positives,
 /// and emits reports that explain the occurance of the bug understandably and
 /// thoroughly.
-def Released : DevelopmentStageEnum<2>;
+def Released : DevelopmentStageEnum<1>;
 
 /// Marks the entry hidden. Hidden entries won't be displayed in
 /// -analyzer-checker-option-help.
@@ -59,7 +52,7 @@ class CmdLineOption<CmdLineOptionTypeEnum type, string cmdFlag, string desc,
   string  CmdFlag = cmdFlag;
   string  Desc = desc;
   string  DefaultVal = defaultVal;
-  bits<2> DevelopmentStage = stage.Val;
+  bits<1> DevelopmentStage = stage.Val;
   bit     Hidden = isHidden.Val;
 }
 

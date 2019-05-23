@@ -614,11 +614,7 @@ void CheckerRegistry::printCheckerOptionList(raw_ostream &Out) const {
       continue;
     }
 
-    if (AnOpts.ShowCheckerOptionList) {
-      if (Option.DevelopmentStatus == "beta")
-        Print(Out, FullOption, llvm::Twine("(Experimental) " + Desc).str());
-      else
-        Print(Out, FullOption, Desc);
-    }
+    if (AnOpts.ShowCheckerOptionList)
+      Print(Out, FullOption, Desc);
   }
 }

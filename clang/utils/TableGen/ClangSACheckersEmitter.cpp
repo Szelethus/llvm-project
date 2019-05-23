@@ -116,8 +116,6 @@ static std::string getDevelopmentStage(const Record &R) {
     case 0:
       return "alpha";
     case 1:
-      return "beta";
-    case 2:
       return "released";
     }
   }
