@@ -117,6 +117,56 @@ TEST(CFGDominatorTree, DomTree) {
   EXPECT_TRUE(PostDom.dominates(nullptr, ExitBlock));
 }
 
+TEST(CFGDominatorTree, ControlDependency) {
+  const char *Code = "bool coin();\n"
+                     "\n"
+                     "void funcWithBranch() {\n"
+                     "  int x = 0;\n"
+                     "  if (coin()) {\n"
+                     "    if (coin()) {\n"
+                     "      x = 5;\n"
+                     "    }\n"
+                     "    int j = 10 / x;\n"
+                     "    (void)j;\n"
+                     "  }\n"
+                     "};\n";
+  BuildResult Result = BuildCFG(Code);
+  EXPECT_EQ(BuildResult::BuiltCFG, Result.getStatus());
+
+  //                  1st if  2nd if
+  //  [B5 (ENTRY)]  -> [B4] -> [B3] -> [B2] -> [B1] -> [B0 (EXIT)]
+  //                    \        \              /         /
+  //                     \        --------------         /
+  //                      -------------------------------
+
+  CFG *cfg = Result.getCFG();
+
+  // Sanity checks.
+  EXPECT_EQ(cfg->size(), 6u);
+
+  CFGBlock *ExitBlock = *cfg->begin();
+  EXPECT_EQ(ExitBlock, &cfg->getExit());
+
+  CFGBlock *NullDerefBlock = *(cfg->begin() + 1);
+
+  CFGBlock *SecondThenBlock = *(cfg->begin() + 2);
+
+  CFGBlock *SecondIfBlock = *(cfg->begin() + 3);
+  EXPECT_TRUE(hasStmtType<IfStmt>(SecondIfBlock));
+
+  CFGBlock *FirstIfBlock = *(cfg->begin() + 4);
+  EXPECT_TRUE(hasStmtType<IfStmt>(FirstIfBlock));
+
+  CFGBlock *EntryBlock = *(cfg->begin() + 5);
+  EXPECT_EQ(EntryBlock, &cfg->getEntry());
+
+  CFGControlDependencyTree Control;
+  Control.buildDominatorTree(cfg);
+
+  EXPECT_TRUE(Control.isControlDependency(SecondIfBlock, SecondThenBlock));
+  EXPECT_FALSE(Control.isControlDependency(SecondIfBlock, NullDerefBlock));
+}
+
 } // namespace
 } // namespace analysis
 } // namespace clang

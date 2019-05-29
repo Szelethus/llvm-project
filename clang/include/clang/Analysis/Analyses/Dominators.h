@@ -44,12 +44,14 @@ class CFGDominatorTreeImpl : public ManagedAnalysis {
 public:
   using DominatorTreeBase = llvm::DominatorTreeBase<CFGBlock, IsPostDom>;
 
-  DominatorTreeBase DT;
-
   CFGDominatorTreeImpl() = default;
   ~CFGDominatorTreeImpl() override = default;
 
-  DominatorTreeBase& getBase() { return *DT; }
+  DominatorTreeBase &getBase() { return DT; }
+
+  CFG *getCFG() {
+    return cfg;
+  }
 
   /// \returns the root CFGBlock of the dominators tree.
   CFGBlock *getRoot() const {
@@ -172,10 +174,66 @@ public:
 
 private:
   CFG *cfg;
+  DominatorTreeBase DT;
 };
 
 using CFGDomTree = CFGDominatorTreeImpl</*IsPostDom*/ false>;
 using CFGPostDomTree = CFGDominatorTreeImpl</*IsPostDom*/ true>;
+
+
+class CFGControlDependencyTree : public ManagedAnalysis {
+  CFGDomTree DomTree;
+  CFGPostDomTree PostDomTree;
+
+public:
+  void buildDominatorTree(CFG *cfg) {
+    DomTree.buildDominatorTree(cfg);
+    PostDomTree.buildDominatorTree(cfg);
+  }
+
+  CFGDomTree &getCFGDomTree() { return DomTree; }
+  const CFGDomTree &getCFGDomTree() const { return DomTree; }
+  CFGPostDomTree &getCFGPostDomTree() { return PostDomTree; }
+  const CFGPostDomTree &getCFGPostDomTree() const { return PostDomTree; }
+
+  virtual void releaseMemory() {
+    DomTree.releaseMemory();
+    PostDomTree.releaseMemory();
+  }
+
+  bool isControlDependency(CFGBlock *A, CFGBlock *B) const {
+    return DomTree.dominates(A, B) && !PostDomTree.dominates(B, A);
+  }
+
+  /// Dumps immediate dominators for each block.
+  void dump() {
+    CFG *cfg = DomTree.getCFG();
+    llvm::errs() << "Immediate control dependency tree (Node#,IDom#):\n";
+    for (CFG::const_iterator I = cfg->begin(),
+        E = cfg->end(); I != E; ++I) {
+
+      assert(*I &&
+             "LLVM's Dominator tree builder uses nullpointers to signify the "
+             "virtual root!");
+
+      DomTreeNode *IDom = DomTree.getBase().getNode(*I)->getIDom();
+      if (IDom) {
+        if (!PostDomTree.dominates(*I, IDom->getBlock()))
+          llvm::errs() << "(" << (*I)->getBlockID()
+                       << ","
+                       << IDom->getBlock()->getBlockID()
+                       << ")\n";
+      }
+
+      bool IsEntryBlock = *I == &(*I)->getParent()->getEntry();
+      assert((IDom || IsEntryBlock) &&
+             "If the immediate dominator node is nullptr, the CFG block "
+             "should be the entry point (since it's the root of the dominator "
+             "tree)");
+      (void)IsEntryBlock;
+    }
+  }
+};
 
 } // namespace clang
 

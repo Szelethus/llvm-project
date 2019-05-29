@@ -1,6 +1,7 @@
 // RUN: %clang_analyze_cc1 %s \
 // RUN:   -analyzer-checker=debug.DumpDominators \
 // RUN:   -analyzer-checker=debug.DumpPostDominators \
+// RUN:   -analyzer-checker=debug.DumpControlDependencies \
 // RUN:   2>&1 | FileCheck %s
 
 bool coin();
@@ -20,7 +21,8 @@ void f() {
 
 //  [B3 (ENTRY)]  -> [B1] -> [B2] -> [B0 (EXIT)]
 
-// CHECK:      Immediate dominance tree (Node#,IDom#):
+// CHECK:      Immediate control dependency tree (Node#,IDom#):
+// CHECK-NEXT: Immediate dominance tree (Node#,IDom#):
 // CHECK-NEXT: (0,2)
 // CHECK-NEXT: (1,3)
 // CHECK-NEXT: (2,1)
@@ -48,7 +50,10 @@ void funcWithBranch() {
 //                   \                       /
 //                    ----> [B0 (EXIT)] <----
 
-// CHECK:      Immediate dominance tree (Node#,IDom#):
+// CHECK:      Immediate control dependency tree (Node#,IDom#):
+// CHECK-NEXT: (2,3)
+// CHECK-NEXT: (3,4)
+// CHECK-NEXT: Immediate dominance tree (Node#,IDom#):
 // CHECK-NEXT: (0,4)
 // CHECK-NEXT: (1,3)
 // CHECK-NEXT: (2,3)
