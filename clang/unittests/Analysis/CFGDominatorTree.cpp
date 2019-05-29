@@ -168,6 +168,54 @@ TEST(CFGDominatorTree, ControlDependency) {
   EXPECT_FALSE(Control.isControlDependency(SecondIfBlock, NullDerefBlock));
 }
 
+TEST(CFGDominatorTree, ControlDependencyWithLoops) {
+  const char *Code = R"(int test3() {
+                          int x,y,z;
+
+                          x = y = z = 1;
+                          if (x > 0) {
+                            while (x >= 0){
+                              while (y >= x) {
+                                x = x-1;
+                                y = y/2;
+                              }
+                            }
+                          }
+                          z = y;
+
+                          return 0;
+                        })";
+  BuildResult Result = BuildCFG(Code);
+  EXPECT_EQ(BuildResult::BuiltCFG, Result.getStatus());
+
+  //                            <-------------
+  //                           /              \
+  //                           |        ---> [B2]
+  //                           |       /
+  // [B8 (ENTRY)] -> [B7] -> [B6] -> [B5] -> [B4] -> [B3]
+  //                   \       |       \              /
+  //                    \      |        <-------------
+  //                     \      \
+  //                      --------> [B1] -> [B0 (EXIT)]
+
+  CFG *cfg = Result.getCFG();
+
+  CFGControlDependencyTree Control;
+  Control.buildDominatorTree(cfg);
+
+  auto GetBlock = [cfg] (unsigned Index) -> CFGBlock * {
+    assert(Index < cfg->size());
+    return *(cfg->begin() + Index);
+  };
+
+  // While not immediately obvious, the second block in fact post dominates the
+  // fifth, hence B5 is not a control dependency of 2.
+  EXPECT_FALSE(Control.isControlDependency(GetBlock(5), GetBlock(2)));
+  EXPECT_TRUE(Control.getCFGDomTree().dominates(GetBlock(5), GetBlock(2)));
+  EXPECT_TRUE(Control.getCFGPostDomTree().dominates(GetBlock(2), GetBlock(5)));
+}
+
+
 } // namespace
 } // namespace analysis
 } // namespace clang
