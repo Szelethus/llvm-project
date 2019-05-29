@@ -44,11 +44,11 @@ void funcWithBranch() {
   }
 }
 
-//                            ----> [B2] ---->
-//                           /                \
-// [B5 (ENTRY)] -> [B4] -> [B3] -----------> [B1]
-//                   \                       /
-//                    ----> [B0 (EXIT)] <----
+//                  1st if  2nd if
+//  [B5 (ENTRY)]  -> [B4] -> [B3] -> [B2] -> [B1] -> [B0 (EXIT)]
+//                    \        \              /         /
+//                     \        ------------->         /
+//                      ------------------------------>
 
 // CHECK:      Immediate control dependency tree (Node#,IDom#):
 // CHECK-NEXT: (2,3)

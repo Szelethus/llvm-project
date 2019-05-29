@@ -118,26 +118,26 @@ TEST(CFGDominatorTree, DomTree) {
 }
 
 TEST(CFGDominatorTree, ControlDependency) {
-  const char *Code = "bool coin();\n"
-                     "\n"
-                     "void funcWithBranch() {\n"
-                     "  int x = 0;\n"
-                     "  if (coin()) {\n"
-                     "    if (coin()) {\n"
-                     "      x = 5;\n"
-                     "    }\n"
-                     "    int j = 10 / x;\n"
-                     "    (void)j;\n"
-                     "  }\n"
-                     "};\n";
+  const char *Code = R"(bool coin();
+
+                        void funcWithBranch() {
+                          int x = 0;
+                          if (coin()) {
+                            if (coin()) {
+                              x = 5;
+                            }
+                            int j = 10 / x;
+                            (void)j;
+                          }
+                        };)";
   BuildResult Result = BuildCFG(Code);
   EXPECT_EQ(BuildResult::BuiltCFG, Result.getStatus());
 
   //                  1st if  2nd if
   //  [B5 (ENTRY)]  -> [B4] -> [B3] -> [B2] -> [B1] -> [B0 (EXIT)]
   //                    \        \              /         /
-  //                     \        --------------         /
-  //                      -------------------------------
+  //                     \        ------------->         /
+  //                      ------------------------------>
 
   CFG *cfg = Result.getCFG();
 
@@ -164,6 +164,7 @@ TEST(CFGDominatorTree, ControlDependency) {
   Control.buildDominatorTree(cfg);
 
   EXPECT_TRUE(Control.isControlDependency(SecondIfBlock, SecondThenBlock));
+  EXPECT_TRUE(Control.isControlDependency(FirstIfBlock, SecondIfBlock));
   EXPECT_FALSE(Control.isControlDependency(SecondIfBlock, NullDerefBlock));
 }
 
