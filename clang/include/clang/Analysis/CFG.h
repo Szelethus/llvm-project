@@ -25,6 +25,7 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/iterator_range.h"
+#include "llvm/IR/CFGDiff.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/raw_ostream.h"
 #include <bitset>
@@ -1002,8 +1003,38 @@ public:
     *I = CFGScopeEnd(VD, S);
     return ++I;
   }
-
 };
+
+inline CFGBlock::pred_iterator                pred_begin(CFGBlock *B)   { return B->pred_begin();   }
+inline CFGBlock::pred_iterator                pred_end(CFGBlock *B)     { return B->pred_end();     }
+inline CFGBlock::const_pred_iterator          pred_begin(const CFGBlock *B)   { return B->pred_begin();   }
+inline CFGBlock::const_pred_iterator          pred_end(const CFGBlock *B)     { return B->pred_end();     }
+inline CFGBlock::pred_reverse_iterator        pred_rbegin(CFGBlock *B)  { return B->pred_rbegin();  }
+inline CFGBlock::pred_reverse_iterator        pred_rend(CFGBlock *B)    { return B->pred_rend();    }
+inline CFGBlock::const_pred_reverse_iterator  pred_rbegin(const CFGBlock *B)  { return B->pred_rbegin();  }
+inline CFGBlock::const_pred_reverse_iterator  pred_rend(const CFGBlock *B)    { return B->pred_rend();    }
+inline CFGBlock::pred_range preds(CFGBlock *B) {
+   return CFGBlock::pred_range(B->pred_begin(), B->pred_end());
+ }
+inline CFGBlock::pred_const_range preds(const CFGBlock *B) {
+   return CFGBlock::pred_const_range(B->pred_begin(), B->pred_end());
+ }
+inline CFGBlock::succ_iterator                succ_begin(CFGBlock *B)   { return B->succ_begin();   }
+inline CFGBlock::succ_iterator                succ_end(CFGBlock *B)     { return B->succ_end();     }
+inline CFGBlock::const_succ_iterator          succ_begin(const CFGBlock *B)   { return B->succ_begin();   }
+inline CFGBlock::const_succ_iterator          succ_end(const CFGBlock *B)     { return B->succ_end();     }
+inline CFGBlock::succ_reverse_iterator        succ_rbegin(CFGBlock *B)  { return B->succ_rbegin();  }
+inline CFGBlock::succ_reverse_iterator        succ_rend(CFGBlock *B)    { return B->succ_rend();    }
+inline CFGBlock::const_succ_reverse_iterator  succ_rbegin(const CFGBlock *B)  { return B->succ_rbegin();  }
+inline CFGBlock::const_succ_reverse_iterator  succ_rend(const CFGBlock *B)    { return B->succ_rend();    }
+
+inline CFGBlock::succ_range succs(CFGBlock *B) {
+  return CFGBlock::succ_range(B->succ_begin(), B->succ_end());
+}
+
+inline CFGBlock::succ_const_range succs(const CFGBlock *B) {
+  return CFGBlock::succ_const_range(B->succ_begin(), B->succ_end());
+}
 
 /// CFGCallback defines methods that should be called when a logical
 /// operator error is found when building the CFG.
@@ -1364,6 +1395,29 @@ template <> struct GraphTraits<Inverse<const ::clang::CFG *>>
     return F->nodes_end();
   }
 };
+
+template <>
+struct GraphTraits<
+    std::pair<const GraphDiff<clang::CFGBlock *, false> *, clang::CFGBlock *>>
+    : CFGViewSuccessors<clang::CFGBlock *,
+                        clang::CFGBlock::succ_iterator, false> {};
+template <>
+struct GraphTraits<
+    std::pair<const GraphDiff<clang::CFGBlock *, true> *, clang::CFGBlock *>>
+    : CFGViewSuccessors<clang::CFGBlock *,
+                        clang::CFGBlock::succ_iterator, true> {};
+template <>
+struct GraphTraits<
+    std::pair<const GraphDiff<clang::CFGBlock *, false> *,
+              Inverse<clang::CFGBlock *>>>
+    : CFGViewPredecessors<clang::CFGBlock *,
+                        clang::CFGBlock::pred_iterator, false> {};
+template <>
+struct GraphTraits<
+    std::pair<const GraphDiff<clang::CFGBlock *, true> *,
+              Inverse<clang::CFGBlock *>>>
+    : CFGViewPredecessors<clang::CFGBlock *,
+                        clang::CFGBlock::pred_iterator, true> {};
 
 } // namespace llvm
 

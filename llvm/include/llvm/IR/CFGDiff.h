@@ -17,7 +17,6 @@
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
-#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/Support/CFGUpdate.h"
 #include "llvm/Support/type_traits.h"
@@ -155,15 +154,16 @@ public:
 #endif
 };
 
-template <bool InverseGraph = false> struct CFGViewSuccessors {
-  using DataRef = const GraphDiff<BasicBlock *, InverseGraph> *;
-  using NodeRef = std::pair<DataRef, BasicBlock *>;
+template <typename NodePtr, typename SuccIteratorTy, bool InverseGraph = false>
+struct CFGViewSuccessors {
+  using DataRef = const GraphDiff<NodePtr, InverseGraph> *;
+  using NodeRef = std::pair<DataRef, NodePtr>;
 
   using ExistingChildIterator =
-      WrappedPairNodeDataIterator<succ_iterator, NodeRef, DataRef>;
+      WrappedPairNodeDataIterator<SuccIteratorTy, NodeRef, DataRef>;
   struct DeletedEdgesFilter {
-    BasicBlock *BB;
-    DeletedEdgesFilter(BasicBlock *BB) : BB(BB){};
+    NodePtr BB;
+    DeletedEdgesFilter(NodePtr BB) : BB(BB){};
     bool operator()(NodeRef N) const {
       return !N.first->ignoreChild(BB, N.second, false);
     }
@@ -171,7 +171,7 @@ template <bool InverseGraph = false> struct CFGViewSuccessors {
   using FilterExistingChildrenIterator =
       filter_iterator<ExistingChildIterator, DeletedEdgesFilter>;
 
-  using vec_iterator = SmallVectorImpl<BasicBlock *>::const_iterator;
+  using vec_iterator = typename SmallVectorImpl<NodePtr>::const_iterator;
   using AddNewChildrenIterator =
       WrappedPairNodeDataIterator<vec_iterator, NodeRef, DataRef>;
   using ChildIteratorType =
@@ -209,15 +209,16 @@ template <bool InverseGraph = false> struct CFGViewSuccessors {
   }
 };
 
-template <bool InverseGraph = false> struct CFGViewPredecessors {
-  using DataRef = const GraphDiff<BasicBlock *, InverseGraph> *;
-  using NodeRef = std::pair<DataRef, BasicBlock *>;
+template <typename NodePtr, typename PredIteratorTy, bool InverseGraph = false>
+struct CFGViewPredecessors {
+  using DataRef = const GraphDiff<NodePtr, InverseGraph> *;
+  using NodeRef = std::pair<DataRef, NodePtr>;
 
   using ExistingChildIterator =
-      WrappedPairNodeDataIterator<pred_iterator, NodeRef, DataRef>;
+      WrappedPairNodeDataIterator<PredIteratorTy, NodeRef, DataRef>;
   struct DeletedEdgesFilter {
-    BasicBlock *BB;
-    DeletedEdgesFilter(BasicBlock *BB) : BB(BB){};
+    NodePtr BB;
+    DeletedEdgesFilter(NodePtr BB) : BB(BB){};
     bool operator()(NodeRef N) const {
       return !N.first->ignoreChild(BB, N.second, true);
     }
@@ -225,7 +226,7 @@ template <bool InverseGraph = false> struct CFGViewPredecessors {
   using FilterExistingChildrenIterator =
       filter_iterator<ExistingChildIterator, DeletedEdgesFilter>;
 
-  using vec_iterator = SmallVectorImpl<BasicBlock *>::const_iterator;
+  using vec_iterator = typename SmallVectorImpl<NodePtr>::const_iterator;
   using AddNewChildrenIterator =
       WrappedPairNodeDataIterator<vec_iterator, NodeRef, DataRef>;
   using ChildIteratorType =
@@ -263,22 +264,24 @@ template <bool InverseGraph = false> struct CFGViewPredecessors {
   }
 };
 
+class BasicBlock;
+
 template <>
 struct GraphTraits<
     std::pair<const GraphDiff<BasicBlock *, false> *, BasicBlock *>>
-    : CFGViewSuccessors<false> {};
+    : CFGViewSuccessors<BasicBlock *, succ_iterator, false> {};
 template <>
 struct GraphTraits<
     std::pair<const GraphDiff<BasicBlock *, true> *, BasicBlock *>>
-    : CFGViewSuccessors<true> {};
+    : CFGViewSuccessors<BasicBlock *, succ_iterator, true> {};
 template <>
 struct GraphTraits<
     std::pair<const GraphDiff<BasicBlock *, false> *, Inverse<BasicBlock *>>>
-    : CFGViewPredecessors<false> {};
+    : CFGViewPredecessors<BasicBlock *, pred_iterator, false> {};
 template <>
 struct GraphTraits<
     std::pair<const GraphDiff<BasicBlock *, true> *, Inverse<BasicBlock *>>>
-    : CFGViewPredecessors<true> {};
+    : CFGViewPredecessors<BasicBlock *, pred_iterator, true> {};
 } // end namespace llvm
 
 #endif // LLVM_IR_CFGDIFF_H

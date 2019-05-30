@@ -160,8 +160,7 @@ TEST(CFGDominatorTree, ControlDependency) {
   CFGBlock *EntryBlock = *(cfg->begin() + 5);
   EXPECT_EQ(EntryBlock, &cfg->getEntry());
 
-  CFGControlDependencyTree Control;
-  Control.buildDominatorTree(cfg);
+  CFGControlDependencyTree Control(cfg);
 
   EXPECT_TRUE(Control.isControlDependency(SecondIfBlock, SecondThenBlock));
   EXPECT_TRUE(Control.isControlDependency(FirstIfBlock, SecondIfBlock));
@@ -200,8 +199,7 @@ TEST(CFGDominatorTree, ControlDependencyWithLoops) {
 
   CFG *cfg = Result.getCFG();
 
-  CFGControlDependencyTree Control;
-  Control.buildDominatorTree(cfg);
+  CFGControlDependencyTree Control(cfg);
 
   auto GetBlock = [cfg] (unsigned Index) -> CFGBlock * {
     assert(Index < cfg->size());
@@ -211,8 +209,6 @@ TEST(CFGDominatorTree, ControlDependencyWithLoops) {
   // While not immediately obvious, the second block in fact post dominates the
   // fifth, hence B5 is not a control dependency of 2.
   EXPECT_FALSE(Control.isControlDependency(GetBlock(5), GetBlock(2)));
-  EXPECT_TRUE(Control.getCFGDomTree().dominates(GetBlock(5), GetBlock(2)));
-  EXPECT_TRUE(Control.getCFGPostDomTree().dominates(GetBlock(2), GetBlock(5)));
 }
 
 

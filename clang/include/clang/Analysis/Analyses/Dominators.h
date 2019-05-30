@@ -18,6 +18,7 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/iterator.h"
+#include "llvm/Analysis/IteratedDominanceFrontier.h"
 #include "llvm/Support/GenericDomTree.h"
 #include "llvm/Support/GenericDomTreeConstruction.h"
 #include "llvm/Support/raw_ostream.h"
@@ -45,13 +46,16 @@ public:
   using DominatorTreeBase = llvm::DominatorTreeBase<CFGBlock, IsPostDom>;
 
   CFGDominatorTreeImpl() = default;
+
+  CFGDominatorTreeImpl(CFG *cfg) {
+    buildDominatorTree(cfg);
+  }
+
   ~CFGDominatorTreeImpl() override = default;
 
   DominatorTreeBase &getBase() { return DT; }
 
-  CFG *getCFG() {
-    return cfg;
-  }
+  CFG *getCFG() { return cfg; }
 
   /// \returns the root CFGBlock of the dominators tree.
   CFGBlock *getRoot() const {
@@ -180,57 +184,60 @@ private:
 using CFGDomTree = CFGDominatorTreeImpl</*IsPostDom*/ false>;
 using CFGPostDomTree = CFGDominatorTreeImpl</*IsPostDom*/ true>;
 
-
 class CFGControlDependencyTree : public ManagedAnalysis {
-  CFGDomTree DomTree;
+  using IDFCalculator = llvm::IDFCalculator<CFGBlock, /*IsPostDom=*/true>;
+  using CFGBlockVector = llvm::SmallVector<CFGBlock *, 4>;
+  using CFGBlockSet = llvm::SmallPtrSet<CFGBlock *, 4>;
+
   CFGPostDomTree PostDomTree;
+  IDFCalculator IDFCalc;
+
+  llvm::DenseMap<CFGBlock *, CFGBlockVector> ControlDepenencyMap;
 
 public:
-  void buildDominatorTree(CFG *cfg) {
-    DomTree.buildDominatorTree(cfg);
-    PostDomTree.buildDominatorTree(cfg);
+  CFGControlDependencyTree(CFG *cfg)
+    : PostDomTree(cfg), IDFCalc(PostDomTree.getBase()) {
+    for (CFGBlock *BB : *cfg) {
+      CFGBlockSet DefiningBlock = {BB};
+      IDFCalc.setDefiningBlocks(DefiningBlock);
+
+      CFGBlockVector ControlDependencies;
+      IDFCalc.calculate(ControlDependencies);
+
+      ControlDepenencyMap[BB] = ControlDependencies;
+    }
   }
 
-  CFGDomTree &getCFGDomTree() { return DomTree; }
-  const CFGDomTree &getCFGDomTree() const { return DomTree; }
   CFGPostDomTree &getCFGPostDomTree() { return PostDomTree; }
   const CFGPostDomTree &getCFGPostDomTree() const { return PostDomTree; }
 
   virtual void releaseMemory() {
-    DomTree.releaseMemory();
     PostDomTree.releaseMemory();
   }
 
-  bool isControlDependency(CFGBlock *A, CFGBlock *B) const {
-    return DomTree.dominates(A, B) && !PostDomTree.dominates(B, A);
+  const CFGBlockVector &getControlDependencies(CFGBlock *A) const {
+    return ControlDepenencyMap.find(A)->second;
   }
 
-  /// Dumps immediate dominators for each block.
-  void dump() {
-    CFG *cfg = DomTree.getCFG();
-    llvm::errs() << "Immediate control dependency tree (Node#,IDom#):\n";
-    for (CFG::const_iterator I = cfg->begin(),
-        E = cfg->end(); I != E; ++I) {
+  bool isControlDependency(CFGBlock *A, CFGBlock *B) const {
+    return llvm::is_contained(getControlDependencies(A), B);
+  }
 
-      assert(*I &&
+  // Dumps immediate control dependencies for each block.
+  void dump() {
+    CFG *cfg = PostDomTree.getCFG();
+    llvm::errs() << "Immediate control dependency tree (Node#,IDom#):\n";
+    for (CFGBlock *BB : *cfg) {
+
+      assert(BB &&
              "LLVM's Dominator tree builder uses nullpointers to signify the "
              "virtual root!");
 
-      DomTreeNode *IDom = DomTree.getBase().getNode(*I)->getIDom();
-      if (IDom) {
-        if (!PostDomTree.dominates(*I, IDom->getBlock()))
-          llvm::errs() << "(" << (*I)->getBlockID()
-                       << ","
-                       << IDom->getBlock()->getBlockID()
-                       << ")\n";
-      }
-
-      bool IsEntryBlock = *I == &(*I)->getParent()->getEntry();
-      assert((IDom || IsEntryBlock) &&
-             "If the immediate dominator node is nullptr, the CFG block "
-             "should be the entry point (since it's the root of the dominator "
-             "tree)");
-      (void)IsEntryBlock;
+      for (CFGBlock *isControlDependency : getControlDependencies(BB))
+        llvm::errs() << "(" << BB->getBlockID()
+                     << ","
+                     << isControlDependency->getBlockID()
+                     << ")\n";
     }
   }
 };
