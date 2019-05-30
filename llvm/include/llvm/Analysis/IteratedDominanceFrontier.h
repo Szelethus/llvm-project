@@ -105,6 +105,20 @@ typedef IDFCalculator<BasicBlock, true> ReverseIDFCalculator;
 // Implementation.
 //===----------------------------------------------------------------------===//
 
+namespace IDFCalculatorDetail {
+template <class GraphType>
+struct ChildrenGetter {
+  using ChildIteratorTy = typename GraphTraits<GraphType>::ChildIteratorType;
+  using NodeRef = typename GraphTraits<GraphType>::NodeRef;
+  using ReturnTy = SmallVector<NodeRef, 8>;
+
+  static ReturnTy Get(const NodeRef &G) {
+    auto Children = children<GraphType>(G);
+    return {Children.begin(), Children.end()};
+  }
+};
+} // end of namespace IDFCalculatorDetail
+
 template <class NodeTy, bool IsPostDom>
 void IDFCalculator<NodeTy, IsPostDom>::calculate(
     SmallVectorImpl<NodeTy *> &PHIBlocks) {
@@ -117,6 +131,9 @@ void IDFCalculator<NodeTy, IsPostDom>::calculate(
   typedef std::priority_queue<DomTreeNodePair, SmallVector<DomTreeNodePair, 32>,
                               less_second>
       IDFPriorityQueue;
+
+  using namespace IDFCalculatorDetail;
+
   IDFPriorityQueue PQ;
 
   DT.updateDFSNumbers();
@@ -172,11 +189,11 @@ void IDFCalculator<NodeTy, IsPostDom>::calculate(
 
       if (GD) {
         for (auto Pair :
-             children<std::pair<const GraphDiff<NodeTy *, IsPostDom> *,
-                                OrderedNodeTy>>({GD, BB}))
+             ChildrenGetter<std::pair<const GraphDiff<NodeTy *, IsPostDom> *,
+                         OrderedNodeTy>>::Get({GD, BB}))
           DoWork(Pair.second);
       } else {
-        for (auto Succ : children<OrderedNodeTy>(BB))
+        for (auto Succ : ChildrenGetter<OrderedNodeTy>::Get(BB))
           DoWork(Succ);
       }
 

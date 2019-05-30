@@ -316,6 +316,50 @@ ClangCFGPostDomReverseChildrenGetter::Get(
 
 } // end of namespace DomTreeBuilder
 
+/// Aaaand the same goes for IDFCalculator.
+namespace IDFCalculatorDetail {
+using ClangCFGIDFCalculator =
+     typename llvm::IDFCalculator<clang::CFGBlock, true>;
+
+using ClangCFGBlockOrder = ClangCFGIDFCalculator::OrderedNodeTy;
+
+using InverseClangCFGGraphDiff = GraphDiff<clang::CFGBlock *, true>;
+
+using NodePair = std::pair<const InverseClangCFGGraphDiff *,
+                           ClangCFGBlockOrder>;
+
+using NodePairIDFChildrenGetter = ChildrenGetter<NodePair>;
+
+template<>
+NodePairIDFChildrenGetter::ReturnTy NodePairIDFChildrenGetter::Get(
+    const NodePairIDFChildrenGetter::NodeRef &N) {
+
+  auto Children = children<NodePair>(N);
+  NodePairIDFChildrenGetter::ReturnTy Ret{Children.begin(), Children.end()};
+
+  Ret.erase(std::remove_if(Ret.begin(), Ret.end(),
+            [](const NodePairIDFChildrenGetter::NodeRef &Pair) {
+              return Pair.second == nullptr;}), Ret.end());
+  return Ret;
+}
+
+using CFGBlockOrderedIDFChildrenGetter = ChildrenGetter<ClangCFGBlockOrder>;
+
+template<> CFGBlockOrderedIDFChildrenGetter::ReturnTy
+CFGBlockOrderedIDFChildrenGetter::Get(
+    const CFGBlockOrderedIDFChildrenGetter::NodeRef &N) {
+
+  auto Children = children<ClangCFGBlockOrder>(N);
+
+  CFGBlockOrderedIDFChildrenGetter::ReturnTy
+      Ret{Children.begin(), Children.end()};
+
+  Ret.erase(std::remove(Ret.begin(), Ret.end(), nullptr), Ret.end());
+  return Ret;
+}
+
+} // end of namespace IDFCalculatorDetail
+
 //===-------------------------------------
 /// DominatorTree GraphTraits specialization so the DominatorTree can be
 /// iterable by generic graph iterators.
