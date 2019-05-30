@@ -41,11 +41,10 @@ namespace llvm {
 /// pruned using the live-in set.
 /// By default, liveness is not used to prune the IDF computation.
 /// The template parameters should be of a CFG block type.
-template <class NodeTy, bool IsPostDom>
-class IDFCalculator {
+template <class NodeTy, bool IsPostDom> class IDFCalculator {
 public:
-  using OrderedNodeTy = typename std::conditional<
-      IsPostDom, Inverse<NodeTy *>, NodeTy *>::type;
+  using OrderedNodeTy =
+      typename std::conditional<IsPostDom, Inverse<NodeTy *>, NodeTy *>::type;
 
   IDFCalculator(DominatorTreeBase<NodeTy, IsPostDom> &DT)
       : DT(DT), GD(nullptr) {}
@@ -116,7 +115,8 @@ void IDFCalculator<NodeTy, IsPostDom>::calculate(
   typedef std::pair<DomTreeNodeBase<NodeTy> *, std::pair<unsigned, unsigned>>
       DomTreeNodePair;
   typedef std::priority_queue<DomTreeNodePair, SmallVector<DomTreeNodePair, 32>,
-                              less_second> IDFPriorityQueue;
+                              less_second>
+      IDFPriorityQueue;
   IDFPriorityQueue PQ;
 
   DT.updateDFSNumbers();
@@ -171,9 +171,9 @@ void IDFCalculator<NodeTy, IsPostDom>::calculate(
       };
 
       if (GD) {
-        for (auto Pair : children<std::pair<
-                 const GraphDiff<NodeTy *, IsPostDom> *,
-                 OrderedNodeTy>>({GD, BB}))
+        for (auto Pair :
+             children<std::pair<const GraphDiff<NodeTy *, IsPostDom> *,
+                                OrderedNodeTy>>({GD, BB}))
           DoWork(Pair.second);
       } else {
         for (auto Succ : children<OrderedNodeTy>(BB))
