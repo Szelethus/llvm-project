@@ -331,7 +331,7 @@ using NodePair = std::pair<const InverseClangCFGGraphDiff *,
 using NodePairIDFChildrenGetter = ChildrenGetter<NodePair>;
 
 template<>
-NodePairIDFChildrenGetter::ReturnTy NodePairIDFChildrenGetter::Get(
+inline NodePairIDFChildrenGetter::ReturnTy NodePairIDFChildrenGetter::Get(
     const NodePairIDFChildrenGetter::NodeRef &N) {
 
   auto Children = children<NodePair>(N);
@@ -346,7 +346,7 @@ NodePairIDFChildrenGetter::ReturnTy NodePairIDFChildrenGetter::Get(
 using CFGBlockOrderedIDFChildrenGetter = ChildrenGetter<ClangCFGBlockOrder>;
 
 template<> CFGBlockOrderedIDFChildrenGetter::ReturnTy
-CFGBlockOrderedIDFChildrenGetter::Get(
+inline CFGBlockOrderedIDFChildrenGetter::Get(
     const CFGBlockOrderedIDFChildrenGetter::NodeRef &N) {
 
   auto Children = children<ClangCFGBlockOrder>(N);
