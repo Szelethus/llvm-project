@@ -21,7 +21,7 @@ void f() {
 
 //  [B3 (ENTRY)]  -> [B1] -> [B2] -> [B0 (EXIT)]
 
-// CHECK:      Immediate control dependency tree (Node#,IDom#):
+// CHECK:      Control dependencies (Node#,Dependency#):
 // CHECK-NEXT: Immediate dominance tree (Node#,IDom#):
 // CHECK-NEXT: (0,2)
 // CHECK-NEXT: (1,3)
@@ -50,8 +50,10 @@ void funcWithBranch() {
 //                     \        ------------->         /
 //                      ------------------------------>
 
-// CHECK:      Immediate control dependency tree (Node#,IDom#):
+// CHECK:      Control dependencies (Node#,Dependency#):
+// CHECK-NEXT: (1,4)
 // CHECK-NEXT: (2,3)
+// CHECK-NEXT: (2,4)
 // CHECK-NEXT: (3,4)
 // CHECK-NEXT: Immediate dominance tree (Node#,IDom#):
 // CHECK-NEXT: (0,4)

@@ -226,7 +226,7 @@ public:
   // Dumps immediate control dependencies for each block.
   void dump() {
     CFG *cfg = PostDomTree.getCFG();
-    llvm::errs() << "Immediate control dependency tree (Node#,IDom#):\n";
+    llvm::errs() << "Control dependencies (Node#,Dependency#):\n";
     for (CFGBlock *BB : *cfg) {
 
       assert(BB &&
