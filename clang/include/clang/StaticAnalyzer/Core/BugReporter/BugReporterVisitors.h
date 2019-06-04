@@ -14,6 +14,7 @@
 #ifndef LLVM_CLANG_STATICANALYZER_CORE_BUGREPORTER_BUGREPORTERVISITORS_H
 #define LLVM_CLANG_STATICANALYZER_CORE_BUGREPORTER_BUGREPORTERVISITORS_H
 
+#include "clang/Analysis/Analyses/Dominators.h"
 #include "clang/Analysis/ProgramPoint.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/RangedConstraintManager.h"
@@ -157,6 +158,35 @@ public:
   /// If the statement is a message send expression with nil receiver, returns
   /// the receiver expression. Returns NULL otherwise.
   static const Expr *getNilReceiver(const Stmt *S, const ExplodedNode *N);
+};
+
+/// Tracks the expressions that are a control dependency of the node that was
+/// supplied to the constructor.
+/// For example:
+///
+///   cond = 1;
+///   if (cond)
+///     10 / 0;
+///
+/// An error is emitted at line 3. This visitor realizes that the branch
+/// on line 2 is a control dependency of line 3, and tracks it's condition via
+/// trackExpressionValue().
+class TrackControlDependencyCondBRVisitor final : public BugReporterVisitor {
+  const ExplodedNode *Origin;
+  ControlDependencyCalculator ControlDepTree;
+  llvm::SmallSet<const CFGBlock *, 32> VisitedBlocks;
+
+public:
+  TrackControlDependencyCondBRVisitor(const ExplodedNode *O);
+
+  void Profile(llvm::FoldingSetNodeID &ID) const override {
+    static int x = 0;
+    ID.AddPointer(&x);
+  }
+
+  std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *N,
+                                                 BugReporterContext &BRC,
+                                                 BugReport &BR) override;
 };
 
 /// Visitor that tries to report interesting diagnostics from conditions.
