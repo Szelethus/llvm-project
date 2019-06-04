@@ -1009,41 +1009,41 @@ public:
 // Free functions for CFGBlock's pred iterator used by llvm::GraphDiff.
 //===----------------------------------------------------------------------===//
 
-CFGBlock::pred_iterator pred_begin(CFGBlock *B) {
+inline CFGBlock::pred_iterator pred_begin(CFGBlock *B) {
   return B->pred_begin();
 }
 
-CFGBlock::pred_iterator pred_end(CFGBlock *B) { return B->pred_end(); }
+inline CFGBlock::pred_iterator pred_end(CFGBlock *B) { return B->pred_end(); }
 
-CFGBlock::const_pred_iterator pred_begin(const CFGBlock *B) {
+inline CFGBlock::const_pred_iterator pred_begin(const CFGBlock *B) {
   return B->pred_begin();
 }
 
-CFGBlock::const_pred_iterator pred_end(const CFGBlock *B) {
+inline CFGBlock::const_pred_iterator pred_end(const CFGBlock *B) {
   return B->pred_end();
 }
 
-CFGBlock::pred_reverse_iterator pred_rbegin(CFGBlock *B) {
+inline CFGBlock::pred_reverse_iterator pred_rbegin(CFGBlock *B) {
   return B->pred_rbegin();
 }
 
-CFGBlock::pred_reverse_iterator pred_rend(CFGBlock *B) {
+inline CFGBlock::pred_reverse_iterator pred_rend(CFGBlock *B) {
   return B->pred_rend();
 }
 
-CFGBlock::const_pred_reverse_iterator pred_rbegin(const CFGBlock *B) {
+inline CFGBlock::const_pred_reverse_iterator pred_rbegin(const CFGBlock *B) {
   return B->pred_rbegin();
 }
 
-CFGBlock::const_pred_reverse_iterator pred_rend(const CFGBlock *B) {
+inline CFGBlock::const_pred_reverse_iterator pred_rend(const CFGBlock *B) {
   return B->pred_rend();
 }
 
-CFGBlock::pred_range preds(CFGBlock *B) {
+inline CFGBlock::pred_range preds(CFGBlock *B) {
   return CFGBlock::pred_range(B->pred_begin(), B->pred_end());
 }
 
-CFGBlock::pred_const_range preds(const CFGBlock *B) {
+inline CFGBlock::pred_const_range preds(const CFGBlock *B) {
   return CFGBlock::pred_const_range(B->pred_begin(), B->pred_end());
 }
 
@@ -1051,41 +1051,41 @@ CFGBlock::pred_const_range preds(const CFGBlock *B) {
 // Free functions for CFGBlock's succ iterator used by llvm::GraphDiff.
 //===----------------------------------------------------------------------===//
 
-CFGBlock::succ_iterator succ_begin(CFGBlock *B) {
+inline CFGBlock::succ_iterator succ_begin(CFGBlock *B) {
   return B->succ_begin();
 }
 
-CFGBlock::succ_iterator succ_end(CFGBlock *B) { return B->succ_end(); }
+inline CFGBlock::succ_iterator succ_end(CFGBlock *B) { return B->succ_end(); }
 
-CFGBlock::const_succ_iterator succ_begin(const CFGBlock *B) {
+inline CFGBlock::const_succ_iterator succ_begin(const CFGBlock *B) {
   return B->succ_begin();
 }
 
-CFGBlock::const_succ_iterator succ_end(const CFGBlock *B) {
+inline CFGBlock::const_succ_iterator succ_end(const CFGBlock *B) {
   return B->succ_end();
 }
 
-CFGBlock::succ_reverse_iterator succ_rbegin(CFGBlock *B) {
+inline CFGBlock::succ_reverse_iterator succ_rbegin(CFGBlock *B) {
   return B->succ_rbegin();
 }
 
-CFGBlock::succ_reverse_iterator succ_rend(CFGBlock *B) {
+inline CFGBlock::succ_reverse_iterator succ_rend(CFGBlock *B) {
   return B->succ_rend();
 }
 
-CFGBlock::const_succ_reverse_iterator succ_rbegin(const CFGBlock *B) {
+inline CFGBlock::const_succ_reverse_iterator succ_rbegin(const CFGBlock *B) {
   return B->succ_rbegin();
 }
 
-CFGBlock::const_succ_reverse_iterator succ_rend(const CFGBlock *B) {
+inline CFGBlock::const_succ_reverse_iterator succ_rend(const CFGBlock *B) {
   return B->succ_rend();
 }
 
-CFGBlock::succ_range succs(CFGBlock *B) {
+inline CFGBlock::succ_range succs(CFGBlock *B) {
   return CFGBlock::succ_range(B->succ_begin(), B->succ_end());
 }
 
-CFGBlock::succ_const_range succs(const CFGBlock *B) {
+inline CFGBlock::succ_const_range succs(const CFGBlock *B) {
   return CFGBlock::succ_const_range(B->succ_begin(), B->succ_end());
 }
 
