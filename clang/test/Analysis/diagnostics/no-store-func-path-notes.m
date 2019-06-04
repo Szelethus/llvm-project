@@ -16,17 +16,20 @@ extern int coin();
     return 0;
   }
   return 1; // expected-note{{Returning without writing to '*var'}}
+            // expected-note@-1{{Returning the value 1}}
 }
 @end
 
 int foo(I *i) {
-  int x;                            //expected-note{{'x' declared without an initial value}}
-  int out = [i initVar:&x param:0]; //expected-note{{Calling 'initVar:param:'}}
-                                    //expected-note@-1{{Returning from 'initVar:param:'}}
-  if (out)                          //expected-note{{'out' is 1}}
-                                    //expected-note@-1{{Taking true branch}}
-    return x;                       //expected-warning{{Undefined or garbage value returned to caller}}
-                                    //expected-note@-1{{Undefined or garbage value returned to caller}}
+  int x;                            // expected-note{{'x' declared without an initial value}}
+  int out = [i initVar:&x param:0]; // expected-note{{Calling 'initVar:param:'}}
+                                    // expected-note@-1{{Returning from 'initVar:param:'}}
+                                    // expected-note@-2{{Passing the value 0 via 2nd parameter 'param'}}
+                                    // expected-note@-3{{'out' initialized to 1}}
+  if (out)                          // expected-note{{Taking true branch}}
+                                    // expected-note@-1{{'out' is 1}}
+    return x;                       // expected-warning{{Undefined or garbage value returned to caller}}
+                                    // expected-note@-1{{Undefined or garbage value returned to caller}}
   return 0;
 }
 

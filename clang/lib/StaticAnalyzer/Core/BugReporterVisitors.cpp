@@ -1668,6 +1668,9 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
   if (!LVNode)
     return false;
 
+  report.addVisitor(llvm::make_unique<TrackControlDependencyCondBRVisitor>(
+        InputNode));
+
   ProgramStateRef LVState = LVNode->getState();
 
   // The message send could be nil due to the receiver being nil.
@@ -1829,6 +1832,69 @@ NilReceiverBRVisitor::VisitNode(const ExplodedNode *N,
   PathDiagnosticLocation L(Receiver, BRC.getSourceManager(),
                                      N->getLocationContext());
   return std::make_shared<PathDiagnosticEventPiece>(L, OS.str());
+}
+
+//===----------------------------------------------------------------------===//
+// Implementation of TrackControlDependencyCondBRVisitor.
+//===----------------------------------------------------------------------===//
+
+TrackControlDependencyCondBRVisitor::TrackControlDependencyCondBRVisitor(
+    const ExplodedNode *O)
+  : Origin(O), ControlDepTree(&O->getCFG()) {}
+
+static CFGBlock *GetRelevantBlock(const ExplodedNode *Node) {
+  if (auto SP = Node->getLocationAs<StmtPoint>()) {
+    const Stmt *S = SP->getStmt();
+    assert(S);
+
+    return const_cast<CFGBlock *>(Node->getLocationContext()
+        ->getAnalysisDeclContext()->getCFGStmtMap()->getBlock(S));
+  }
+
+  return nullptr;
+}
+
+static const Expr *getTerminatorCondition(CFGBlock *B) {
+  assert(B->rbegin()->getKind() == CFGElement::Kind::Statement);
+
+  // This should be the condition of the terminator block.
+  const Stmt *S = B->rbegin()->castAs<CFGStmt>().getStmt();
+  assert(S);
+
+  if (const auto *Cond = dyn_cast<Expr>(S))
+    return Cond;
+
+  assert(isa<ObjCForCollectionStmt>(S) &&
+      "Only ObjCForCollectionStmt is known not to be a non-Expr terminator!");
+
+  // TODO: Return the collection.
+  return nullptr;
+}
+
+std::shared_ptr<PathDiagnosticPiece>
+TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
+                                               BugReporterContext &BRC,
+                                               BugReport &BR) {
+  // We can only reason about control dependencies within the same stack frame.
+  if (Origin->getStackFrame() != N->getStackFrame())
+    return nullptr;
+
+  CFGBlock *NB = GetRelevantBlock(N);
+
+  // Skip if we already inspected this block.
+  if (!VisitedBlocks.insert(NB).second)
+    return nullptr;
+
+  CFGBlock *OriginB = GetRelevantBlock(Origin);
+  if (!OriginB || !NB)
+    return nullptr;
+
+  if (ControlDepTree.isControlDependency(OriginB, NB))
+    if (const Expr *Condition = getTerminatorCondition(NB))
+      bugreporter::trackExpressionValue(
+          N, Condition, BR, /*EnableNullFPSuppression=*/false);
+
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
