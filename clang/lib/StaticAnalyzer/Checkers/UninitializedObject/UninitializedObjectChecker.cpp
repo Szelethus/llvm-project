@@ -209,6 +209,7 @@ void UninitializedObjectChecker::checkEndFunction(
     Report->addNote(Pair.second,
                     PathDiagnosticLocation::create(Pair.first->getDecl(),
                                                    Context.getSourceManager()));
+    Report->markInteresting(Pair.first);
   }
   Context.emitReport(std::move(Report));
 }

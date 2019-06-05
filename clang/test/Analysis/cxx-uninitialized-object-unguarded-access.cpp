@@ -1,6 +1,7 @@
 // RUN: %clang_analyze_cc1 -analyzer-checker=core,optin.cplusplus.UninitializedObject \
 // RUN:   -analyzer-config optin.cplusplus.UninitializedObject:Pedantic=true -DPEDANTIC \
 // RUN:   -analyzer-config optin.cplusplus.UninitializedObject:IgnoreGuardedFields=true \
+// RUN:   -analyzer-output=text \
 // RUN:   -std=c++11 -verify  %s
 
 //===----------------------------------------------------------------------===//
@@ -158,15 +159,16 @@ private:
 
 public:
   UnguardedFieldThroughMethodTest(Kind K) : K(K) {
-    switch (K) {
+    switch (K) { // expected-note{{Control jumps to 'case A:'  at line}}
     case V:
       Volume = 0;
       break;
     case A:
-      Area = 0; // expected-warning {{1 uninitialized field}}
-      break;
+      Area = 0;
+      break; // expected-note{{Execution jumps to the end of the function}}
     }
-  }
+  } // expected-warning{{1 uninitialized field}}
+  // expected-note@-1{{1 uninitialized field}}
 
   void operator-() {
     assert(K == Kind::A);
@@ -180,6 +182,7 @@ public:
 
 void fUnguardedFieldThroughMethodTest() {
   UnguardedFieldThroughMethodTest T1(UnguardedFieldThroughMethodTest::Kind::A);
+  // expected-note@-1{{Calling constructor for 'UnguardedFieldThroughMethodTest'}}
 }
 
 class UnguardedPublicFieldsTest {
@@ -196,15 +199,16 @@ public:
 
 public:
   UnguardedPublicFieldsTest(Kind K) : K(K) {
-    switch (K) {
+    switch (K) { // expected-note{{Control jumps to 'case A:'  at line}}
     case V:
       Volume = 0;
       break;
     case A:
-      Area = 0; // expected-warning {{1 uninitialized field}}
-      break;
+      Area = 0;
+      break; // expected-note{{Execution jumps to the end of the function}}
     }
-  }
+  } // expected-warning {{1 uninitialized field}}
+  // expected-note@-1{{1 uninitialized field}}
 
   void operator-() {
     assert(K == Kind::A);
@@ -219,6 +223,7 @@ public:
 
 void fUnguardedPublicFieldsTest() {
   UnguardedPublicFieldsTest T1(UnguardedPublicFieldsTest::Kind::A);
+  // expected-note@-1{{Calling constructor for 'UnguardedPublicFieldsTest'}}
 }
 
 //===----------------------------------------------------------------------===//
