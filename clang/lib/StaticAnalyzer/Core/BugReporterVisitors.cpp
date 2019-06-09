@@ -368,7 +368,7 @@ private:
   /// either emit a note or suppress the report enirely.
   /// \return Diagnostics piece for region not modified in the current function,
   /// if it decides to emit one.
-  std::shared_ptr<PathDiagnosticPiece>
+  LLVM_NODISCARD std::shared_ptr<PathDiagnosticPiece>
   maybeEmitNote(BugReport &R, const CallEvent &Call, const ExplodedNode *N,
                 const RegionVector &FieldChain, const MemRegion *MatchedRegion,
                 StringRef FirstElement, bool FirstIsReferenceType,
@@ -387,6 +387,27 @@ private:
                                            bool MoreItemsExpected,
                                            int IndirectionLevel,
                                            llvm::raw_svector_ostream &os);
+
+  struct RegionOfInterestInfo {
+    RegionVector FieldChain;
+    const MemRegion *ActualRegion;
+    std::string VarName;
+    bool FirstIsReferenceType;
+    size_t IndirectionLevel;
+
+    const ParmVarDecl *Param;
+    RegionOfInterestInfo(RegionVector &&FieldChain,
+                         const MemRegion *ActualRegion,
+                         StringRef VarName, bool FirstIsReferenceType,
+                         size_t IndirectionLevel, const ParmVarDecl *Param)
+      : FieldChain(std::move(FieldChain)), ActualRegion(ActualRegion),
+        VarName(VarName), FirstIsReferenceType(FirstIsReferenceType),
+        IndirectionLevel(IndirectionLevel), Param(Param) {}
+  };
+
+  Optional<RegionOfInterestInfo> VisitNodeImpl(const ExplodedNode *N,
+                                                     CallEventRef<> &Call,
+                                                     BugReport &R);
 };
 
 } // end of anonymous namespace
@@ -517,6 +538,17 @@ NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
   CallEventRef<> Call =
       BR.getStateManager().getCallEventManager().getCaller(SCtx, State);
 
+  if (Optional<RegionOfInterestInfo> Info = VisitNodeImpl(N, Call, R)) {
+    return maybeEmitNote(R, *Call, N, Info->FieldChain, Info->ActualRegion,
+                         Info->VarName, Info->FirstIsReferenceType,
+                         Info->IndirectionLevel);
+  }
+  return nullptr;
+}
+
+Optional<NoStoreFuncVisitor::RegionOfInterestInfo>
+NoStoreFuncVisitor::VisitNodeImpl(const ExplodedNode *N, CallEventRef<> &Call,
+                                  BugReport &R) {
   // Region of interest corresponds to an IVar, exiting a method
   // which could have written into that IVar, but did not.
   if (const auto *MC = dyn_cast<ObjCMethodCall>(Call)) {
@@ -525,8 +557,8 @@ NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
       if (RegionOfInterest->isSubRegionOf(SelfRegion) &&
           potentiallyWritesIntoIvar(Call->getRuntimeDefinition().getDecl(),
                                     IvarR->getDecl()))
-        return maybeEmitNote(R, *Call, N, {}, SelfRegion, "self",
-                             /*FirstIsReferenceType=*/false, 1);
+        return RegionOfInterestInfo({}, SelfRegion, "self",
+                             /*FirstIsReferenceType=*/false, 1, nullptr);
     }
   }
 
@@ -534,13 +566,15 @@ NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
     const MemRegion *ThisR = CCall->getCXXThisVal().getAsRegion();
     if (RegionOfInterest->isSubRegionOf(ThisR) &&
         !CCall->getDecl()->isImplicit())
-      return maybeEmitNote(R, *Call, N, {}, ThisR, "this",
-                           /*FirstIsReferenceType=*/false, 1);
+      return RegionOfInterestInfo({}, ThisR, "this",
+                           /*FirstIsReferenceType=*/false, 1, nullptr);
 
     // Do not generate diagnostics for not modified parameters in
     // constructors.
-    return nullptr;
+    return None;
   }
+
+  ProgramStateRef State = N->getState();
 
   ArrayRef<ParmVarDecl *> parameters = getCallParameters(Call);
   for (unsigned I = 0; I < Call->getNumArgs() && I < parameters.size(); ++I) {
@@ -553,8 +587,8 @@ NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
     QualType T = PVD->getType();
     while (const MemRegion *MR = V.getAsRegion()) {
       if (RegionOfInterest->isSubRegionOf(MR) && !isPointerToConst(T))
-        return maybeEmitNote(R, *Call, N, {}, MR, ParamName,
-                             ParamIsReferenceType, IndirectionLevel);
+        return RegionOfInterestInfo({}, MR, ParamName,
+                             ParamIsReferenceType, IndirectionLevel, PVD);
 
       QualType PT = T->getPointeeType();
       if (PT.isNull() || PT->isVoidType())
@@ -563,8 +597,9 @@ NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
       if (const RecordDecl *RD = PT->getAsRecordDecl())
         if (Optional<RegionVector> P =
                 findRegionOfInterestInRecord(RD, State, MR))
-          return maybeEmitNote(R, *Call, N, *P, RegionOfInterest, ParamName,
-                               ParamIsReferenceType, IndirectionLevel);
+          return RegionOfInterestInfo(
+              std::move(*P), RegionOfInterest, ParamName, ParamIsReferenceType,
+              IndirectionLevel, PVD);
 
       V = State->getSVal(MR, PT);
       T = PT;
@@ -572,7 +607,7 @@ NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
     }
   }
 
-  return nullptr;
+  return None;
 }
 
 void NoStoreFuncVisitor::findModifyingFrames(const ExplodedNode *N) {
