@@ -1855,7 +1855,10 @@ static CFGBlock *GetRelevantBlock(const ExplodedNode *Node) {
 }
 
 static const Expr *getTerminatorCondition(CFGBlock *B) {
-  assert(B->rbegin()->getKind() == CFGElement::Kind::Statement);
+  // If the terminator is a temporary dtor or a virtual base, etc, we can't
+  // retrieve a meaningful condition, bail out.
+  if (B->rbegin()->getKind() != CFGElement::Kind::Statement)
+    return nullptr;
 
   // This should be the condition of the terminator block.
   const Stmt *S = B->rbegin()->castAs<CFGStmt>().getStmt();
