@@ -404,10 +404,10 @@ private:
         VarName(VarName), FirstIsReferenceType(FirstIsReferenceType),
         IndirectionLevel(IndirectionLevel), Param(Param) {}
   };
+  
+  void discoverPotentialWrites(const ExplodedNode *N);
 
-  Optional<RegionOfInterestInfo> VisitNodeImpl(const ExplodedNode *N,
-                                                     CallEventRef<> &Call,
-                                                     BugReport &R);
+  Optional<RegionOfInterestInfo> VisitNodeImpl(const ExplodedNode *N);
 };
 
 } // end of anonymous namespace
@@ -536,9 +536,9 @@ NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
     return nullptr;
 
   CallEventRef<> Call =
-      BR.getStateManager().getCallEventManager().getCaller(SCtx, State);
+      State->getStateManager().getCallEventManager().getCaller(SCtx, State);
 
-  if (Optional<RegionOfInterestInfo> Info = VisitNodeImpl(N, Call, R)) {
+  if (Optional<RegionOfInterestInfo> Info = VisitNodeImpl(N)) {
     return maybeEmitNote(R, *Call, N, Info->FieldChain, Info->ActualRegion,
                          Info->VarName, Info->FirstIsReferenceType,
                          Info->IndirectionLevel);
@@ -547,8 +547,13 @@ NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
 }
 
 Optional<NoStoreFuncVisitor::RegionOfInterestInfo>
-NoStoreFuncVisitor::VisitNodeImpl(const ExplodedNode *N, CallEventRef<> &Call,
-                                  BugReport &R) {
+NoStoreFuncVisitor::VisitNodeImpl(const ExplodedNode *N) {
+
+  ProgramStateRef State = N->getState();
+  CallEventRef<> Call =
+      State->getStateManager().getCallEventManager().getCaller(
+          N->getLocationContext()->getStackFrame(), State);
+
   // Region of interest corresponds to an IVar, exiting a method
   // which could have written into that IVar, but did not.
   if (const auto *MC = dyn_cast<ObjCMethodCall>(Call)) {
@@ -574,7 +579,6 @@ NoStoreFuncVisitor::VisitNodeImpl(const ExplodedNode *N, CallEventRef<> &Call,
     return None;
   }
 
-  ProgramStateRef State = N->getState();
 
   ArrayRef<ParmVarDecl *> parameters = getCallParameters(Call);
   for (unsigned I = 0; I < Call->getNumArgs() && I < parameters.size(); ++I) {
@@ -610,12 +614,32 @@ NoStoreFuncVisitor::VisitNodeImpl(const ExplodedNode *N, CallEventRef<> &Call,
   return None;
 }
 
+void NoStoreFuncVisitor::discoverPotentialWrites(const ExplodedNode *N) {
+  Optional<RegionOfInterestInfo> Info = VisitNodeImpl(N);
+  if (!Info || !Info->Param)
+    return;
+
+  for (const CFGBlock *B : llvm::inverse_nodes<const CFG *>(&N->getCFG())) {
+    B->dump();
+    for (const CFGElement &E : *B) {
+      if (E.getKind() != CFGElement::Kind::Statement)
+        continue;
+      const Stmt *S = E.castAs<CFGStmt>().getStmt();
+
+      S->dump();
+      llvm::errs() << "-------------\n";
+
+    }
+  }
+}
+
 void NoStoreFuncVisitor::findModifyingFrames(const ExplodedNode *N) {
   assert(N->getLocationAs<CallExitBegin>());
   ProgramStateRef LastReturnState = N->getState();
   SVal ValueAtReturn = LastReturnState->getSVal(RegionOfInterest);
   const LocationContext *Ctx = N->getLocationContext();
   const StackFrameContext *OriginalSCtx = Ctx->getStackFrame();
+  llvm::SmallPtrSet<const CFG *, 5> VisitedCFG;
 
   do {
     ProgramStateRef State = N->getState();
@@ -624,6 +648,9 @@ void NoStoreFuncVisitor::findModifyingFrames(const ExplodedNode *N) {
       LastReturnState = State;
       ValueAtReturn = LastReturnState->getSVal(RegionOfInterest);
     }
+
+    if (VisitedCFG.insert(&N->getCFG()).second)
+      discoverPotentialWrites(N);
 
     FramesModifyingCalculated.insert(N->getLocationContext()->getStackFrame());
 
