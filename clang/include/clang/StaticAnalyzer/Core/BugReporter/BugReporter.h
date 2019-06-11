@@ -153,6 +153,9 @@ protected:
   /// \sa removeInvalidation
   llvm::SmallSet<InvalidationRecord, 4> Invalidations;
 
+  /// Conditions we're already tracking.
+  llvm::SmallPtrSet<const Expr *, 4> TrackedConditions;
+
 private:
   // Used internally by BugReporter.
   Symbols &getInterestingSymbols();
@@ -348,6 +351,10 @@ public:
   /// Iterators through the custom diagnostic visitors.
   visitor_iterator visitor_begin() { return Callbacks.begin(); }
   visitor_iterator visitor_end() { return Callbacks.end(); }
+
+  bool addTrackedCondition(const Expr *Cond) {
+    return TrackedConditions.insert(Cond).second;
+  }
 
   /// Profile to identify equivalent bug reports for error report coalescing.
   /// Reports are uniqued to ensure that we do not emit multiple diagnostics
