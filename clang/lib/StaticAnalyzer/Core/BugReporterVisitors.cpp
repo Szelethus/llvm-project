@@ -1894,8 +1894,9 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
 
   if (ControlDepTree.isControlDependent(OriginB, NB))
     if (const Expr *Condition = getTerminatorCondition(NB))
-      bugreporter::trackExpressionValue(
-          N, Condition, BR, /*EnableNullFPSuppression=*/false);
+      if (BR.addTrackedCondition(Condition))
+        bugreporter::trackExpressionValue(
+            N, Condition, BR, /*EnableNullFPSuppression=*/false);
 
   return nullptr;
 }
