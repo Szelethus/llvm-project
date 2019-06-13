@@ -1892,11 +1892,27 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
   if (!OriginB || !NB)
     return nullptr;
 
-  if (ControlDepTree.isControlDependency(OriginB, NB))
-    if (const Expr *Condition = getTerminatorCondition(NB))
-      if (BR.addTrackedCondition(Condition))
+  if (ControlDepTree.isControlDependency(OriginB, NB)) {
+    if (const Expr *Condition = getTerminatorCondition(NB)) {
+      if (BR.addTrackedCondition(Condition)) {
         bugreporter::trackExpressionValue(
             N, Condition, BR, /*EnableNullFPSuppression=*/false);
+
+        if (BRC.getAnalyzerOptions().AnalysisDiagOpt == PD_NONE)
+          return nullptr;
+
+        std::string ConditionText = Lexer::getSourceText(
+            CharSourceRange::getTokenRange(Condition->getSourceRange()),
+                                           BRC.getSourceManager(),
+                                           BRC.getASTContext().getLangOpts());
+
+        return std::make_shared<PathDiagnosticEventPiece>(
+            PathDiagnosticLocation::createEnd(
+                Condition, BRC.getSourceManager(), N->getLocationContext()),
+                "Tracking condition " + ConditionText);
+      }
+    }
+  }
 
   return nullptr;
 }
