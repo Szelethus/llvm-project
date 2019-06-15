@@ -90,9 +90,7 @@ namespace variable_declaration_in_condition {
 bool coin();
 
 bool foo() {
-  // FIXME: It makes no sense at all for bar to have been assigned here.
-  return coin(); // expected-note {{Value assigned to 'flag'}}
-                 // expected-note@-1 {{Value assigned to 'bar'}}
+  return coin();
 }
 
 int bar;
@@ -105,4 +103,8 @@ void test() {
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
+} // end of namespace variable_declaration_in_condition
+
+namespace conversion_to_bool {
+
 } // end of namespace variable_declaration_in_condition
