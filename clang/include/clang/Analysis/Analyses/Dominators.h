@@ -222,7 +222,8 @@ public:
     return It->second;
   }
 
-  bool isControlDependency(CFGBlock *A, CFGBlock *B) {
+  /// Whether \p A is control dependent of \p B.
+  bool isControlDependent(CFGBlock *A, CFGBlock *B) {
     return llvm::is_contained(getControlDependencies(A), B);
   }
 
