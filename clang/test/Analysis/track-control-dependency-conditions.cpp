@@ -1,4 +1,5 @@
 // RUN: %clang_analyze_cc1 %s -verify \
+// RUN:   -analyzer-config track-conditions=true \
 // RUN:   -analyzer-output=text \
 // RUN:   -analyzer-checker=core
 

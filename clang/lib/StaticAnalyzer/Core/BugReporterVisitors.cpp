@@ -1763,10 +1763,11 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
   if (!LVNode)
     return false;
 
-  report.addVisitor(llvm::make_unique<TrackControlDependencyCondBRVisitor>(
-        InputNode));
-
   ProgramStateRef LVState = LVNode->getState();
+
+  if (LVState->getAnalysisManager().getAnalyzerOptions().ShouldTrackConditions)
+    report.addVisitor(llvm::make_unique<TrackControlDependencyCondBRVisitor>(
+          InputNode));
 
   // The message send could be nil due to the receiver being nil.
   // At this point in the path, the receiver should be live since we are at the

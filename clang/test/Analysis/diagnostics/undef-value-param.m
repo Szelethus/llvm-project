@@ -52,7 +52,7 @@ SCDynamicStoreRef anotherCreateRef(unsigned *err, unsigned x);
 
 static void CreateRef(SCDynamicStoreRef *storeRef, unsigned x) {
     unsigned err = 0;
-    SCDynamicStoreRef ref = anotherCreateRef(&err, x); // expected-note{{Value assigned to 'err'}}
+    SCDynamicStoreRef ref = anotherCreateRef(&err, x);
     if (err) { 
                //expected-note@-1{{Assuming 'err' is not equal to 0}}
                //expected-note@-2{{Taking true branch}}
