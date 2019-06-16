@@ -78,31 +78,6 @@ bool ento::shouldRegisterPostDominatorsTreeDumper(const LangOptions &LO) {
 }
 
 //===----------------------------------------------------------------------===//
-// ControlDependencyTreeDumper
-//===----------------------------------------------------------------------===//
-
-namespace {
-class ControlDependencyTreeDumper : public Checker<check::ASTCodeBody> {
-public:
-  void checkASTCodeBody(const Decl *D, AnalysisManager& mgr,
-                        BugReporter &BR) const {
-    if (AnalysisDeclContext *AC = mgr.getAnalysisDeclContext(D)) {
-      CFGControlDependencyTree dom(AC->getCFG());
-      dom.dump();
-    }
-  }
-};
-}
-
-void ento::registerControlDependencyTreeDumper(CheckerManager &mgr) {
-  mgr.registerChecker<ControlDependencyTreeDumper>();
-}
-
-bool ento::shouldRegisterControlDependencyTreeDumper(const LangOptions &LO) {
-  return true;
-}
-
-//===----------------------------------------------------------------------===//
 // LiveVariablesDumper
 //===----------------------------------------------------------------------===//
 

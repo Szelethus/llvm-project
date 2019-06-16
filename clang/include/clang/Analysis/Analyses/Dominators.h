@@ -18,7 +18,6 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/iterator.h"
-#include "llvm/Analysis/IteratedDominanceFrontier.h"
 #include "llvm/Support/GenericDomTree.h"
 #include "llvm/Support/GenericDomTreeConstruction.h"
 #include "llvm/Support/raw_ostream.h"
@@ -45,17 +44,12 @@ class CFGDominatorTreeImpl : public ManagedAnalysis {
 public:
   using DominatorTreeBase = llvm::DominatorTreeBase<CFGBlock, IsPostDom>;
 
+  DominatorTreeBase DT;
+
   CFGDominatorTreeImpl() = default;
-
-  CFGDominatorTreeImpl(CFG *cfg) {
-    buildDominatorTree(cfg);
-  }
-
   ~CFGDominatorTreeImpl() override = default;
 
-  DominatorTreeBase &getBase() { return DT; }
-
-  CFG *getCFG() { return cfg; }
+  DominatorTreeBase& getBase() { return *DT; }
 
   /// \returns the root CFGBlock of the dominators tree.
   CFGBlock *getRoot() const {
@@ -178,69 +172,10 @@ public:
 
 private:
   CFG *cfg;
-  DominatorTreeBase DT;
 };
 
 using CFGDomTree = CFGDominatorTreeImpl</*IsPostDom*/ false>;
 using CFGPostDomTree = CFGDominatorTreeImpl</*IsPostDom*/ true>;
-
-class CFGControlDependencyTree : public ManagedAnalysis {
-  using IDFCalculator = llvm::IDFCalculatorBase<CFGBlock, /*IsPostDom=*/true>;
-  using CFGBlockVector = llvm::SmallVector<CFGBlock *, 4>;
-  using CFGBlockSet = llvm::SmallPtrSet<CFGBlock *, 4>;
-
-  CFGPostDomTree PostDomTree;
-  IDFCalculator IDFCalc;
-
-  llvm::DenseMap<CFGBlock *, CFGBlockVector> ControlDepenencyMap;
-
-public:
-  CFGControlDependencyTree(CFG *cfg)
-    : PostDomTree(cfg), IDFCalc(PostDomTree.getBase()) {
-    for (CFGBlock *BB : *cfg) {
-      CFGBlockSet DefiningBlock = {BB};
-      IDFCalc.setDefiningBlocks(DefiningBlock);
-
-      CFGBlockVector ControlDependencies;
-      IDFCalc.calculate(ControlDependencies);
-
-      ControlDepenencyMap[BB] = ControlDependencies;
-    }
-  }
-
-  CFGPostDomTree &getCFGPostDomTree() { return PostDomTree; }
-  const CFGPostDomTree &getCFGPostDomTree() const { return PostDomTree; }
-
-  virtual void releaseMemory() {
-    PostDomTree.releaseMemory();
-  }
-
-  const CFGBlockVector &getControlDependencies(CFGBlock *A) const {
-    return ControlDepenencyMap.find(A)->second;
-  }
-
-  bool isControlDependency(CFGBlock *A, CFGBlock *B) const {
-    return llvm::is_contained(getControlDependencies(A), B);
-  }
-
-  // Dumps immediate control dependencies for each block.
-  void dump() {
-    CFG *cfg = PostDomTree.getCFG();
-    llvm::errs() << "Control dependencies (Node#,Dependency#):\n";
-    for (CFGBlock *BB : *cfg) {
-
-      assert(BB &&
-             "LLVM's Dominator tree builder uses nullpointers to signify the "
-             "virtual root!");
-
-      for (CFGBlock *isControlDependency : getControlDependencies(BB))
-        llvm::errs() << "(" << BB->getBlockID()
-                     << ","
-                     << isControlDependency->getBlockID()
-                     << ")\n";
-    }
-  }
-};
 
 } // namespace clang
 
@@ -315,41 +250,6 @@ ClangCFGPostDomReverseChildrenGetter::Get(
 }
 
 } // end of namespace DomTreeBuilder
-
-/// Aaaand the same goes for IDFCalculator.
-
-using ClangCFGIDFCalculator =
-     typename llvm::IDFCalculatorBase<clang::CFGBlock, false>;
-
-template<>
-inline ClangCFGIDFCalculator::ChildrenTy ClangCFGIDFCalculator::getChildren(
-    const ClangCFGIDFCalculator::NodeRef &N) {
-
-  auto Children = children<OrderedNodeTy>(N);
-
-  ClangCFGIDFCalculator::ChildrenTy
-      Ret{Children.begin(), Children.end()};
-
-  Ret.erase(std::remove(Ret.begin(), Ret.end(), nullptr), Ret.end());
-  return Ret;
-}
-
-using ClangCFGPostIDFCalculator =
-     typename llvm::IDFCalculatorBase<clang::CFGBlock, true>;
-
-template<>
-inline ClangCFGPostIDFCalculator::ChildrenTy
-ClangCFGPostIDFCalculator::getChildren(
-    const ClangCFGPostIDFCalculator::NodeRef &N) {
-
-  auto Children = children<OrderedNodeTy>(N);
-
-  ClangCFGPostIDFCalculator::ChildrenTy
-      Ret{Children.begin(), Children.end()};
-
-  Ret.erase(std::remove(Ret.begin(), Ret.end(), nullptr), Ret.end());
-  return Ret;
-}
 
 //===-------------------------------------
 /// DominatorTree GraphTraits specialization so the DominatorTree can be
