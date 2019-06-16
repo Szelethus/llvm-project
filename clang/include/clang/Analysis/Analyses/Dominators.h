@@ -196,17 +196,7 @@ class CFGControlDependencyTree : public ManagedAnalysis {
 
 public:
   CFGControlDependencyTree(CFG *cfg)
-    : PostDomTree(cfg), IDFCalc(PostDomTree.getBase()) {
-    for (CFGBlock *BB : *cfg) {
-      CFGBlockSet DefiningBlock = {BB};
-      IDFCalc.setDefiningBlocks(DefiningBlock);
-
-      CFGBlockVector ControlDependencies;
-      IDFCalc.calculate(ControlDependencies);
-
-      ControlDepenencyMap[BB] = ControlDependencies;
-    }
-  }
+    : PostDomTree(cfg), IDFCalc(PostDomTree.getBase()) {}
 
   CFGPostDomTree &getCFGPostDomTree() { return PostDomTree; }
   const CFGPostDomTree &getCFGPostDomTree() const { return PostDomTree; }
@@ -215,11 +205,24 @@ public:
     PostDomTree.releaseMemory();
   }
 
-  const CFGBlockVector &getControlDependencies(CFGBlock *A) const {
-    return ControlDepenencyMap.find(A)->second;
+  // Lazily retrieves the set of control dependencies to \p A.
+  const CFGBlockVector &getControlDependencies(CFGBlock *A) {
+    auto It = ControlDepenencyMap.find(A);
+    if (It == ControlDepenencyMap.end()) {
+      CFGBlockSet DefiningBlock = {A};
+      IDFCalc.setDefiningBlocks(DefiningBlock);
+
+      CFGBlockVector ControlDependencies;
+      IDFCalc.calculate(ControlDependencies);
+
+      It = ControlDepenencyMap.insert({A, ControlDependencies}).first;
+    }
+
+    assert(It != ControlDepenencyMap.end());
+    return It->second;
   }
 
-  bool isControlDependency(CFGBlock *A, CFGBlock *B) const {
+  bool isControlDependency(CFGBlock *A, CFGBlock *B) {
     return llvm::is_contained(getControlDependencies(A), B);
   }
 
