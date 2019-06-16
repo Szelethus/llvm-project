@@ -162,9 +162,9 @@ TEST(CFGDominatorTree, ControlDependency) {
 
   CFGControlDependencyTree Control(cfg);
 
-  EXPECT_TRUE(Control.isControlDependency(SecondIfBlock, SecondThenBlock));
-  EXPECT_TRUE(Control.isControlDependency(FirstIfBlock, SecondIfBlock));
-  EXPECT_FALSE(Control.isControlDependency(SecondIfBlock, NullDerefBlock));
+  EXPECT_TRUE(Control.isControlDependent(SecondIfBlock, SecondThenBlock));
+  EXPECT_TRUE(Control.isControlDependent(FirstIfBlock, SecondIfBlock));
+  EXPECT_FALSE(Control.isControlDependent(SecondIfBlock, NullDerefBlock));
 }
 
 TEST(CFGDominatorTree, ControlDependencyWithLoops) {
@@ -208,7 +208,7 @@ TEST(CFGDominatorTree, ControlDependencyWithLoops) {
 
   // While not immediately obvious, the second block in fact post dominates the
   // fifth, hence B5 is not a control dependency of 2.
-  EXPECT_FALSE(Control.isControlDependency(GetBlock(5), GetBlock(2)));
+  EXPECT_FALSE(Control.isControlDependent(GetBlock(5), GetBlock(2)));
 }
 
 
