@@ -23,46 +23,15 @@
 #ifndef LLVM_ANALYSIS_IDF_H
 #define LLVM_ANALYSIS_IDF_H
 
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/SmallVector.h"
-#include "llvm/IR/CFGDiff.h"
-#include "llvm/Support/GenericDomTree.h"
 #include "llvm/Support/GenericIteratedDominanceFrontier.h"
-#include <queue>
 
 namespace llvm {
 
-/// Determine the iterated dominance frontier, given a set of defining
-/// blocks, and optionally, a set of live-in blocks.
-///
-/// In turn, the results can be used to place phi nodes.
-///
-/// This algorithm is a linear time computation of Iterated Dominance Frontiers,
-/// pruned using the live-in set.
-/// By default, liveness is not used to prune the IDF computation.
-/// The template parameters should be of a CFG block type.
-template <class NodeTy, bool IsPostDom>
-class IDFCalculator : public IDFCalculatorBase<NodeTy, IsPostDom> {
-public:
-  using IDFCalculatorBase = typename llvm::IDFCalculatorBase<NodeTy, IsPostDom>;
-  using OrderedNodeTy = typename IDFCalculatorBase::OrderedNodeTy;
-
-  IDFCalculator(DominatorTreeBase<NodeTy, IsPostDom> &DT)
-      : IDFCalculatorBase(DT) {}
-
-  IDFCalculator(DominatorTreeBase<NodeTy, IsPostDom> &DT,
-                const GraphDiff<NodeTy *, IsPostDom> *GD)
-      : IDFCalculatorBase(DT), GD(GD) {}
-
-private:
-  const GraphDiff<NodeTy *, IsPostDom> *GD = nullptr;
-};
-
 class BasicBlock;
 
-typedef IDFCalculator<BasicBlock, false> ForwardIDFCalculator;
-typedef IDFCalculator<BasicBlock, true> ReverseIDFCalculator;
+using ForwardIDFCalculator = IDFCalculatorBase<BasicBlock, false>;
+using ReverseIDFCalculator = IDFCalculatorBase<BasicBlock, true>;
+
 } // end of namespace llvm
 
 #endif

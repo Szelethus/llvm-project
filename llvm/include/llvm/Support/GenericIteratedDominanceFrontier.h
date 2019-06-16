@@ -83,6 +83,14 @@ public:
   /// would be dead.
   void calculate(SmallVectorImpl<NodeTy *> &IDFBlocks);
 
+  using NodeRef = typename GraphTraits<OrderedNodeTy>::NodeRef;
+  using ChildrenTy = SmallVector<NodeRef, 8>;
+
+  ChildrenTy getChildren(const NodeRef &N) {
+    auto Children = children<OrderedNodeTy>(N);
+    return {Children.begin(), Children.end()};
+  }
+
 private:
   DominatorTreeBase<NodeTy, IsPostDom> &DT;
   bool useLiveIn = false;
@@ -93,20 +101,6 @@ private:
 //===----------------------------------------------------------------------===//
 // Implementation.
 //===----------------------------------------------------------------------===//
-
-namespace IDFCalculatorDetail {
-template <class GraphType>
-struct ChildrenGetter {
-  using ChildIteratorTy = typename GraphTraits<GraphType>::ChildIteratorType;
-  using NodeRef = typename GraphTraits<GraphType>::NodeRef;
-  using ReturnTy = SmallVector<NodeRef, 8>;
-
-  static ReturnTy Get(const NodeRef &G) {
-    auto Children = children<GraphType>(G);
-    return {Children.begin(), Children.end()};
-  }
-};
-} // end of namespace IDFCalculatorDetail
 
 template <class NodeTy, bool IsPostDom>
 void IDFCalculatorBase<NodeTy, IsPostDom>::calculate(
@@ -120,8 +114,6 @@ void IDFCalculatorBase<NodeTy, IsPostDom>::calculate(
   using IDFPriorityQueue =
       std::priority_queue<DomTreeNodePair, SmallVector<DomTreeNodePair, 32>,
                           less_second>;
-
-  using namespace IDFCalculatorDetail;
 
   IDFPriorityQueue PQ;
 
@@ -176,7 +168,7 @@ void IDFCalculatorBase<NodeTy, IsPostDom>::calculate(
               SuccNode, std::make_pair(SuccLevel, SuccNode->getDFSNumIn())));
       };
 
-      for (auto Succ : ChildrenGetter<OrderedNodeTy>::Get(BB))
+      for (auto Succ : getChildren(BB))
         DoWork(Succ);
 
       for (auto DomChild : *Node) {

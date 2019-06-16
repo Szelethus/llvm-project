@@ -185,7 +185,7 @@ using CFGDomTree = CFGDominatorTreeImpl</*IsPostDom*/ false>;
 using CFGPostDomTree = CFGDominatorTreeImpl</*IsPostDom*/ true>;
 
 class CFGControlDependencyTree : public ManagedAnalysis {
-  using IDFCalculator = llvm::IDFCalculator<CFGBlock, /*IsPostDom=*/true>;
+  using IDFCalculator = llvm::IDFCalculatorBase<CFGBlock, /*IsPostDom=*/true>;
   using CFGBlockVector = llvm::SmallVector<CFGBlock *, 4>;
   using CFGBlockSet = llvm::SmallPtrSet<CFGBlock *, 4>;
 
@@ -317,48 +317,39 @@ ClangCFGPostDomReverseChildrenGetter::Get(
 } // end of namespace DomTreeBuilder
 
 /// Aaaand the same goes for IDFCalculator.
-namespace IDFCalculatorDetail {
+
 using ClangCFGIDFCalculator =
-     typename llvm::IDFCalculator<clang::CFGBlock, true>;
-
-using ClangCFGBlockOrder = ClangCFGIDFCalculator::OrderedNodeTy;
-
-using InverseClangCFGGraphDiff = GraphDiff<clang::CFGBlock *, true>;
-
-using NodePair = std::pair<const InverseClangCFGGraphDiff *,
-                           ClangCFGBlockOrder>;
-
-using NodePairIDFChildrenGetter = ChildrenGetter<NodePair>;
+     typename llvm::IDFCalculatorBase<clang::CFGBlock, false>;
 
 template<>
-inline NodePairIDFChildrenGetter::ReturnTy NodePairIDFChildrenGetter::Get(
-    const NodePairIDFChildrenGetter::NodeRef &N) {
+inline ClangCFGIDFCalculator::ChildrenTy ClangCFGIDFCalculator::getChildren(
+    const ClangCFGIDFCalculator::NodeRef &N) {
 
-  auto Children = children<NodePair>(N);
-  NodePairIDFChildrenGetter::ReturnTy Ret{Children.begin(), Children.end()};
+  auto Children = children<OrderedNodeTy>(N);
 
-  Ret.erase(std::remove_if(Ret.begin(), Ret.end(),
-            [](const NodePairIDFChildrenGetter::NodeRef &Pair) {
-              return Pair.second == nullptr;}), Ret.end());
-  return Ret;
-}
-
-using CFGBlockOrderedIDFChildrenGetter = ChildrenGetter<ClangCFGBlockOrder>;
-
-template<> CFGBlockOrderedIDFChildrenGetter::ReturnTy
-inline CFGBlockOrderedIDFChildrenGetter::Get(
-    const CFGBlockOrderedIDFChildrenGetter::NodeRef &N) {
-
-  auto Children = children<ClangCFGBlockOrder>(N);
-
-  CFGBlockOrderedIDFChildrenGetter::ReturnTy
+  ClangCFGIDFCalculator::ChildrenTy
       Ret{Children.begin(), Children.end()};
 
   Ret.erase(std::remove(Ret.begin(), Ret.end(), nullptr), Ret.end());
   return Ret;
 }
 
-} // end of namespace IDFCalculatorDetail
+using ClangCFGPostIDFCalculator =
+     typename llvm::IDFCalculatorBase<clang::CFGBlock, true>;
+
+template<>
+inline ClangCFGPostIDFCalculator::ChildrenTy
+ClangCFGPostIDFCalculator::getChildren(
+    const ClangCFGPostIDFCalculator::NodeRef &N) {
+
+  auto Children = children<OrderedNodeTy>(N);
+
+  ClangCFGPostIDFCalculator::ChildrenTy
+      Ret{Children.begin(), Children.end()};
+
+  Ret.erase(std::remove(Ret.begin(), Ret.end(), nullptr), Ret.end());
+  return Ret;
+}
 
 //===-------------------------------------
 /// DominatorTree GraphTraits specialization so the DominatorTree can be
