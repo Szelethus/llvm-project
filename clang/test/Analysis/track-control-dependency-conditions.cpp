@@ -90,7 +90,7 @@ namespace variable_declaration_in_condition {
 bool coin();
 
 bool foo() {
-  return coin();
+  return coin(); // expected-note {{Returning value}}
 }
 
 int bar;
@@ -98,8 +98,11 @@ int bar;
 void test() {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
 
-  if (int flag = foo()) // expected-note   {{Taking true branch}}
-            // expected-note@-1{{Assuming 'flag' is not equal to 0}}
+  if (int flag = foo()) // expected-note {{Calling 'foo'}}
+            // expected-note@-1{{Returning from 'foo'}}
+            // expected-note@-2{{'flag' initialized here}}
+            // expected-note@-3{{Assuming 'flag' is not equal to 0}}
+            // expected-note@-4{{Taking true branch}}
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -109,14 +112,16 @@ namespace conversion_to_bool {
 bool coin();
 
 struct ConvertsToBool {
-  operator bool() const { return coin(); }
+  operator bool() const { return coin(); } // expected-note {{Returning value}}
 };
 
 void test() {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
 
-  if (ConvertsToBool()) // expected-note   {{Taking true branch}}
-            // expected-note@-1{{Assuming 'flag' is not equal to 0}}
+  if (ConvertsToBool()) // expected-note {{Calling 'ConvertsToBool::operator bool'}}
+            // expected-note@-1{{Returning from 'ConvertsToBool::operator bool'}}
+            // expected-note@-2{{Assuming the condition is true}}
+            // expected-note@-3{{Taking true branch}}
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
