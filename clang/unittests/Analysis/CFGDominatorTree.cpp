@@ -160,7 +160,7 @@ TEST(CFGDominatorTree, ControlDependency) {
   CFGBlock *EntryBlock = *(cfg->begin() + 5);
   EXPECT_EQ(EntryBlock, &cfg->getEntry());
 
-  CFGControlDependencyTree Control(cfg);
+  ControlDependencyCalculator Control(cfg);
 
   EXPECT_TRUE(Control.isControlDependent(SecondIfBlock, SecondThenBlock));
   EXPECT_TRUE(Control.isControlDependent(FirstIfBlock, SecondIfBlock));
@@ -187,19 +187,17 @@ TEST(CFGDominatorTree, ControlDependencyWithLoops) {
   BuildResult Result = BuildCFG(Code);
   EXPECT_EQ(BuildResult::BuiltCFG, Result.getStatus());
 
-  //                            <-------------
-  //                           /              \
-  //                           |        ---> [B2]
-  //                           |       /
-  // [B8 (ENTRY)] -> [B7] -> [B6] -> [B5] -> [B4] -> [B3]
-  //                   \       |       \              /
-  //                    \      |        <-------------
+  //                           <- [B2] <-
+  //                          /          \
+  // [B8 (ENTRY)] -> [B7] -> [B6] ---> [B5] -> [B4] -> [B3]
+  //                   \       |         \              /
+  //                    \      |          <-------------
   //                     \      \
   //                      --------> [B1] -> [B0 (EXIT)]
 
   CFG *cfg = Result.getCFG();
 
-  CFGControlDependencyTree Control(cfg);
+  ControlDependencyCalculator Control(cfg);
 
   auto GetBlock = [cfg] (unsigned Index) -> CFGBlock * {
     assert(Index < cfg->size());

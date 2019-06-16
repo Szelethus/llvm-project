@@ -18,7 +18,7 @@
 #include "llvm/ADT/DepthFirstIterator.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/iterator.h"
-#include "llvm/Analysis/IteratedDominanceFrontier.h"
+#include "llvm/Support/GenericIteratedDominanceFrontier.h"
 #include "llvm/Support/GenericDomTree.h"
 #include "llvm/Support/GenericDomTreeConstruction.h"
 #include "llvm/Support/raw_ostream.h"
@@ -184,7 +184,7 @@ private:
 using CFGDomTree = CFGDominatorTreeImpl</*IsPostDom*/ false>;
 using CFGPostDomTree = CFGDominatorTreeImpl</*IsPostDom*/ true>;
 
-class CFGControlDependencyTree : public ManagedAnalysis {
+class ControlDependencyCalculator : public ManagedAnalysis {
   using IDFCalculator = llvm::IDFCalculatorBase<CFGBlock, /*IsPostDom=*/true>;
   using CFGBlockVector = llvm::SmallVector<CFGBlock *, 4>;
   using CFGBlockSet = llvm::SmallPtrSet<CFGBlock *, 4>;
@@ -195,7 +195,7 @@ class CFGControlDependencyTree : public ManagedAnalysis {
   llvm::DenseMap<CFGBlock *, CFGBlockVector> ControlDepenencyMap;
 
 public:
-  CFGControlDependencyTree(CFG *cfg)
+  ControlDependencyCalculator(CFG *cfg)
     : PostDomTree(cfg), IDFCalc(PostDomTree.getBase()) {}
 
   CFGPostDomTree &getCFGPostDomTree() { return PostDomTree; }
