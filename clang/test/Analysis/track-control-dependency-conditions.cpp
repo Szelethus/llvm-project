@@ -15,15 +15,15 @@ void test() {
   flag = 1;
 
   foo(); // TODO: Add nodes here about flag's value being invalidated.
-  if (flag) // expected-note   {{Taking false branch}}
-            // expected-note@-1{{Assuming 'flag' is 0}}
+  if (flag) // expected-note   {{Assuming 'flag' is 0}}
+            // expected-note@-1{{Taking false branch}}
     x = new int;
 
   foo(); // expected-note   {{Calling 'foo'}}
          // expected-note@-1{{Returning from 'foo'}}
 
-  if (flag) // expected-note   {{Taking true branch}}
-            // expected-note@-1{{Assuming 'flag' is not equal to 0}}
+  if (flag) // expected-note   {{Assuming 'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -42,8 +42,8 @@ void test() {
   flag = 1;
 
   foo();
-  if (flag) // expected-note   {{Taking false branch}}
-            // expected-note@-1{{Assuming 'flag' is 0}}
+  if (flag) // expected-note   {{Assuming 'flag' is 0}}
+            // expected-note@-1{{Taking false branch}}
     x = new int;
 
   x = 0; // expected-note{{Null pointer value stored to 'x'}}
@@ -51,8 +51,8 @@ void test() {
   foo(); // expected-note   {{Calling 'foo'}}
          // expected-note@-1{{Returning from 'foo'}}
 
-  if (flag) // expected-note   {{Taking true branch}}
-            // expected-note@-1{{Assuming 'flag' is not equal to 0}}
+  if (flag) // expected-note   {{Assuming 'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -63,7 +63,7 @@ int flag;
 bool coin();
 
 void foo() {
-  // FIXME: It makes no sense at all for bar to have been assigned here.
+  // coin() could write bar, do it's invalidated.
   flag = coin(); // expected-note {{Value assigned to 'flag'}}
                  // expected-note@-1 {{Value assigned to 'bar'}}
 }
@@ -77,10 +77,10 @@ void test() {
   foo(); // expected-note   {{Calling 'foo'}}
          // expected-note@-1{{Returning from 'foo'}}
 
-  if (bar) // expected-note   {{Taking true branch}}
-           // expected-note@-1{{Assuming 'bar' is not equal to 0}}
-    if (flag) // expected-note   {{Taking true branch}}
-              // expected-note@-1{{Assuming 'flag' is not equal to 0}}
+  if (bar) // expected-note   {{Assuming 'bar' is not equal to 0}}
+           // expected-note@-1{{Taking true branch}}
+    if (flag) // expected-note   {{Assuming 'flag' is not equal to 0}}
+              // expected-note@-1{{Taking true branch}}
       *x = 5; // expected-warning{{Dereference of null pointer}}
               // expected-note@-1{{Dereference of null pointer}}
 }
@@ -106,5 +106,19 @@ void test() {
 } // end of namespace variable_declaration_in_condition
 
 namespace conversion_to_bool {
+bool coin();
+
+struct ConvertsToBool {
+  operator bool() const { return coin(); }
+};
+
+void test() {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+
+  if (ConvertsToBool()) // expected-note   {{Taking true branch}}
+            // expected-note@-1{{Assuming 'flag' is not equal to 0}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
 
 } // end of namespace variable_declaration_in_condition

@@ -160,35 +160,6 @@ public:
   static const Expr *getNilReceiver(const Stmt *S, const ExplodedNode *N);
 };
 
-/// Tracks the expressions that are a control dependency of the node that was
-/// supplied to the constructor.
-/// For example:
-///
-///   cond = 1;
-///   if (cond)
-///     10 / 0;
-///
-/// An error is emitted at line 3. This visitor realizes that the branch
-/// on line 2 is a control dependency of line 3, and tracks it's condition via
-/// trackExpressionValue().
-class TrackControlDependencyCondBRVisitor final : public BugReporterVisitor {
-  const ExplodedNode *Origin;
-  ControlDependencyCalculator ControlDepTree;
-  llvm::SmallSet<const CFGBlock *, 32> VisitedBlocks;
-
-public:
-  TrackControlDependencyCondBRVisitor(const ExplodedNode *O);
-
-  void Profile(llvm::FoldingSetNodeID &ID) const override {
-    static int x = 0;
-    ID.AddPointer(&x);
-  }
-
-  std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *N,
-                                                 BugReporterContext &BRC,
-                                                 BugReport &BR) override;
-};
-
 /// Visitor that tries to report interesting diagnostics from conditions.
 class ConditionBRVisitor final : public BugReporterVisitor {
   // FIXME: constexpr initialization isn't supported by MSVC2013.

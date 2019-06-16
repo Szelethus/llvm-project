@@ -1555,6 +1555,101 @@ SuppressInlineDefensiveChecksVisitor::VisitNode(const ExplodedNode *Succ,
 }
 
 //===----------------------------------------------------------------------===//
+// TrackControlDependencyCondBRVisitor.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Tracks the expressions that are a control dependency of the node that was
+/// supplied to the constructor.
+/// For example:
+///
+///   cond = 1;
+///   if (cond)
+///     10 / 0;
+///
+/// An error is emitted at line 3. This visitor realizes that the branch
+/// on line 2 is a control dependency of line 3, and tracks it's condition via
+/// trackExpressionValue().
+class TrackControlDependencyCondBRVisitor final : public BugReporterVisitor {
+  const ExplodedNode *Origin;
+  ControlDependencyCalculator ControlDeps;
+  llvm::SmallSet<const CFGBlock *, 32> VisitedBlocks;
+
+public:
+  TrackControlDependencyCondBRVisitor(const ExplodedNode *O)
+  : Origin(O), ControlDeps(&O->getCFG()) {}
+
+  void Profile(llvm::FoldingSetNodeID &ID) const override {
+    static int x = 0;
+    ID.AddPointer(&x);
+  }
+
+  std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *N,
+                                                 BugReporterContext &BRC,
+                                                 BugReport &BR) override;
+};
+} // end of anonymous namespace
+
+static CFGBlock *GetRelevantBlock(const ExplodedNode *Node) {
+  if (auto SP = Node->getLocationAs<StmtPoint>()) {
+    const Stmt *S = SP->getStmt();
+    assert(S);
+
+    return const_cast<CFGBlock *>(Node->getLocationContext()
+        ->getAnalysisDeclContext()->getCFGStmtMap()->getBlock(S));
+  }
+
+  return nullptr;
+}
+
+static const Expr *getTerminatorCondition(CFGBlock *B) {
+  // If the terminator is a temporary dtor or a virtual base, etc, we can't
+  // retrieve a meaningful condition, bail out.
+  if (B->rbegin()->getKind() != CFGElement::Kind::Statement)
+    return nullptr;
+
+  // This should be the condition of the terminator block.
+  const Stmt *S = B->rbegin()->castAs<CFGStmt>().getStmt();
+  assert(S);
+
+  if (const auto *Cond = dyn_cast<Expr>(S))
+    return Cond;
+
+  assert(isa<ObjCForCollectionStmt>(S) &&
+      "Only ObjCForCollectionStmt is known not to be a non-Expr terminator!");
+
+  // TODO: Return the collection.
+  return nullptr;
+}
+
+std::shared_ptr<PathDiagnosticPiece>
+TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
+                                               BugReporterContext &BRC,
+                                               BugReport &BR) {
+  // We can only reason about control dependencies within the same stack frame.
+  if (Origin->getStackFrame() != N->getStackFrame())
+    return nullptr;
+
+  CFGBlock *NB = GetRelevantBlock(N);
+
+  // Skip if we already inspected this block.
+  if (!VisitedBlocks.insert(NB).second)
+    return nullptr;
+
+  CFGBlock *OriginB = GetRelevantBlock(Origin);
+  if (!OriginB || !NB)
+    return nullptr;
+
+  if (ControlDeps.isControlDependent(OriginB, NB))
+    if (const Expr *Condition = getTerminatorCondition(NB))
+      if (BR.addTrackedCondition(Condition))
+        bugreporter::trackExpressionValue(
+            N, Condition, BR, /*EnableNullFPSuppression=*/false);
+
+  return nullptr;
+}
+
+//===----------------------------------------------------------------------===//
 // Implementation of trackExpressionValue.
 //===----------------------------------------------------------------------===//
 
@@ -1832,73 +1927,6 @@ NilReceiverBRVisitor::VisitNode(const ExplodedNode *N,
   PathDiagnosticLocation L(Receiver, BRC.getSourceManager(),
                                      N->getLocationContext());
   return std::make_shared<PathDiagnosticEventPiece>(L, OS.str());
-}
-
-//===----------------------------------------------------------------------===//
-// Implementation of TrackControlDependencyCondBRVisitor.
-//===----------------------------------------------------------------------===//
-
-TrackControlDependencyCondBRVisitor::TrackControlDependencyCondBRVisitor(
-    const ExplodedNode *O)
-  : Origin(O), ControlDepTree(&O->getCFG()) {}
-
-static CFGBlock *GetRelevantBlock(const ExplodedNode *Node) {
-  if (auto SP = Node->getLocationAs<StmtPoint>()) {
-    const Stmt *S = SP->getStmt();
-    assert(S);
-
-    return const_cast<CFGBlock *>(Node->getLocationContext()
-        ->getAnalysisDeclContext()->getCFGStmtMap()->getBlock(S));
-  }
-
-  return nullptr;
-}
-
-static const Expr *getTerminatorCondition(CFGBlock *B) {
-  // If the terminator is a temporary dtor or a virtual base, etc, we can't
-  // retrieve a meaningful condition, bail out.
-  if (B->rbegin()->getKind() != CFGElement::Kind::Statement)
-    return nullptr;
-
-  // This should be the condition of the terminator block.
-  const Stmt *S = B->rbegin()->castAs<CFGStmt>().getStmt();
-  assert(S);
-
-  if (const auto *Cond = dyn_cast<Expr>(S))
-    return Cond;
-
-  assert(isa<ObjCForCollectionStmt>(S) &&
-      "Only ObjCForCollectionStmt is known not to be a non-Expr terminator!");
-
-  // TODO: Return the collection.
-  return nullptr;
-}
-
-std::shared_ptr<PathDiagnosticPiece>
-TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
-                                               BugReporterContext &BRC,
-                                               BugReport &BR) {
-  // We can only reason about control dependencies within the same stack frame.
-  if (Origin->getStackFrame() != N->getStackFrame())
-    return nullptr;
-
-  CFGBlock *NB = GetRelevantBlock(N);
-
-  // Skip if we already inspected this block.
-  if (!VisitedBlocks.insert(NB).second)
-    return nullptr;
-
-  CFGBlock *OriginB = GetRelevantBlock(Origin);
-  if (!OriginB || !NB)
-    return nullptr;
-
-  if (ControlDepTree.isControlDependent(OriginB, NB))
-    if (const Expr *Condition = getTerminatorCondition(NB))
-      if (BR.addTrackedCondition(Condition))
-        bugreporter::trackExpressionValue(
-            N, Condition, BR, /*EnableNullFPSuppression=*/false);
-
-  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
