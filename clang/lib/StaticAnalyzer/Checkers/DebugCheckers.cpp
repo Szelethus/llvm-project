@@ -87,7 +87,7 @@ public:
   void checkASTCodeBody(const Decl *D, AnalysisManager& mgr,
                         BugReporter &BR) const {
     if (AnalysisDeclContext *AC = mgr.getAnalysisDeclContext(D)) {
-      CFGControlDependencyTree dom(AC->getCFG());
+      ControlDependencyCalculator dom(AC->getCFG());
       dom.dump();
     }
   }

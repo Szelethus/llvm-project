@@ -211,7 +211,7 @@ struct ChildrenGetterTy<clang::CFGBlock, IsPostDom> {
 
 namespace clang {
 
-class CFGControlDependencyTree : public ManagedAnalysis {
+class ControlDependencyCalculator : public ManagedAnalysis {
   using IDFCalculator = llvm::IDFCalculatorBase<CFGBlock, /*IsPostDom=*/true>;
   using CFGBlockVector = llvm::SmallVector<CFGBlock *, 4>;
   using CFGBlockSet = llvm::SmallPtrSet<CFGBlock *, 4>;
@@ -222,7 +222,7 @@ class CFGControlDependencyTree : public ManagedAnalysis {
   llvm::DenseMap<CFGBlock *, CFGBlockVector> ControlDepenencyMap;
 
 public:
-  CFGControlDependencyTree(CFG *cfg)
+  ControlDependencyCalculator(CFG *cfg)
     : PostDomTree(cfg), IDFCalc(PostDomTree.getBase()) {}
 
   CFGPostDomTree &getCFGPostDomTree() { return PostDomTree; }
