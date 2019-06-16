@@ -10,12 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/Analysis/Analyses/Dominators.h"
 #include "clang/Analysis/Analyses/LiveVariables.h"
+#include "clang/Analysis/Analyses/ReachingDefinitions.h"
 #include "clang/Analysis/CallGraph.h"
-#include "clang/StaticAnalyzer/Core/Checker.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
+#include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExplodedGraph.h"
@@ -99,6 +100,72 @@ void ento::registerControlDependencyTreeDumper(CheckerManager &mgr) {
 }
 
 bool ento::shouldRegisterControlDependencyTreeDumper(const LangOptions &LO) {
+  return true;
+}
+
+//===----------------------------------------------------------------------===//
+// GenSetDumper
+//===----------------------------------------------------------------------===//
+
+namespace {
+class GenSetDumper : public Checker<check::ASTCodeBody> {
+public:
+  void checkASTCodeBody(const Decl *D, AnalysisManager &mgr,
+                        BugReporter &BR) const {
+    if (AnalysisDeclContext *AC = mgr.getAnalysisDeclContext(D))
+      AC->getAnalysis<ReachingDefinitionsCalculator>()->dumpGenSet();
+  }
+};
+} // namespace
+
+void ento::registerGenSetDumper(CheckerManager &mgr) {
+  mgr.registerChecker<GenSetDumper>();
+}
+
+bool ento::shouldRegisterGenSetDumper(const LangOptions &LO) { return true; }
+
+//===----------------------------------------------------------------------===//
+// KillSetDumper
+//===----------------------------------------------------------------------===//
+
+namespace {
+class KillSetDumper : public Checker<check::ASTCodeBody> {
+public:
+  void checkASTCodeBody(const Decl *D, AnalysisManager &mgr,
+                        BugReporter &BR) const {
+    if (AnalysisDeclContext *AC = mgr.getAnalysisDeclContext(D))
+      AC->getAnalysis<ReachingDefinitionsCalculator>()->dumpKillSet();
+  }
+};
+} // namespace
+
+void ento::registerKillSetDumper(CheckerManager &mgr) {
+  mgr.registerChecker<KillSetDumper>();
+}
+
+bool ento::shouldRegisterKillSetDumper(const LangOptions &LO) { return true; }
+
+//===----------------------------------------------------------------------===//
+// ReachingDefinitionsDumper
+//===----------------------------------------------------------------------===//
+
+namespace {
+class ReachingDefinitionsDumper : public Checker<check::ASTCodeBody> {
+public:
+  void checkASTCodeBody(const Decl *D, AnalysisManager &mgr,
+                        BugReporter &BR) const {
+    if (AnalysisDeclContext *AC = mgr.getAnalysisDeclContext(D))
+      AC->getAnalysis<ReachingDefinitionsCalculator>()
+          ->dumpReachingDefinitions();
+  }
+};
+} // namespace
+
+void ento::registerReachingDefinitionsDumper(CheckerManager &mgr) {
+  mgr.registerChecker<ReachingDefinitionsDumper>();
+}
+
+bool ento::shouldRegisterReachingDefinitionsDumper(const LangOptions &LO) {
   return true;
 }
 

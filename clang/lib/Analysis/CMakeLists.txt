@@ -22,6 +22,7 @@ add_clang_library(clangAnalysis
   PostOrderCFGView.cpp
   ProgramPoint.cpp
   ReachableCode.cpp
+  ReachingDefinitions.cpp
   RetainSummaryManager.cpp
   ThreadSafety.cpp
   ThreadSafetyCommon.cpp

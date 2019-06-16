@@ -1415,8 +1415,19 @@ def DebugIteratorModeling : Checker<"DebugIteratorModeling">,
   Dependencies<[DebugContainerModeling, IteratorModeling]>,
   Documentation<NotDocumented>;
 
-} // end "debug"
+def GenSetDumper : Checker<"DumpGenSets">,
+  HelpText<"Dump the GEN sets for each block in a function">,
+  Documentation<NotDocumented>;
 
+def KillSetDumper : Checker<"DumpKillSets">,
+  HelpText<"Dump the KILL sets for each block in a function">,
+  Documentation<NotDocumented>;
+
+def ReachingDefinitionsDumper : Checker<"DumpReachingDefinitions">,
+  HelpText<"Dump the reaching definitions for each block in a function">,
+  Documentation<NotDocumented>;
+
+} // end "debug"
 
 //===----------------------------------------------------------------------===//
 // Clone Detection
