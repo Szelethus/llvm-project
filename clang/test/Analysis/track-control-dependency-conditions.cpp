@@ -1,5 +1,9 @@
-// RUN: %clang_analyze_cc1 %s -verify \
+// RUN: %clang_analyze_cc1 %s -verify -DTRACKING_CONDITIONS \
 // RUN:   -analyzer-config track-conditions=true \
+// RUN:   -analyzer-output=text \
+// RUN:   -analyzer-checker=core
+//
+// RUN: %clang_analyze_cc1 %s -verify \
 // RUN:   -analyzer-output=text \
 // RUN:   -analyzer-checker=core
 
@@ -8,7 +12,10 @@ int flag;
 bool coin();
 
 void foo() {
-  flag = coin(); // expected-note {{Value assigned to 'flag'}}
+  flag = coin();
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{Value assigned to 'flag'}}
+#endif // TRACKING_CONDITIONS
 }
 
 void test() {
@@ -20,8 +27,11 @@ void test() {
             // expected-note@-1{{Taking false branch}}
     x = new int;
 
-  foo(); // expected-note   {{Calling 'foo'}}
-         // expected-note@-1{{Returning from 'foo'}}
+  foo();
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{Calling 'foo'}}
+  // expected-note@-3{{Returning from 'foo'}}
+#endif // TRACKING_CONDITIONS
 
   if (flag) // expected-note   {{Assuming 'flag' is not equal to 0}}
             // expected-note@-1{{Taking true branch}}
@@ -35,7 +45,10 @@ int flag;
 bool coin();
 
 void foo() {
-  flag = coin(); // expected-note {{Value assigned to 'flag'}}
+  flag = coin();
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{Value assigned to 'flag'}}
+#endif // TRACKING_CONDITIONS
 }
 
 void test() {
@@ -49,8 +62,11 @@ void test() {
 
   x = 0; // expected-note{{Null pointer value stored to 'x'}}
 
-  foo(); // expected-note   {{Calling 'foo'}}
-         // expected-note@-1{{Returning from 'foo'}}
+  foo();
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{Calling 'foo'}}
+  // expected-note@-3{{Returning from 'foo'}}
+#endif // TRACKING_CONDITIONS
 
   if (flag) // expected-note   {{Assuming 'flag' is not equal to 0}}
             // expected-note@-1{{Taking true branch}}
@@ -65,8 +81,11 @@ bool coin();
 
 void foo() {
   // coin() could write bar, do it's invalidated.
-  flag = coin(); // expected-note {{Value assigned to 'flag'}}
-                 // expected-note@-1 {{Value assigned to 'bar'}}
+  flag = coin();
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{Value assigned to 'flag'}}
+  // expected-note@-3{{Value assigned to 'bar'}}
+#endif // TRACKING_CONDITIONS
 }
 
 int bar;
@@ -75,8 +94,11 @@ void test() {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
   flag = 1;
 
-  foo(); // expected-note   {{Calling 'foo'}}
-         // expected-note@-1{{Returning from 'foo'}}
+  foo();
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{Calling 'foo'}}
+  // expected-note@-3{{Returning from 'foo'}}
+#endif // TRACKING_CONDITIONS
 
   if (bar) // expected-note   {{Assuming 'bar' is not equal to 0}}
            // expected-note@-1{{Taking true branch}}
@@ -91,7 +113,10 @@ namespace variable_declaration_in_condition {
 bool coin();
 
 bool foo() {
-  return coin(); // expected-note {{Returning value}}
+  return coin();
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{Returning value}}
+#endif // TRACKING_CONDITIONS
 }
 
 int bar;
@@ -99,11 +124,14 @@ int bar;
 void test() {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
 
-  if (int flag = foo()) // expected-note {{Calling 'foo'}}
-            // expected-note@-1{{Returning from 'foo'}}
-            // expected-note@-2{{'flag' initialized here}}
-            // expected-note@-3{{Assuming 'flag' is not equal to 0}}
-            // expected-note@-4{{Taking true branch}}
+  if (int flag = foo())
+#ifdef TRACKING_CONDITIONS
+    // expected-note@-2{{Calling 'foo'}}
+    // expected-note@-3{{Returning from 'foo'}}
+    // expected-note@-4{{'flag' initialized here}}
+#endif // TRACKING_CONDITIONS
+    // expected-note@-6{{Assuming 'flag' is not equal to 0}}
+    // expected-note@-7{{Taking true branch}}
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -113,16 +141,22 @@ namespace conversion_to_bool {
 bool coin();
 
 struct ConvertsToBool {
-  operator bool() const { return coin(); } // expected-note {{Returning value}}
+  operator bool() const { return coin(); }
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{Returning value}}
+#endif // TRACKING_CONDITIONS
 };
 
 void test() {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
 
-  if (ConvertsToBool()) // expected-note {{Calling 'ConvertsToBool::operator bool'}}
-            // expected-note@-1{{Returning from 'ConvertsToBool::operator bool'}}
-            // expected-note@-2{{Assuming the condition is true}}
-            // expected-note@-3{{Taking true branch}}
+  if (ConvertsToBool())
+#ifdef TRACKING_CONDITIONS
+    // expected-note@-2 {{Calling 'ConvertsToBool::operator bool'}}
+    // expected-note@-3{{Returning from 'ConvertsToBool::operator bool'}}
+#endif // TRACKING_CONDITIONS
+    // expected-note@-5{{Assuming the condition is true}}
+    // expected-note@-6{{Taking true branch}}
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
