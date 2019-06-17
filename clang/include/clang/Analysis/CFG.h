@@ -541,6 +541,8 @@ public:
   }
 };
 
+class CFGElementRef;
+
 /// Represents a single basic block in a source-level CFG.
 ///  It consists of:
 ///
@@ -732,6 +734,8 @@ public:
   bool                       empty()       const { return Elements.empty();   }
 
   CFGElement operator[](size_t i) const  { return Elements[i]; }
+
+  CFGElementRef getCFGElementRef(size_t i) const;
 
   // CFG iterators
   using pred_iterator = AdjacentBlocks::iterator;
@@ -1014,8 +1018,39 @@ public:
     *I = CFGScopeEnd(VD, S);
     return ++I;
   }
-
 };
+
+/// A simply wrapper for a (CFGBlock, index) pair. This is needed because
+/// CFGElements can't be collected by address, as CFGBlock returns them by
+/// value.
+class CFGElementRef {
+  const CFGBlock *B;
+  size_t Index;
+
+public:
+  const CFGBlock *getCFGBlock() const {
+    return B;
+  }
+
+  size_t getIndex() const {
+    return Index;
+  }
+
+  CFGElement operator*() const {
+    return (*B)[Index];
+  }
+
+  CFGElementRef(const CFGBlock *B, size_t Index) : B(B), Index(Index) {}
+
+  bool precedes(CFGElementRef Other) const {
+    assert(getCFGBlock() == Other.getCFGBlock());
+    return getIndex() < Other.getIndex();
+  }
+};
+
+inline CFGElementRef CFGBlock::getCFGElementRef(size_t I) const {
+  return {this, I};
+}
 
 /// CFGCallback defines methods that should be called when a logical
 /// operator error is found when building the CFG.
