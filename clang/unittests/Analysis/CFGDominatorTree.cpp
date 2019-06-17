@@ -162,9 +162,9 @@ TEST(CFGDominatorTree, ControlDependency) {
 
   ControlDependencyCalculator Control(cfg);
 
-  EXPECT_TRUE(Control.isControlDependent(SecondIfBlock, SecondThenBlock));
-  EXPECT_TRUE(Control.isControlDependent(FirstIfBlock, SecondIfBlock));
-  EXPECT_FALSE(Control.isControlDependent(SecondIfBlock, NullDerefBlock));
+  EXPECT_TRUE(Control.isControlDependent(SecondThenBlock, SecondIfBlock));
+  EXPECT_TRUE(Control.isControlDependent(SecondIfBlock, FirstIfBlock));
+  EXPECT_FALSE(Control.isControlDependent(NullDerefBlock, SecondIfBlock));
 }
 
 TEST(CFGDominatorTree, ControlDependencyWithLoops) {
