@@ -225,7 +225,6 @@ public:
   ControlDependencyCalculator(CFG *cfg)
     : PostDomTree(cfg), IDFCalc(PostDomTree.getBase()) {}
 
-  CFGPostDomTree &getCFGPostDomTree() { return PostDomTree; }
   const CFGPostDomTree &getCFGPostDomTree() const { return PostDomTree; }
 
   virtual void releaseMemory() {
@@ -249,7 +248,7 @@ public:
     return It->second;
   }
 
-  /// Whether \p A is control dependent of \p B.
+  /// Whether \p A is control dependent on \p B.
   bool isControlDependent(CFGBlock *A, CFGBlock *B) {
     return llvm::is_contained(getControlDependencies(A), B);
   }
