@@ -26,7 +26,7 @@ public:
       : IDFCalculatorBase(DT) {}
 
   IDFCalculator(DominatorTreeBase<BasicBlock, IsPostDom> &DT,
-                        const GraphDiff<BasicBlock *, IsPostDom> *GD)
+                const GraphDiff<BasicBlock *, IsPostDom> *GD)
       : IDFCalculatorBase(DT), GD(GD) {
     assert(GD);
   }
