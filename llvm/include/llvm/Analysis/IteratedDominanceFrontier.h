@@ -9,14 +9,53 @@
 #ifndef LLVM_ANALYSIS_IDF_H
 #define LLVM_ANALYSIS_IDF_H
 
+#include "llvm/IR/CFGDiff.h"
 #include "llvm/Support/GenericIteratedDominanceFrontier.h"
 
 namespace llvm {
 
 class BasicBlock;
 
-using ForwardIDFCalculator = IDFCalculatorBase<BasicBlock, false>;
-using ReverseIDFCalculator = IDFCalculatorBase<BasicBlock, true>;
+template <bool IsPostDom>
+class IDFCalculator final : public IDFCalculatorBase<BasicBlock, IsPostDom> {
+public:
+  using IDFCalculatorBase =
+      typename llvm::IDFCalculatorBase<BasicBlock, IsPostDom>;
+
+  IDFCalculator(DominatorTreeBase<BasicBlock, IsPostDom> &DT)
+      : IDFCalculatorBase(DT) {}
+
+  IDFCalculator(DominatorTreeBase<BasicBlock, IsPostDom> &DT,
+                        const GraphDiff<BasicBlock *, IsPostDom> *GD)
+      : IDFCalculatorBase(DT), GD(GD) {
+    assert(GD);
+  }
+
+  using NodeRef = BasicBlock *;
+  using ChildrenTy = typename IDFCalculatorBase::ChildrenTy;
+  using OrderedNodeTy = typename IDFCalculatorBase::OrderedNodeTy;
+
+  virtual ChildrenTy getChildren(const NodeRef &BB) override {
+    if (!GD) {
+      auto Children = children<OrderedNodeTy>(BB);
+      return {Children.begin(), Children.end()};
+    }
+
+    using SnapShotBBPair =
+        std::pair<const GraphDiff<BasicBlock *, IsPostDom> *, OrderedNodeTy>;
+
+    ChildrenTy Ret;
+    for (auto Pair : children<SnapShotBBPair>({GD, BB}))
+      Ret.emplace_back(Pair.second);
+    return Ret;
+  }
+
+private:
+  const GraphDiff<BasicBlock *, IsPostDom> *GD = nullptr;
+};
+
+using ForwardIDFCalculator = IDFCalculator<false>;
+using ReverseIDFCalculator = IDFCalculator<true>;
 
 } // end of namespace llvm
 

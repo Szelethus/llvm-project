@@ -48,6 +48,8 @@ public:
 
   IDFCalculatorBase(DominatorTreeBase<NodeTy, IsPostDom> &DT) : DT(DT) {}
 
+  virtual ~IDFCalculatorBase() = default;
+
   /// Give the IDF calculator the set of blocks in which the value is
   /// defined.  This is equivalent to the set of starting blocks it should be
   /// calculating the IDF for (though later gets pruned based on liveness).
@@ -86,7 +88,7 @@ public:
   using NodeRef = typename GraphTraits<OrderedNodeTy>::NodeRef;
   using ChildrenTy = SmallVector<NodeRef, 8>;
 
-  ChildrenTy getChildren(const NodeRef &N) {
+  virtual ChildrenTy getChildren(const NodeRef &N) {
     auto Children = children<OrderedNodeTy>(N);
     return {Children.begin(), Children.end()};
   }
