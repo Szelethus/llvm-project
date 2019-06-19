@@ -1638,12 +1638,14 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
     return nullptr;
 
   CFGBlock *OriginB = GetRelevantBlock(Origin);
+
+  // TODO: Cache CFGBlocks for each ExplodedNode.
   if (!OriginB || !NB)
     return nullptr;
 
   if (ControlDeps.isControlDependent(OriginB, NB))
     if (const Expr *Condition = getTerminatorCondition(NB))
-      if (BR.addTrackedCondition(Condition))
+      if (BR.addTrackedCondition({Condition, N}))
         bugreporter::trackExpressionValue(
             N, Condition, BR, /*EnableNullFPSuppression=*/false);
 
