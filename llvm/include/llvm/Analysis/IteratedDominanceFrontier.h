@@ -47,16 +47,6 @@ public:
   using ChildrenTy = typename IDFCalculatorBase::ChildrenTy;
   using OrderedNodeTy = typename IDFCalculatorBase::OrderedNodeTy;
 
-  ChildrenTy getChildren(const NodeRef &BB) {
-    using SnapShotBBPair =
-        std::pair<const GraphDiff<BasicBlock *, IsPostDom> *, OrderedNodeTy>;
-
-    ChildrenTy Ret;
-    for (auto Pair : children<SnapShotBBPair>({GD, BB}))
-      Ret.emplace_back(Pair.second);
-    return Ret;
-  }
-
 private:
   const GraphDiff<BasicBlock *, IsPostDom> *GD = nullptr;
 };
