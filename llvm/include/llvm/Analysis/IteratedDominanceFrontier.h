@@ -27,7 +27,19 @@ public:
 
   IDFCalculator(DominatorTreeBase<BasicBlock, IsPostDom> &DT,
                 const GraphDiff<BasicBlock *, IsPostDom> *GD)
-      : IDFCalculatorBase(DT), GD(GD) {
+      : IDFCalculatorBase(
+            DT,
+            [GD](const NodeRef &BB) {
+              using SnapShotBBPair =
+                  std::pair<const GraphDiff<BasicBlock *, IsPostDom> *,
+                            OrderedNodeTy>;
+
+              ChildrenTy Ret;
+              for (auto Pair : children<SnapShotBBPair>({GD, BB}))
+                Ret.emplace_back(Pair.second);
+              return Ret;
+            }),
+        GD(GD) {
     assert(GD);
   }
 
@@ -35,12 +47,7 @@ public:
   using ChildrenTy = typename IDFCalculatorBase::ChildrenTy;
   using OrderedNodeTy = typename IDFCalculatorBase::OrderedNodeTy;
 
-  virtual ChildrenTy getChildren(const NodeRef &BB) override {
-    if (!GD) {
-      auto Children = children<OrderedNodeTy>(BB);
-      return {Children.begin(), Children.end()};
-    }
-
+  ChildrenTy getChildren(const NodeRef &BB) {
     using SnapShotBBPair =
         std::pair<const GraphDiff<BasicBlock *, IsPostDom> *, OrderedNodeTy>;
 

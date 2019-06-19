@@ -28,6 +28,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/CFGDiff.h"
 #include "llvm/Support/GenericDomTree.h"
+#include <functional>
 #include <queue>
 
 namespace llvm {
@@ -46,9 +47,17 @@ public:
   using OrderedNodeTy =
       typename std::conditional<IsPostDom, Inverse<NodeTy *>, NodeTy *>::type;
 
-  IDFCalculatorBase(DominatorTreeBase<NodeTy, IsPostDom> &DT) : DT(DT) {}
+  using NodeRef = typename GraphTraits<OrderedNodeTy>::NodeRef;
+  using ChildrenTy = SmallVector<NodeRef, 8>;
+  using ChildrenGetterFn = ChildrenTy(const NodeRef &);
 
-  virtual ~IDFCalculatorBase() = default;
+  IDFCalculatorBase(DominatorTreeBase<NodeTy, IsPostDom> &DT,
+                    std::function<ChildrenGetterFn> Fn =
+                        [](const NodeRef &N) -> ChildrenTy {
+                      auto Children = children<OrderedNodeTy>(N);
+                      return {Children.begin(), Children.end()};
+                    })
+      : DT(DT), GetChildren(Fn) {}
 
   /// Give the IDF calculator the set of blocks in which the value is
   /// defined.  This is equivalent to the set of starting blocks it should be
@@ -85,19 +94,12 @@ public:
   /// would be dead.
   void calculate(SmallVectorImpl<NodeTy *> &IDFBlocks);
 
-  using NodeRef = typename GraphTraits<OrderedNodeTy>::NodeRef;
-  using ChildrenTy = SmallVector<NodeRef, 8>;
-
-  virtual ChildrenTy getChildren(const NodeRef &N) {
-    auto Children = children<OrderedNodeTy>(N);
-    return {Children.begin(), Children.end()};
-  }
-
 private:
   DominatorTreeBase<NodeTy, IsPostDom> &DT;
   bool useLiveIn = false;
   const SmallPtrSetImpl<NodeTy *> *LiveInBlocks;
   const SmallPtrSetImpl<NodeTy *> *DefBlocks;
+  std::function<ChildrenGetterFn> GetChildren;
 };
 
 //===----------------------------------------------------------------------===//
@@ -170,7 +172,7 @@ void IDFCalculatorBase<NodeTy, IsPostDom>::calculate(
               SuccNode, std::make_pair(SuccLevel, SuccNode->getDFSNumIn())));
       };
 
-      for (auto Succ : getChildren(BB))
+      for (auto Succ : GetChildren(BB))
         DoWork(Succ);
 
       for (auto DomChild : *Node) {
