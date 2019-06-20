@@ -1603,26 +1603,6 @@ static CFGBlock *GetRelevantBlock(const ExplodedNode *Node) {
   return nullptr;
 }
 
-static const Expr *getTerminatorCondition(CFGBlock *B) {
-  // If the terminator is a temporary dtor or a virtual base, etc, we can't
-  // retrieve a meaningful condition, bail out.
-  if (B->rbegin()->getKind() != CFGElement::Kind::Statement)
-    return nullptr;
-
-  // This should be the condition of the terminator block.
-  const Stmt *S = B->rbegin()->castAs<CFGStmt>().getStmt();
-  assert(S);
-
-  if (const auto *Cond = dyn_cast<Expr>(S))
-    return Cond;
-
-  assert(isa<ObjCForCollectionStmt>(S) &&
-      "Only ObjCForCollectionStmt is known not to be a non-Expr terminator!");
-
-  // TODO: Return the collection.
-  return nullptr;
-}
-
 std::shared_ptr<PathDiagnosticPiece>
 TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
                                                BugReporterContext &BRC,
@@ -1644,7 +1624,7 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
     return nullptr;
 
   if (ControlDeps.isControlDependent(OriginB, NB))
-    if (const Expr *Condition = getTerminatorCondition(NB))
+    if (const Expr *Condition = NB->getTerminatorConditionExpr())
       if (BR.addTrackedCondition({Condition, N}))
         bugreporter::trackExpressionValue(
             N, Condition, BR, /*EnableNullFPSuppression=*/false);
