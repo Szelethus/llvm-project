@@ -75,7 +75,7 @@ void test() {
 }
 } // end of namespace example_2
 
-namespace example_3 {
+namespace global_variable_invalidation {
 int flag;
 bool coin();
 
@@ -107,7 +107,7 @@ void test() {
       *x = 5; // expected-warning{{Dereference of null pointer}}
               // expected-note@-1{{Dereference of null pointer}}
 }
-} // end of namespace example_3
+} // end of namespace global_variable_invalidation
 
 namespace variable_declaration_in_condition {
 bool coin();
@@ -162,3 +162,126 @@ void test() {
 }
 
 } // end of namespace variable_declaration_in_condition
+
+namespace tracked_condition_is_only_initialized {
+int getInt();
+
+void f() {
+  int flag = getInt();
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{'flag' initialized here}}
+#endif // TRACKING_CONDITIONS
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+  if (flag) // expected-note{{Assuming 'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+} // end of namespace tracked_condition_is_only_initialized
+
+namespace tracked_condition_written_in_same_stackframe {
+int flag;
+int getInt();
+
+void f(int y) {
+  y = 1;
+  flag = y;
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-3{{The value 1 is assigned to 'y'}}
+  // expected-note@-3{{The value 1 is assigned to 'flag'}}
+#endif // TRACKING_CONDITIONS
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+  if (flag) // expected-note{{'flag' is 1}}
+            // expected-note@-1{{Taking true branch}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+} // end of namespace tracked_condition_written_in_same_stackframe
+
+namespace tracked_condition_written_in_nested_stackframe {
+int flag;
+int getInt();
+
+void foo() {
+  int y;
+  y = 1;
+  flag = y;
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-3{{The value 1 is assigned to 'y'}}
+  // expected-note@-3{{The value 1 is assigned to 'flag'}}
+#endif // TRACKING_CONDITIONS
+
+}
+
+void f(int y) {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+  foo();
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{Calling 'foo'}}
+  // expected-note@-3{{Returning from 'foo'}}
+#endif // TRACKING_CONDITIONS
+  if (flag) // expected-note{{'flag' is 1}}
+            // expected-note@-1{{Taking true branch}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+} // end of namespace tracked_condition_written_in_nested_stackframe
+
+namespace collapse_point_not_in_condition {
+
+[[noreturn]] void halt();
+
+void assert(int b) {
+  if (!b)
+#ifdef TRACKING_CONDITIONS
+    // expected-note@-2{{Assuming 'b' is not equal to 0}}
+    // expected-note@-3{{Taking false branch}}
+#endif // TRACKING_CONDITIONS
+    halt();
+}
+
+void f(int flag) {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+  assert(flag);
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-2{{Calling 'assert'}}
+  // expected-note@-3{{Returning from 'assert'}}
+#endif // TRACKING_CONDITIONS
+  if (flag) // expected-note{{'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+
+} // end of namespace collapse_point_not_in_condition
+
+namespace unimportant_write_before_collapse_point {
+
+[[noreturn]] void halt();
+
+void assert(int b) {
+  if (!b)
+#ifdef TRACKING_CONDITIONS
+    // expected-note@-2{{Assuming 'b' is not equal to 0}}
+    // expected-note@-3{{Taking false branch}}
+#endif // TRACKING_CONDITIONS
+    halt();
+}
+int getInt();
+
+void f(int flag) {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+  flag = getInt();
+  assert(flag);
+#ifdef TRACKING_CONDITIONS
+  // expected-note@-3{{Value assigned to 'flag'}}
+  // expected-note@-3{{Calling 'assert'}}
+  // expected-note@-4{{Returning from 'assert'}}
+#endif // TRACKING_CONDITIONS
+  if (flag) // expected-note{{'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+
+} // end of namespace unimportant_write_before_collapse_point
