@@ -50,8 +50,6 @@ public:
       : IDFCalculatorBase(DT, ChildrenGetterTy(GD)) {
     assert(GD);
   }
-
-private:
 };
 
 using ForwardIDFCalculator = IDFCalculator<false>;
