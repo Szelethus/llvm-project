@@ -32,6 +32,20 @@
 
 namespace llvm {
 
+namespace IDFCalculatorDetail {
+
+/// Generic utility class used for getting the children of a basic block.
+/// May be specialized if, for example, one wouldn't like to return nullpointer
+/// successors.
+template <class NodeTy, bool IsPostDom> struct ChildrenGetterTy {
+  using NodeRef = typename GraphTraits<NodeTy>::NodeRef;
+  using ChildrenTy = SmallVector<NodeRef, 8>;
+
+  ChildrenTy get(const NodeRef &N);
+};
+
+} // end of namespace IDFCalculatorDetail
+
 /// Determine the iterated dominance frontier, given a set of defining
 /// blocks, and optionally, a set of live-in blocks.
 ///
@@ -45,10 +59,14 @@ template <class NodeTy, bool IsPostDom> class IDFCalculatorBase {
 public:
   using OrderedNodeTy =
       typename std::conditional<IsPostDom, Inverse<NodeTy *>, NodeTy *>::type;
+  using ChildrenGetterTy =
+      IDFCalculatorDetail::ChildrenGetterTy<NodeTy, IsPostDom>;
 
   IDFCalculatorBase(DominatorTreeBase<NodeTy, IsPostDom> &DT) : DT(DT) {}
 
-  virtual ~IDFCalculatorBase() = default;
+  IDFCalculatorBase(DominatorTreeBase<NodeTy, IsPostDom> &DT,
+                    const ChildrenGetterTy &C)
+      : DT(DT), ChildrenGetter(C) {}
 
   /// Give the IDF calculator the set of blocks in which the value is
   /// defined.  This is equivalent to the set of starting blocks it should be
@@ -64,7 +82,6 @@ public:
   /// not include blocks where any phi insertion would be dead.
   ///
   /// Note: This set *must* live for the entire lifetime of the IDF calculator.
-
   void setLiveInBlocks(const SmallPtrSetImpl<NodeTy *> &Blocks) {
     LiveInBlocks = &Blocks;
     useLiveIn = true;
@@ -85,16 +102,9 @@ public:
   /// would be dead.
   void calculate(SmallVectorImpl<NodeTy *> &IDFBlocks);
 
-  using NodeRef = typename GraphTraits<OrderedNodeTy>::NodeRef;
-  using ChildrenTy = SmallVector<NodeRef, 8>;
-
-  virtual ChildrenTy getChildren(const NodeRef &N) {
-    auto Children = children<OrderedNodeTy>(N);
-    return {Children.begin(), Children.end()};
-  }
-
 private:
   DominatorTreeBase<NodeTy, IsPostDom> &DT;
+  ChildrenGetterTy ChildrenGetter;
   bool useLiveIn = false;
   const SmallPtrSetImpl<NodeTy *> *LiveInBlocks;
   const SmallPtrSetImpl<NodeTy *> *DefBlocks;
@@ -103,6 +113,21 @@ private:
 //===----------------------------------------------------------------------===//
 // Implementation.
 //===----------------------------------------------------------------------===//
+
+namespace IDFCalculatorDetail {
+
+template <class NodeTy, bool IsPostDom>
+typename ChildrenGetterTy<NodeTy, IsPostDom>::ChildrenTy
+ChildrenGetterTy<NodeTy, IsPostDom>::get(
+    const ChildrenGetterTy<NodeTy, IsPostDom>::NodeRef &N) {
+  using OrderedNodeTy =
+      typename IDFCalculatorBase<NodeTy, IsPostDom>::OrderedNodeTy;
+
+  auto Children = children<OrderedNodeTy>(N);
+  return {Children.begin(), Children.end()};
+};
+
+} // end of namespace IDFCalculatorDetail
 
 template <class NodeTy, bool IsPostDom>
 void IDFCalculatorBase<NodeTy, IsPostDom>::calculate(
@@ -170,7 +195,7 @@ void IDFCalculatorBase<NodeTy, IsPostDom>::calculate(
               SuccNode, std::make_pair(SuccLevel, SuccNode->getDFSNumIn())));
       };
 
-      for (auto Succ : getChildren(BB))
+      for (auto Succ : ChildrenGetter.get(BB))
         DoWork(Succ);
 
       for (auto DomChild : *Node) {

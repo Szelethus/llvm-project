@@ -16,46 +16,79 @@ namespace llvm {
 
 class BasicBlock;
 
+namespace IDFCalculatorDetail {
+
+/// Specialization for BasicBlock for the optional use of GraphDiff.
+template <bool IsPostDom> struct ChildrenGetterTy<BasicBlock, IsPostDom> {
+  using NodeRef = BasicBlock *;
+  using ChildrenTy = SmallVector<BasicBlock *, 8>;
+
+  ChildrenGetterTy() = default;
+  ChildrenGetterTy(const GraphDiff<BasicBlock *, IsPostDom> *GD) : GD(GD) {
+    assert(GD);
+  }
+
+  ChildrenTy get(const NodeRef &N);
+
+  const GraphDiff<BasicBlock *, IsPostDom> *GD = nullptr;
+};
+
+} // end of namespace IDFCalculatorDetail
+
 template <bool IsPostDom>
 class IDFCalculator final : public IDFCalculatorBase<BasicBlock, IsPostDom> {
 public:
   using IDFCalculatorBase =
       typename llvm::IDFCalculatorBase<BasicBlock, IsPostDom>;
+  using ChildrenGetterTy = typename IDFCalculatorBase::ChildrenGetterTy;
 
   IDFCalculator(DominatorTreeBase<BasicBlock, IsPostDom> &DT)
       : IDFCalculatorBase(DT) {}
 
   IDFCalculator(DominatorTreeBase<BasicBlock, IsPostDom> &DT,
                 const GraphDiff<BasicBlock *, IsPostDom> *GD)
-      : IDFCalculatorBase(DT), GD(GD) {
+      : IDFCalculatorBase(DT, ChildrenGetterTy(GD)) {
     assert(GD);
   }
 
-  using NodeRef = BasicBlock *;
-  using ChildrenTy = typename IDFCalculatorBase::ChildrenTy;
-  using OrderedNodeTy = typename IDFCalculatorBase::OrderedNodeTy;
-
-  virtual ChildrenTy getChildren(const NodeRef &BB) override {
-    if (!GD) {
-      auto Children = children<OrderedNodeTy>(BB);
-      return {Children.begin(), Children.end()};
-    }
-
-    using SnapShotBBPair =
-        std::pair<const GraphDiff<BasicBlock *, IsPostDom> *, OrderedNodeTy>;
-
-    ChildrenTy Ret;
-    for (auto Pair : children<SnapShotBBPair>({GD, BB}))
-      Ret.emplace_back(Pair.second);
-    return Ret;
-  }
-
 private:
-  const GraphDiff<BasicBlock *, IsPostDom> *GD = nullptr;
 };
 
 using ForwardIDFCalculator = IDFCalculator<false>;
 using ReverseIDFCalculator = IDFCalculator<true>;
+
+//===----------------------------------------------------------------------===//
+// Implementation.
+//===----------------------------------------------------------------------===//
+
+namespace IDFCalculatorDetail {
+
+template <bool IsPostDom>
+using BBChildrenGetterTy = ChildrenGetterTy<BasicBlock, IsPostDom>;
+
+template <bool IsPostDom>
+typename BBChildrenGetterTy<IsPostDom>::ChildrenTy
+BBChildrenGetterTy<IsPostDom>::get(
+    const BBChildrenGetterTy<IsPostDom>::NodeRef &N) {
+
+  using OrderedNodeTy =
+      typename IDFCalculatorBase<BasicBlock, IsPostDom>::OrderedNodeTy;
+
+  if (!GD) {
+    auto Children = children<OrderedNodeTy>(N);
+    return {Children.begin(), Children.end()};
+  }
+
+  using SnapShotBBPair =
+      std::pair<const GraphDiff<BasicBlock *, IsPostDom> *, OrderedNodeTy>;
+
+  ChildrenTy Ret;
+  for (auto Pair : children<SnapShotBBPair>({GD, N}))
+    Ret.emplace_back(Pair.second);
+  return Ret;
+}
+
+} // end of namespace IDFCalculatorDetail
 
 } // end of namespace llvm
 
