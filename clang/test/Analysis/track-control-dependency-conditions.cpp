@@ -213,9 +213,6 @@ int getInt();
 void f(int y) {
   y = 1;
   flag = y;
-#ifdef TRACKING_CONDITIONS
-  // expected-note@-2{{The value 1 is assigned to 'flag'}}
-#endif // TRACKING_CONDITIONS
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
   if (flag) // expected-note{{'flag' is 1}}
             // expected-note@-1{{Taking true branch}}
@@ -308,9 +305,8 @@ void f(int flag) {
   flag = getInt();
   assert(flag);
 #ifdef TRACKING_CONDITIONS
-  // expected-note@-3{{Value assigned to 'flag'}}
-  // expected-note@-3{{Calling 'assert'}}
-  // expected-note@-4{{Returning from 'assert'}}
+  // expected-note@-2{{Calling 'assert'}}
+  // expected-note@-3{{Returning from 'assert'}}
 #endif // TRACKING_CONDITIONS
   if (flag) // expected-note{{'flag' is not equal to 0}}
             // expected-note@-1{{Taking true branch}}

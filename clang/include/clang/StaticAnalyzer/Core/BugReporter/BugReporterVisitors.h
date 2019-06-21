@@ -103,6 +103,7 @@ class FindLastStoreBRVisitor final : public BugReporterVisitor {
   /// bug, we are going to employ false positive suppression.
   bool EnableNullFPSuppression;
   TrackingKind TKind;
+  const StackFrameContext *OriginSFC;
 
 public:
   /// Creates a visitor for every VarDecl inside a Stmt and registers it with
@@ -112,9 +113,10 @@ public:
 
   FindLastStoreBRVisitor(KnownSVal V, const MemRegion *R,
                          bool InEnableNullFPSuppression,
-                         TrackingKind TKind = TrackingKind::ThoroughTracking)
+                         TrackingKind TKind = TrackingKind::ThoroughTracking,
+                         const StackFrameContext *OriginSFC = nullptr)
       : R(R), V(V), EnableNullFPSuppression(InEnableNullFPSuppression),
-        TKind(TKind) {
+        TKind(TKind), OriginSFC(OriginSFC) {
     assert(R);
   }
 
