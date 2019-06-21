@@ -142,9 +142,6 @@ bool coin();
 
 bool foo() {
   return coin();
-#ifdef TRACKING_CONDITIONS
-  // expected-note@-2{{Returning value}}
-#endif // TRACKING_CONDITIONS
 }
 
 int bar;
@@ -154,15 +151,13 @@ void test() {
 
   if (int flag = foo())
 #ifdef TRACKING_CONDITIONS
-    // expected-note@-2{{Calling 'foo'}}
-    // expected-note@-3{{Returning from 'foo'}}
-    // expected-note@-4{{'flag' initialized here}}
+    // expected-note@-2{{'flag' initialized here}}
 #ifdef TRACKING_CONDITIONS_DEBUG
-    // expected-note@-6{{Tracking condition 'flag'}}
+    // expected-note@-4{{Tracking condition 'flag'}}
 #endif // TRACKING_CONDITIONS_DEBUG
 #endif // TRACKING_CONDITIONS
-    // expected-note@-9{{Assuming 'flag' is not equal to 0}}
-    // expected-note@-10{{Taking true branch}}
+    // expected-note@-7{{Assuming 'flag' is not equal to 0}}
+    // expected-note@-8{{Taking true branch}}
 
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
@@ -225,8 +220,7 @@ void f(int y) {
   y = 1;
   flag = y;
 #ifdef TRACKING_CONDITIONS
-  // expected-note@-3{{The value 1 is assigned to 'y'}}
-  // expected-note@-3{{The value 1 is assigned to 'flag'}}
+  // expected-note@-2{{The value 1 is assigned to 'flag'}}
 #endif // TRACKING_CONDITIONS
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
   if (flag) // expected-note{{'flag' is 1}}
@@ -248,8 +242,7 @@ void foo() {
   y = 1;
   flag = y;
 #ifdef TRACKING_CONDITIONS
-  // expected-note@-3{{The value 1 is assigned to 'y'}}
-  // expected-note@-3{{The value 1 is assigned to 'flag'}}
+  // expected-note@-2{{The value 1 is assigned to 'flag'}}
 #endif // TRACKING_CONDITIONS
 
 }

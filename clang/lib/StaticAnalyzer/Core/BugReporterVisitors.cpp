@@ -1319,16 +1319,18 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
 
   // If we have an expression that provided the value, try to track where it
   // came from.
-  if (InitE) {
-    if (V.isUndef() ||
-        V.getAs<loc::ConcreteInt>() || V.getAs<nonloc::ConcreteInt>()) {
-      if (!IsParam)
-        InitE = InitE->IgnoreParenCasts();
-      bugreporter::trackExpressionValue(StoreSite, InitE, BR,
-                                   EnableNullFPSuppression);
+  if (TKind != TrackingKind::ConditionTracking) {
+    if (InitE) {
+      if (V.isUndef() ||
+          V.getAs<loc::ConcreteInt>() || V.getAs<nonloc::ConcreteInt>()) {
+        if (!IsParam)
+          InitE = InitE->IgnoreParenCasts();
+        bugreporter::trackExpressionValue(StoreSite, InitE, BR,
+                                     EnableNullFPSuppression);
+      }
+      ReturnVisitor::addVisitorIfNecessary(StoreSite, InitE->IgnoreParenCasts(),
+                                           BR, EnableNullFPSuppression);
     }
-    ReturnVisitor::addVisitorIfNecessary(StoreSite, InitE->IgnoreParenCasts(),
-                                         BR, EnableNullFPSuppression);
   }
 
   // Okay, we've found the binding. Emit an appropriate message.
@@ -1356,7 +1358,7 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
           if (const VarRegion *OriginalR = BDR->getOriginalRegion(VR)) {
             if (auto KV = State->getSVal(OriginalR).getAs<KnownSVal>())
               BR.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-                  *KV, OriginalR, EnableNullFPSuppression));
+                  *KV, OriginalR, EnableNullFPSuppression, TKind));
           }
         }
       }
