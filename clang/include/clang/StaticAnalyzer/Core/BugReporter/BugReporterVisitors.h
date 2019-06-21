@@ -83,6 +83,15 @@ public:
                     BugReport &BR);
 };
 
+/// Specifies the type of tracking for an expression. For instance, we'd like to
+/// gather far more information about a variable found to be a cause of a null
+/// pointer dereference, while tracking a condition to that extent would pollute
+/// the bug report without much of an added value.
+enum class TrackingKind {
+  ThoroughTracking,
+  ConditionTracking
+};
+
 /// Finds last store into the given region,
 /// which is different from a given symbolic value.
 class FindLastStoreBRVisitor final : public BugReporterVisitor {
@@ -93,6 +102,7 @@ class FindLastStoreBRVisitor final : public BugReporterVisitor {
   /// If the visitor is tracking the value directly responsible for the
   /// bug, we are going to employ false positive suppression.
   bool EnableNullFPSuppression;
+  TrackingKind TKind;
 
 public:
   /// Creates a visitor for every VarDecl inside a Stmt and registers it with
@@ -101,8 +111,12 @@ public:
                                         bool EnableNullFPSuppression);
 
   FindLastStoreBRVisitor(KnownSVal V, const MemRegion *R,
-                         bool InEnableNullFPSuppression)
-      : R(R), V(V), EnableNullFPSuppression(InEnableNullFPSuppression) {}
+                         bool InEnableNullFPSuppression,
+                         TrackingKind TKind = TrackingKind::ThoroughTracking)
+      : R(R), V(V), EnableNullFPSuppression(InEnableNullFPSuppression),
+        TKind(TKind) {
+    assert(R);
+  }
 
   void Profile(llvm::FoldingSetNodeID &ID) const override;
 

@@ -67,6 +67,13 @@
 using namespace clang;
 using namespace ento;
 
+/// Implementation function for trackExpressionValue().
+static bool trackExpressionValue(
+    const ExplodedNode *InputNode,
+    const Expr *E, BugReport &report,
+    bool EnableNullFPSuppression,
+    TrackingKind TKind = TrackingKind::ThoroughTracking);
+
 //===----------------------------------------------------------------------===//
 // Utility functions.
 //===----------------------------------------------------------------------===//
@@ -1077,6 +1084,7 @@ void FindLastStoreBRVisitor::Profile(llvm::FoldingSetNodeID &ID) const {
   ID.AddPointer(&tag);
   ID.AddPointer(R);
   ID.Add(V);
+  ID.AddInteger(static_cast<int>(TKind));
   ID.AddBoolean(EnableNullFPSuppression);
 }
 
@@ -1250,7 +1258,7 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
   // should track the initializer expression.
   if (Optional<PostInitializer> PIP = Pred->getLocationAs<PostInitializer>()) {
     const MemRegion *FieldReg = (const MemRegion *)PIP->getLocationValue();
-    if (FieldReg && FieldReg == R) {
+    if (FieldReg == R) {
       StoreSite = Pred;
       InitE = PIP->getInitializer()->getInit();
     }
@@ -1648,8 +1656,9 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
   if (ControlDeps.isControlDependent(OriginB, NB)) {
     if (const Expr *Condition = NB->getTerminatorConditionExpr()) {
       if (BR.addTrackedCondition(N)) {
-        bugreporter::trackExpressionValue(
-            N, Condition, BR, /*EnableNullFPSuppression=*/false);
+        ::trackExpressionValue(
+            N, Condition, BR, /*EnableNullFPSuppression=*/false,
+            TrackingKind::ConditionTracking);
         return constructDebugPieceForTrackedCondition(Condition, N, BRC);
       }
     }
@@ -1761,9 +1770,12 @@ static const ExplodedNode* findNodeForExpression(const ExplodedNode *N,
   return N;
 }
 
-bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
-                                       const Expr *E, BugReport &report,
-                                       bool EnableNullFPSuppression) {
+static bool trackExpressionValue(
+    const ExplodedNode *InputNode,
+    const Expr *E, BugReport &report,
+    bool EnableNullFPSuppression,
+    TrackingKind TKind /* = TrackingKind::ThoroughTracking*/) {
+
   if (!E || !InputNode)
     return false;
 
@@ -1803,7 +1815,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
     if (RR && !LVIsNull)
       if (auto KV = LVal.getAs<KnownSVal>())
         report.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-              *KV, RR, EnableNullFPSuppression));
+              *KV, RR, EnableNullFPSuppression, TKind));
 
     // In case of C++ references, we want to differentiate between a null
     // reference and reference to null pointer.
@@ -1840,7 +1852,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
 
       if (auto KV = V.getAs<KnownSVal>())
         report.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-              *KV, R, EnableNullFPSuppression));
+              *KV, R, EnableNullFPSuppression, TKind));
       return true;
     }
   }
@@ -1878,7 +1890,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
     if (CanDereference)
       if (auto KV = RVal.getAs<KnownSVal>())
         report.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-            *KV, L->getRegion(), EnableNullFPSuppression));
+            *KV, L->getRegion(), EnableNullFPSuppression, TKind));
 
     const MemRegion *RegionRVal = RVal.getAsRegion();
     if (RegionRVal && isa<SymbolicRegion>(RegionRVal)) {
@@ -1888,6 +1900,12 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
     }
   }
   return true;
+}
+
+bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
+                                       const Expr *E, BugReport &report,
+                                       bool EnableNullFPSuppression) {
+  return ::trackExpressionValue(InputNode, E, report, EnableNullFPSuppression);
 }
 
 //===----------------------------------------------------------------------===//
