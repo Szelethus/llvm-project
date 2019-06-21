@@ -1425,16 +1425,20 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
 
   // If we have an expression that provided the value, try to track where it
   // came from.
-  if (InitE) {
-    if (V.isUndef() ||
-        V.getAs<loc::ConcreteInt>() || V.getAs<nonloc::ConcreteInt>()) {
-      if (!IsParam)
-        InitE = InitE->IgnoreParenCasts();
-      bugreporter::trackExpressionValue(StoreSite, InitE, BR,
-                                   EnableNullFPSuppression);
+  // For tracked conditions, this isn't really important, it would pollute the
+  // bug report far too much.
+  if (TKind != TrackingKind::ConditionTracking) {
+    if (InitE) {
+      if (V.isUndef() ||
+          V.getAs<loc::ConcreteInt>() || V.getAs<nonloc::ConcreteInt>()) {
+        if (!IsParam)
+          InitE = InitE->IgnoreParenCasts();
+        bugreporter::trackExpressionValue(StoreSite, InitE, BR,
+                                     EnableNullFPSuppression);
+      }
+      ReturnVisitor::addVisitorIfNecessary(StoreSite, InitE->IgnoreParenCasts(),
+                                           BR, EnableNullFPSuppression);
     }
-    ReturnVisitor::addVisitorIfNecessary(StoreSite, InitE->IgnoreParenCasts(),
-                                         BR, EnableNullFPSuppression);
   }
 
   // Okay, we've found the binding. Emit an appropriate message.

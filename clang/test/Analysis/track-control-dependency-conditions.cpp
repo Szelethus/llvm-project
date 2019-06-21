@@ -119,7 +119,7 @@ namespace variable_declaration_in_condition {
 bool coin();
 
 bool foo() {
-  return coin(); // tracking-note{{Returning value}}
+  return coin();
 }
 
 int bar;
@@ -127,12 +127,10 @@ int bar;
 void test() {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
 
-  if (int flag = foo()) // tracking-note{{Calling 'foo'}}
-                        // tracking-note@-1{{Returning from 'foo'}}
-                        // tracking-note@-2{{'flag' initialized here}}
-                        // debug-note@-3{{Tracking condition 'flag'}}
-                        // expected-note@-4{{Assuming 'flag' is not equal to 0}}
-                        // expected-note@-5{{Taking true branch}}
+  if (int flag = foo()) // tracking-note{{'flag' initialized here}}
+                        // debug-note@-1{{Tracking condition 'flag'}}
+                        // expected-note@-2{{Assuming 'flag' is not equal to 0}}
+                        // expected-note@-3{{Taking true branch}}
 
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
@@ -226,9 +224,8 @@ int flag;
 int getInt();
 
 void f(int y) {
-  y = 1; // tracking-note{{The value 1 is assigned to 'y'}}
+  y = 1;
   flag = y; // tracking-note{{The value 1 is assigned to 'flag'}}
-
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
   if (flag) // expected-note{{'flag' is 1}}
             // expected-note@-1{{Taking true branch}}
@@ -244,9 +241,8 @@ int getInt();
 
 void foo() {
   int y;
-  y = 1; // tracking-note{{The value 1 is assigned to 'y'}}
+  y = 1;
   flag = y; // tracking-note{{The value 1 is assigned to 'flag'}}
-
 }
 
 void f(int y) {
