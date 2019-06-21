@@ -1524,7 +1524,7 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
 void TrackConstraintBRVisitor::Profile(llvm::FoldingSetNodeID &ID) const {
   static int tag = 0;
   ID.AddPointer(&tag);
-  ID.AddBoolean(Assumption);
+  ID.AddBoolean(IsAssumedNonNull);
   ID.Add(Constraint);
 }
 
@@ -1535,9 +1535,9 @@ const char *TrackConstraintBRVisitor::getTag() {
 }
 
 bool TrackConstraintBRVisitor::isUnderconstrained(const ExplodedNode *N) const {
-  if (IsZeroCheck)
-    return N->getState()->isNull(Constraint).isUnderconstrained();
-  return (bool)N->getState()->assume(Constraint, !Assumption);
+  if (IsAssumedNonNull)
+    return N->getState()->isNonNull(Constraint).isUnderconstrained();
+  return N->getState()->isNull(Constraint).isUnderconstrained();
 }
 
 PathDiagnosticPieceRef
@@ -1549,14 +1549,14 @@ TrackConstraintBRVisitor::VisitNode(const ExplodedNode *N,
 
   // Start tracking after we see the first state in which the value is
   // constrained.
-  if (!IsTrackingTurnedOn)
-    if (!isUnderconstrained(N))
+  if (!IsTrackingTurnedOn && !isUnderconstrained(N))
       IsTrackingTurnedOn = true;
+
   if (!IsTrackingTurnedOn)
     return nullptr;
 
-  // Check if in the previous state it was feasible for this constraint
-  // to *not* be true.
+  // Check if the previous state was the one after which could constrain our
+  // assumption.
   if (isUnderconstrained(PrevN)) {
     IsSatisfied = true;
 
@@ -1570,10 +1570,12 @@ TrackConstraintBRVisitor::VisitNode(const ExplodedNode *N,
     SmallString<64> sbuf;
     llvm::raw_svector_ostream os(sbuf);
 
-    if (Constraint.getAs<Loc>()) {
-      os << "Assuming pointer value is ";
-      os << (Assumption ? "non-null" : "null");
-    }
+    // FIXME: Support non-loc values.
+    if (Constraint.getBaseKind() != SVal::BaseKind::LocKind)
+      return nullptr;
+
+    os << "Assuming pointer value is ";
+    os << (IsAssumedNonNull ? "non-null" : "null");
 
     if (os.str().empty())
       return nullptr;
@@ -2001,7 +2003,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
       if (V.getAsLocSymbol(/*IncludeBaseRegions=*/true))
         if (LVState->isNull(V).isConstrainedTrue())
           report.addVisitor(std::make_unique<TrackConstraintBRVisitor>(
-              V.castAs<DefinedSVal>(), false));
+              V.castAs<DefinedSVal>(), /*IsAssumedNonNull=*/ false));
 
       // Add visitor, which will suppress inline defensive checks.
       if (auto DV = V.getAs<DefinedSVal>())
@@ -2058,7 +2060,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
     if (RegionRVal && isa<SymbolicRegion>(RegionRVal)) {
       report.markInteresting(RegionRVal, TKind);
       report.addVisitor(std::make_unique<TrackConstraintBRVisitor>(
-            loc::MemRegionVal(RegionRVal), /*assumption=*/false));
+            loc::MemRegionVal(RegionRVal), /*IsAssumedNonNull=*/false));
     }
   }
   return true;

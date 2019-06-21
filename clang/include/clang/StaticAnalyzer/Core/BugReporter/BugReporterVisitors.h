@@ -162,18 +162,16 @@ public:
 
 class TrackConstraintBRVisitor final : public BugReporterVisitor {
   DefinedSVal Constraint;
-  bool Assumption;
+  bool IsAssumedNonNull;
   bool IsSatisfied = false;
-  bool IsZeroCheck;
 
   /// We should start tracking from the last node along the path in which the
   /// value is constrained.
   bool IsTrackingTurnedOn = false;
 
 public:
-  TrackConstraintBRVisitor(DefinedSVal constraint, bool assumption)
-      : Constraint(constraint), Assumption(assumption),
-        IsZeroCheck(!Assumption && Constraint.getAs<Loc>()) {}
+  TrackConstraintBRVisitor(DefinedSVal constraint, bool IsAssumedNonNull)
+      : Constraint(constraint), IsAssumedNonNull(IsAssumedNonNull) {}
 
   void Profile(llvm::FoldingSetNodeID &ID) const override;
 
