@@ -153,9 +153,8 @@ protected:
   /// \sa removeInvalidation
   llvm::SmallSet<InvalidationRecord, 4> Invalidations;
 
-  using ConditionValue = std::pair<const Expr *, const ExplodedNode*>;
   /// Conditions we're already tracking.
-  llvm::SmallSet<ConditionValue, 4> TrackedConditions;
+  llvm::SmallSet<const ExplodedNode *, 4> TrackedConditions;
 
 private:
   // Used internally by BugReporter.
@@ -353,7 +352,7 @@ public:
   visitor_iterator visitor_begin() { return Callbacks.begin(); }
   visitor_iterator visitor_end() { return Callbacks.end(); }
 
-  bool addTrackedCondition(const ConditionValue &Cond) {
+  bool addTrackedCondition(const ExplodedNode *Cond) {
     return TrackedConditions.insert(Cond).second;
   }
 

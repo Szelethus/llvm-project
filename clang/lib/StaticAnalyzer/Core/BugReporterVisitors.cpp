@@ -1625,7 +1625,7 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
 
   if (ControlDeps.isControlDependent(OriginB, NB))
     if (const Expr *Condition = NB->getTerminatorConditionExpr())
-      if (BR.addTrackedCondition({Condition, N}))
+      if (BR.addTrackedCondition(N))
         bugreporter::trackExpressionValue(
             N, Condition, BR, /*EnableNullFPSuppression=*/false);
 
@@ -1748,6 +1748,11 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
 
   ProgramStateRef LVState = LVNode->getState();
 
+  // We only track expressions if we believe that they are important. Chances
+  // are good that control dependencies to the tracking point are also improtant
+  // because of this, let's explain why we believe control reached this point.
+  // TODO: Shouldn't we track control dependencies of every bug location, rather
+  // than only tracked expressions?
   if (LVState->getAnalysisManager().getAnalyzerOptions().ShouldTrackConditions)
     report.addVisitor(llvm::make_unique<TrackControlDependencyCondBRVisitor>(
           InputNode));
