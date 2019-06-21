@@ -2,7 +2,23 @@
 // RUN:   -analyzer-config track-conditions=true \
 // RUN:   -analyzer-output=text \
 // RUN:   -analyzer-checker=core
+
+// RUN: not %clang_analyze_cc1 -verify %s \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-config track-conditions-debug=true \
+// RUN:   2>&1 | FileCheck %s -check-prefix=CHECK-INVALID-DEBUG
+
+// CHECK-INVALID-DEBUG: (frontend): invalid input for analyzer-config option
+// CHECK-INVALID-DEBUG-SAME:        'track-conditions-debug', that expects
+// CHECK-INVALID-DEBUG-SAME:        'track-conditions' to also be enabled
 //
+// RUN: %clang_analyze_cc1 %s -verify \
+// RUN:   -DTRACKING_CONDITIONS -DTRACKING_CONDITIONS_DEBUG \
+// RUN:   -analyzer-config track-conditions=true \
+// RUN:   -analyzer-config track-conditions-debug=true \
+// RUN:   -analyzer-output=text \
+// RUN:   -analyzer-checker=core
+
 // RUN: %clang_analyze_cc1 %s -verify \
 // RUN:   -analyzer-output=text \
 // RUN:   -analyzer-checker=core
@@ -35,6 +51,9 @@ void test() {
 
   if (flag) // expected-note   {{Assuming 'flag' is not equal to 0}}
             // expected-note@-1{{Taking true branch}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+            // expected-note@-3{{Tracking condition 'flag'}}
+#endif // TRACKING_CONDITIONS_DEBUG
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -70,6 +89,9 @@ void test() {
 
   if (flag) // expected-note   {{Assuming 'flag' is not equal to 0}}
             // expected-note@-1{{Taking true branch}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+            // expected-note@-3{{Tracking condition 'flag'}}
+#endif // TRACKING_CONDITIONS_DEBUG
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -102,8 +124,14 @@ void test() {
 
   if (bar) // expected-note   {{Assuming 'bar' is not equal to 0}}
            // expected-note@-1{{Taking true branch}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+           // expected-note@-3{{Tracking condition 'bar'}}
+#endif // TRACKING_CONDITIONS_DEBUG
     if (flag) // expected-note   {{Assuming 'flag' is not equal to 0}}
               // expected-note@-1{{Taking true branch}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+              // expected-note@-3{{Tracking condition 'flag'}}
+#endif // TRACKING_CONDITIONS_DEBUG
       *x = 5; // expected-warning{{Dereference of null pointer}}
               // expected-note@-1{{Dereference of null pointer}}
 }
@@ -129,9 +157,13 @@ void test() {
     // expected-note@-2{{Calling 'foo'}}
     // expected-note@-3{{Returning from 'foo'}}
     // expected-note@-4{{'flag' initialized here}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+    // expected-note@-6{{Tracking condition 'flag'}}
+#endif // TRACKING_CONDITIONS_DEBUG
 #endif // TRACKING_CONDITIONS
-    // expected-note@-6{{Assuming 'flag' is not equal to 0}}
-    // expected-note@-7{{Taking true branch}}
+    // expected-note@-9{{Assuming 'flag' is not equal to 0}}
+    // expected-note@-10{{Taking true branch}}
+
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -154,9 +186,12 @@ void test() {
 #ifdef TRACKING_CONDITIONS
     // expected-note@-2 {{Calling 'ConvertsToBool::operator bool'}}
     // expected-note@-3{{Returning from 'ConvertsToBool::operator bool'}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+    // expected-note@-5{{Tracking condition 'ConvertsToBool()'}}
+#endif // TRACKING_CONDITIONS_DEBUG
 #endif // TRACKING_CONDITIONS
-    // expected-note@-5{{Assuming the condition is true}}
-    // expected-note@-6{{Taking true branch}}
+    // expected-note@-8{{Assuming the condition is true}}
+    // expected-note@-9{{Taking true branch}}
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -174,6 +209,9 @@ void f() {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
   if (flag) // expected-note{{Assuming 'flag' is not equal to 0}}
             // expected-note@-1{{Taking true branch}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+            // expected-note@-3{{Tracking condition 'flag'}}
+#endif // TRACKING_CONDITIONS_DEBUG
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -193,6 +231,9 @@ void f(int y) {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
   if (flag) // expected-note{{'flag' is 1}}
             // expected-note@-1{{Taking true branch}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+            // expected-note@-3{{Tracking condition 'flag'}}
+#endif // TRACKING_CONDITIONS_DEBUG
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -222,6 +263,9 @@ void f(int y) {
 #endif // TRACKING_CONDITIONS
   if (flag) // expected-note{{'flag' is 1}}
             // expected-note@-1{{Taking true branch}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+            // expected-note@-3{{Tracking condition 'flag'}}
+#endif // TRACKING_CONDITIONS_DEBUG
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -249,6 +293,9 @@ void f(int flag) {
 #endif // TRACKING_CONDITIONS
   if (flag) // expected-note{{'flag' is not equal to 0}}
             // expected-note@-1{{Taking true branch}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+            // expected-note@-3{{Tracking condition 'flag'}}
+#endif // TRACKING_CONDITIONS_DEBUG
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
@@ -280,6 +327,9 @@ void f(int flag) {
 #endif // TRACKING_CONDITIONS
   if (flag) // expected-note{{'flag' is not equal to 0}}
             // expected-note@-1{{Taking true branch}}
+#ifdef TRACKING_CONDITIONS_DEBUG
+            // expected-note@-3{{Tracking condition 'flag'}}
+#endif // TRACKING_CONDITIONS_DEBUG
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }

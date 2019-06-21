@@ -1603,6 +1603,26 @@ static CFGBlock *GetRelevantBlock(const ExplodedNode *Node) {
   return nullptr;
 }
 
+static std::shared_ptr<PathDiagnosticEventPiece>
+constructDebugPieceForTrackedCondition(const Expr *Cond,
+                                       const ExplodedNode *N,
+                                       BugReporterContext &BRC) {
+
+  if (BRC.getAnalyzerOptions().AnalysisDiagOpt == PD_NONE ||
+      !BRC.getAnalyzerOptions().ShouldTrackConditionsDebug)
+    return nullptr;
+
+  std::string ConditionText = Lexer::getSourceText(
+      CharSourceRange::getTokenRange(Cond->getSourceRange()),
+                                     BRC.getSourceManager(),
+                                     BRC.getASTContext().getLangOpts());
+
+  return std::make_shared<PathDiagnosticEventPiece>(
+      PathDiagnosticLocation::createBegin(
+          Cond, BRC.getSourceManager(), N->getLocationContext()),
+          (Twine() + "Tracking condition '" + ConditionText + "'").str());
+}
+
 std::shared_ptr<PathDiagnosticPiece>
 TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
                                                BugReporterContext &BRC,
@@ -1623,11 +1643,15 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
   if (!OriginB || !NB)
     return nullptr;
 
-  if (ControlDeps.isControlDependent(OriginB, NB))
-    if (const Expr *Condition = NB->getTerminatorConditionExpr())
-      if (BR.addTrackedCondition(N))
+  if (ControlDeps.isControlDependent(OriginB, NB)) {
+    if (const Expr *Condition = NB->getTerminatorConditionExpr()) {
+      if (BR.addTrackedCondition(N)) {
         bugreporter::trackExpressionValue(
             N, Condition, BR, /*EnableNullFPSuppression=*/false);
+        return constructDebugPieceForTrackedCondition(Condition, N, BRC);
+      }
+    }
+  }
 
   return nullptr;
 }
