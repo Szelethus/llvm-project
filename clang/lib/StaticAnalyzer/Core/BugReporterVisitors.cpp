@@ -1344,6 +1344,8 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
     const auto *VR = dyn_cast<VarRegion>(R);
 
     if (DS) {
+      if (TKind == TrackingKind::ConditionTracking)
+        return nullptr;
       action = R->canPrintPretty() ? "initialized to " :
                                      "Initializing to ";
     } else if (isa<BlockExpr>(S)) {

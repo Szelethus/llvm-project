@@ -150,14 +150,11 @@ void test() {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
 
   if (int flag = foo())
-#ifdef TRACKING_CONDITIONS
-    // expected-note@-2{{'flag' initialized here}}
 #ifdef TRACKING_CONDITIONS_DEBUG
-    // expected-note@-4{{Tracking condition 'flag'}}
+    // expected-note@-2{{Tracking condition 'flag'}}
 #endif // TRACKING_CONDITIONS_DEBUG
-#endif // TRACKING_CONDITIONS
-    // expected-note@-7{{Assuming 'flag' is not equal to 0}}
-    // expected-note@-8{{Taking true branch}}
+    // expected-note@-4{{Assuming 'flag' is not equal to 0}}
+    // expected-note@-5{{Taking true branch}}
 
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
@@ -198,9 +195,6 @@ int getInt();
 
 void f() {
   int flag = getInt();
-#ifdef TRACKING_CONDITIONS
-  // expected-note@-2{{'flag' initialized here}}
-#endif // TRACKING_CONDITIONS
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
   if (flag) // expected-note{{Assuming 'flag' is not equal to 0}}
             // expected-note@-1{{Taking true branch}}
