@@ -160,9 +160,8 @@ public:
                                    BugReport &BR) override;
 };
 
-class TrackConstraintBRVisitor final : public BugReporterVisitor {
+class TrackConstraintToNullptrVisitor final : public BugReporterVisitor {
   DefinedSVal Constraint;
-  bool IsAssumedNonNull;
   bool IsSatisfied = false;
 
   /// We should start tracking from the last node along the path in which the
@@ -170,8 +169,8 @@ class TrackConstraintBRVisitor final : public BugReporterVisitor {
   bool IsTrackingTurnedOn = false;
 
 public:
-  TrackConstraintBRVisitor(DefinedSVal constraint, bool IsAssumedNonNull)
-      : Constraint(constraint), IsAssumedNonNull(IsAssumedNonNull) {}
+  TrackConstraintToNullptrVisitor(DefinedSVal constraint)
+    : Constraint(constraint) {}
 
   void Profile(llvm::FoldingSetNodeID &ID) const override;
 
