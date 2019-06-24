@@ -24,7 +24,7 @@ void test(struct S syz, int *pp) {
   // expected-note@-1{{Dereference of null pointer (loaded from field 'x')}}
 }
 
-void testTrackConstraintBRVisitorIsTrackingTurnedOn(struct S syz, int *pp) {
+void testTrackConstraintToNullptrVisitorIsTrackingTurnedOn(struct S syz, int *pp) {
   int m = 0;
   syz.x = foo(); // expected-note{{Value assigned to 'syz.x'}}
 

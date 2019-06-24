@@ -1398,30 +1398,29 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
 }
 
 //===----------------------------------------------------------------------===//
-// Implementation of TrackConstraintBRVisitor.
+// Implementation of TrackConstraintToNullptrVisitor.
 //===----------------------------------------------------------------------===//
 
-void TrackConstraintBRVisitor::Profile(llvm::FoldingSetNodeID &ID) const {
+void TrackConstraintToNullptrVisitor::Profile(
+    llvm::FoldingSetNodeID &ID) const {
   static int tag = 0;
   ID.AddPointer(&tag);
-  ID.AddBoolean(IsAssumedNonNull);
   ID.Add(Constraint);
 }
 
 /// Return the tag associated with this visitor.  This tag will be used
 /// to make all PathDiagnosticPieces created by this visitor.
-const char *TrackConstraintBRVisitor::getTag() {
-  return "TrackConstraintBRVisitor";
+const char *TrackConstraintToNullptrVisitor::getTag() {
+  return "TrackConstraintToNullptrVisitor";
 }
 
-bool TrackConstraintBRVisitor::isUnderconstrained(const ExplodedNode *N) const {
-  if (IsAssumedNonNull)
-    return N->getState()->isNonNull(Constraint).isUnderconstrained();
+bool TrackConstraintToNullptrVisitor::isUnderconstrained(
+    const ExplodedNode *N) const {
   return N->getState()->isNull(Constraint).isUnderconstrained();
 }
 
 std::shared_ptr<PathDiagnosticPiece>
-TrackConstraintBRVisitor::VisitNode(const ExplodedNode *N,
+TrackConstraintToNullptrVisitor::VisitNode(const ExplodedNode *N,
                                     BugReporterContext &BRC, BugReport &) {
   const ExplodedNode *PrevN = N->getFirstPred();
   if (IsSatisfied)
@@ -1454,8 +1453,7 @@ TrackConstraintBRVisitor::VisitNode(const ExplodedNode *N,
     if (Constraint.getBaseKind() != SVal::BaseKind::LocKind)
       return nullptr;
 
-    os << "Assuming pointer value is ";
-    os << (IsAssumedNonNull ? "non-null" : "null");
+    os << "Assuming pointer value is null";
 
     if (os.str().empty())
       return nullptr;
@@ -1849,8 +1847,8 @@ static bool trackExpressionValue(
 
       // If the contents are symbolic, find out when they became null.
       if (V.getAsLocSymbol(/*IncludeBaseRegions*/ true))
-        report.addVisitor(llvm::make_unique<TrackConstraintBRVisitor>(
-              V.castAs<DefinedSVal>(), /*IsAssumedNonNull=*/ false));
+        report.addVisitor(llvm::make_unique<TrackConstraintToNullptrVisitor>(
+              V.castAs<DefinedSVal>()));
 
       // Add visitor, which will suppress inline defensive checks.
       if (auto DV = V.getAs<DefinedSVal>())
@@ -1905,8 +1903,8 @@ static bool trackExpressionValue(
     const MemRegion *RegionRVal = RVal.getAsRegion();
     if (RegionRVal && isa<SymbolicRegion>(RegionRVal)) {
       report.markInteresting(RegionRVal);
-      report.addVisitor(llvm::make_unique<TrackConstraintBRVisitor>(
-            loc::MemRegionVal(RegionRVal), /*IsAssumedNonNull=*/ false));
+      report.addVisitor(llvm::make_unique<TrackConstraintToNullptrVisitor>(
+            loc::MemRegionVal(RegionRVal)));
     }
   }
   return true;
