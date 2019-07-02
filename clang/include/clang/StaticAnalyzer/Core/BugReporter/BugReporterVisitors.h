@@ -170,7 +170,10 @@ class TrackConstraintToNullptrVisitor final : public BugReporterVisitor {
 
 public:
   TrackConstraintToNullptrVisitor(DefinedSVal constraint)
-    : Constraint(constraint) {}
+    : Constraint(constraint) {
+    assert(Constraint.getAsRegion() &&
+           "This visitor only tracks pointer values!");
+  }
 
   void Profile(llvm::FoldingSetNodeID &ID) const override;
 

@@ -1540,8 +1540,8 @@ bool TrackConstraintToNullptrVisitor::isUnderconstrained(
 }
 
 PathDiagnosticPieceRef
-TrackConstraintToNullptrVisitor::VisitNode(const ExplodedNode *N,
-                                    BugReporterContext &BRC, BugReport &) {
+TrackConstraintToNullptrVisitor::VisitNode(
+    const ExplodedNode *N, BugReporterContext &BRC, BugReport &) {
   const ExplodedNode *PrevN = N->getFirstPred();
   if (IsSatisfied)
     return nullptr;
@@ -1569,10 +1569,6 @@ TrackConstraintToNullptrVisitor::VisitNode(const ExplodedNode *N,
     SmallString<64> sbuf;
     llvm::raw_svector_ostream os(sbuf);
 
-    // FIXME: Support non-loc values.
-    if (Constraint.getBaseKind() != SVal::BaseKind::LocKind)
-      return nullptr;
-
     os << "Assuming pointer value is null";
 
     if (os.str().empty())
@@ -1589,6 +1585,10 @@ TrackConstraintToNullptrVisitor::VisitNode(const ExplodedNode *N,
     X->setTag(getTag());
     return std::move(X);
   }
+
+  Constraint.dump();
+  N->getCodeDecl().dump();
+  assert(N->getState()->isNull(Constraint).isConstrainedTrue());
 
   return nullptr;
 }
