@@ -134,6 +134,11 @@ public:
                                         bool EnableNullFPSuppression,
                                         TrackingKind TKind);
 
+  /// \param V We're searching for the store where \c R received this value.
+  /// \param R The region we're tracking.
+  /// \param EnableNullFPSuppression Whether we should employ false positive
+  ///         suppression (inlined defensive checks, returned null).
+  /// \param TKind May limit the amount of notes added to the bug report.
   FindLastStoreBRVisitor(KnownSVal V, const MemRegion *R,
                          bool InEnableNullFPSuppression,
                          TrackingKind TKind)
