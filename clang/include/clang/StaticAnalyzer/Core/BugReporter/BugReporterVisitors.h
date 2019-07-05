@@ -138,7 +138,8 @@ public:
   /// \param R The region we're tracking.
   /// \param EnableNullFPSuppression Whether we should employ false positive
   ///         suppression (inlined defensive checks, returned null).
-  /// \param TKind May limit the amount of notes added to the bug report.
+  /// \param TKind May limit the amount of notes added to the bug report. For
+  ///        conditions, ignores the initialization point.
   FindLastStoreBRVisitor(KnownSVal V, const MemRegion *R,
                          bool InEnableNullFPSuppression,
                          TrackingKind TKind)
