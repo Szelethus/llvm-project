@@ -131,11 +131,12 @@ public:
   /// Creates a visitor for every VarDecl inside a Stmt and registers it with
   /// the BugReport.
   static void registerStatementVarDecls(BugReport &BR, const Stmt *S,
-                                        bool EnableNullFPSuppression);
+                                        bool EnableNullFPSuppression,
+                                        TrackingKind TKind);
 
   FindLastStoreBRVisitor(KnownSVal V, const MemRegion *R,
                          bool InEnableNullFPSuppression,
-                         TrackingKind TKind = TrackingKind::ThoroughTracking)
+                         TrackingKind TKind)
       : R(R), V(V), EnableNullFPSuppression(InEnableNullFPSuppression),
         TKind(TKind) {
     assert(R);

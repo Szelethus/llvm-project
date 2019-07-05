@@ -1160,6 +1160,41 @@ void FindLastStoreBRVisitor::Profile(llvm::FoldingSetNodeID &ID) const {
   ID.AddBoolean(EnableNullFPSuppression);
 }
 
+void FindLastStoreBRVisitor::registerStatementVarDecls(
+    BugReport &BR, const Stmt *S, bool EnableNullFPSuppression,
+    TrackingKind TKind) {
+
+  const ExplodedNode *N = BR.getErrorNode();
+  std::deque<const Stmt *> WorkList;
+  WorkList.push_back(S);
+
+  while (!WorkList.empty()) {
+    const Stmt *Head = WorkList.front();
+    WorkList.pop_front();
+
+    ProgramStateManager &StateMgr = N->getState()->getStateManager();
+
+    if (const auto *DR = dyn_cast<DeclRefExpr>(Head)) {
+      if (const auto *VD = dyn_cast<VarDecl>(DR->getDecl())) {
+        const VarRegion *R =
+        StateMgr.getRegionManager().getVarRegion(VD, N->getLocationContext());
+
+        // What did we load?
+        SVal V = N->getSVal(S);
+
+        if (V.getAs<loc::ConcreteInt>() || V.getAs<nonloc::ConcreteInt>()) {
+          // Register a new visitor with the BugReport.
+          BR.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
+              V.castAs<KnownSVal>(), R, EnableNullFPSuppression, TKind));
+        }
+      }
+    }
+
+    for (const Stmt *SubStmt : Head->children())
+      WorkList.push_back(SubStmt);
+  }
+}
+
 /// Returns true if \p N represents the DeclStmt declaring and initializing
 /// \p VR.
 static bool isInitializationOfVar(const ExplodedNode *N, const VarRegion *VR) {
@@ -1428,7 +1463,7 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
           if (const VarRegion *OriginalR = BDR->getOriginalRegion(VR)) {
             if (auto KV = State->getSVal(OriginalR).getAs<KnownSVal>())
               BR.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-                  *KV, OriginalR, EnableNullFPSuppression));
+                  *KV, OriginalR, EnableNullFPSuppression, TKind));
           }
         }
       }
@@ -2034,45 +2069,6 @@ NilReceiverBRVisitor::VisitNode(const ExplodedNode *N,
   PathDiagnosticLocation L(Receiver, BRC.getSourceManager(),
                                      N->getLocationContext());
   return std::make_shared<PathDiagnosticEventPiece>(L, OS.str());
-}
-
-//===----------------------------------------------------------------------===//
-// Implementation of FindLastStoreBRVisitor.
-//===----------------------------------------------------------------------===//
-
-// Registers every VarDecl inside a Stmt with a last store visitor.
-void FindLastStoreBRVisitor::registerStatementVarDecls(BugReport &BR,
-                                                const Stmt *S,
-                                                bool EnableNullFPSuppression) {
-  const ExplodedNode *N = BR.getErrorNode();
-  std::deque<const Stmt *> WorkList;
-  WorkList.push_back(S);
-
-  while (!WorkList.empty()) {
-    const Stmt *Head = WorkList.front();
-    WorkList.pop_front();
-
-    ProgramStateManager &StateMgr = N->getState()->getStateManager();
-
-    if (const auto *DR = dyn_cast<DeclRefExpr>(Head)) {
-      if (const auto *VD = dyn_cast<VarDecl>(DR->getDecl())) {
-        const VarRegion *R =
-        StateMgr.getRegionManager().getVarRegion(VD, N->getLocationContext());
-
-        // What did we load?
-        SVal V = N->getSVal(S);
-
-        if (V.getAs<loc::ConcreteInt>() || V.getAs<nonloc::ConcreteInt>()) {
-          // Register a new visitor with the BugReport.
-          BR.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-              V.castAs<KnownSVal>(), R, EnableNullFPSuppression));
-        }
-      }
-    }
-
-    for (const Stmt *SubStmt : Head->children())
-      WorkList.push_back(SubStmt);
-  }
 }
 
 //===----------------------------------------------------------------------===//
