@@ -67,16 +67,24 @@
 using namespace clang;
 using namespace ento;
 
+
+//===----------------------------------------------------------------------===//
+// Utility functions.
+//===----------------------------------------------------------------------===//
+
 /// Implementation function for trackExpressionValue().
 static bool trackExpressionValue(
     const ExplodedNode *InputNode,
     const Expr *E, BugReport &report,
     bool EnableNullFPSuppression,
-    TrackingKind TKind = TrackingKind::ThoroughTracking);
+    bugreporter::TrackingKind TKind);
 
-//===----------------------------------------------------------------------===//
-// Utility functions.
-//===----------------------------------------------------------------------===//
+bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
+                                       const Expr *E, BugReport &report,
+                                       bool EnableNullFPSuppression) {
+  return ::trackExpressionValue(InputNode, E, report, EnableNullFPSuppression,
+                                TrackingKind::ThoroughTracking);
+}
 
 static const Expr *peelOffPointerArithmetic(const BinaryOperator *B) {
   if (B->isAdditiveOp() && B->getType()->isPointerType()) {
@@ -1721,9 +1729,9 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
       // isn't sufficient, because a new visitor is created for each tracked
       // expression, hence the BugReport level set.
       if (BR.addTrackedCondition(N)) {
-        ::trackExpressionValue(
+        trackExpressionValue(
             N, Condition, BR, /*EnableNullFPSuppression=*/false,
-            TrackingKind::ConditionTracking);
+            bugreporter::TrackingKind::ConditionTracking);
         return constructDebugPieceForTrackedCondition(Condition, N, BRC);
       }
     }
@@ -1839,7 +1847,9 @@ static bool trackExpressionValue(
     const ExplodedNode *InputNode,
     const Expr *E, BugReport &report,
     bool EnableNullFPSuppression,
-    TrackingKind TKind /* = TrackingKind::ThoroughTracking*/) {
+    bugreporter::TrackingKind TKind /* = TrackingKind::ThoroughTracking*/) {
+
+  using namespace bugreporter;
 
   if (!E || !InputNode)
     return false;
@@ -1970,12 +1980,6 @@ static bool trackExpressionValue(
     }
   }
   return true;
-}
-
-bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
-                                       const Expr *E, BugReport &report,
-                                       bool EnableNullFPSuppression) {
-  return ::trackExpressionValue(InputNode, E, report, EnableNullFPSuppression);
 }
 
 //===----------------------------------------------------------------------===//
