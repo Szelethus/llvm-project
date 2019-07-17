@@ -127,10 +127,9 @@ int bar;
 void test() {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
 
-  if (int flag = foo()) // tracking-note{{'flag' initialized here}}
-                        // debug-note@-1{{Tracking condition 'flag'}}
-                        // expected-note@-2{{Assuming 'flag' is not equal to 0}}
-                        // expected-note@-3{{Taking true branch}}
+  if (int flag = foo()) // debug-note{{Tracking condition 'flag'}}
+                        // expected-note@-1{{Assuming 'flag' is not equal to 0}}
+                        // expected-note@-2{{Taking true branch}}
 
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
@@ -314,7 +313,7 @@ namespace tracked_condition_is_only_initialized {
 int getInt();
 
 void f() {
-  int flag = getInt(); // tracking-note{{'flag' initialized here}}
+  int flag = getInt();
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
   if (flag) // expected-note{{Assuming 'flag' is not equal to 0}}
             // expected-note@-1{{Taking true branch}}
@@ -329,8 +328,8 @@ int flag;
 int getInt();
 
 void f(int y) {
-  y = 1; // tracking-note{{The value 1 is assigned to 'y'}}
-  flag = y; // tracking-note{{The value 1 is assigned to 'flag'}}
+  y = 1;
+  flag = y;
 
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
   if (flag) // expected-note{{'flag' is 1}}
@@ -347,9 +346,8 @@ int getInt();
 
 void foo() {
   int y;
-  y = 1; // tracking-note{{The value 1 is assigned to 'y'}}
+  y = 1;
   flag = y; // tracking-note{{The value 1 is assigned to 'flag'}}
-
 }
 
 void f(int y) {
@@ -380,7 +378,7 @@ void f() {
 
   foo(); // tracking-note{{Calling 'foo'}}
          // tracking-note@-1{{Returning from 'foo'}}
-  y = flag; // tracking-note{{Value assigned to 'y'}}
+  y = flag;
 
   if (y) // expected-note{{Assuming 'y' is not equal to 0}}
          // expected-note@-1{{Taking true branch}}
@@ -429,7 +427,7 @@ int getInt();
 void f(int flag) {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
 
-  flag = getInt(); // tracking-note{{Value assigned to 'flag'}}
+  flag = getInt();
   assert(flag); // tracking-note{{Calling 'assert'}}
                 // tracking-note@-1{{Returning from 'assert'}}
 
