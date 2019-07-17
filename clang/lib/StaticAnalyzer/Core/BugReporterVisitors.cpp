@@ -851,13 +851,13 @@ class ReturnVisitor : public BugReporterVisitor {
   bool EnableNullFPSuppression;
   bool ShouldInvalidate = true;
   AnalyzerOptions& Options;
+  bugreporter::TrackingKind TKind;
 
 public:
-  ReturnVisitor(const StackFrameContext *Frame,
-                bool Suppressed,
-                AnalyzerOptions &Options)
+  ReturnVisitor(const StackFrameContext *Frame, bool Suppressed,
+                AnalyzerOptions &Options, bugreporter::TrackingKind TKind)
       : CalleeSFC(Frame), EnableNullFPSuppression(Suppressed),
-        Options(Options) {}
+        Options(Options), TKind(TKind) {}
 
   static void *getTag() {
     static int Tag = 0;
@@ -879,7 +879,8 @@ public:
   /// bug report, so it can print a note later.
   static void addVisitorIfNecessary(const ExplodedNode *Node, const Stmt *S,
                                     BugReport &BR,
-                                    bool InEnableNullFPSuppression) {
+                                    bool InEnableNullFPSuppression,
+                                    bugreporter::TrackingKind TKind) {
     if (!CallEvent::isCallStmt(S))
       return;
 
@@ -952,7 +953,7 @@ public:
 
     BR.addVisitor(llvm::make_unique<ReturnVisitor>(CalleeContext,
                                                    EnableNullFPSuppression,
-                                                   Options));
+                                                   Options, TKind));
   }
 
   std::shared_ptr<PathDiagnosticPiece>
@@ -1000,8 +1001,9 @@ public:
 
     RetE = RetE->IgnoreParenCasts();
 
-    // If we're returning 0, we should track where that 0 came from.
-    bugreporter::trackExpressionValue(N, RetE, BR, EnableNullFPSuppression);
+    // Let's track the return value.
+    bugreporter::trackExpressionValue(
+        N, RetE, BR, TKind, EnableNullFPSuppression);
 
     // Build an appropriate message based on the return value.
     SmallString<64> Msg;
@@ -1116,7 +1118,7 @@ public:
       if (!State->isNull(*ArgV).isConstrainedTrue())
         continue;
 
-      if (bugreporter::trackExpressionValue(N, ArgE, BR, EnableNullFPSuppression))
+      if (trackExpressionValue(N, ArgE, BR, TKind, EnableNullFPSuppression))
         ShouldInvalidate = false;
 
       // If we /can't/ track the null pointer, we should err on the side of
@@ -1160,7 +1162,43 @@ void FindLastStoreBRVisitor::Profile(llvm::FoldingSetNodeID &ID) const {
   ID.AddPointer(&tag);
   ID.AddPointer(R);
   ID.Add(V);
+  ID.AddInteger(static_cast<int>(TKind));
   ID.AddBoolean(EnableNullFPSuppression);
+}
+
+void FindLastStoreBRVisitor::registerStatementVarDecls(
+    BugReport &BR, const Stmt *S, bool EnableNullFPSuppression,
+    TrackingKind TKind) {
+
+  const ExplodedNode *N = BR.getErrorNode();
+  std::deque<const Stmt *> WorkList;
+  WorkList.push_back(S);
+
+  while (!WorkList.empty()) {
+    const Stmt *Head = WorkList.front();
+    WorkList.pop_front();
+
+    ProgramStateManager &StateMgr = N->getState()->getStateManager();
+
+    if (const auto *DR = dyn_cast<DeclRefExpr>(Head)) {
+      if (const auto *VD = dyn_cast<VarDecl>(DR->getDecl())) {
+        const VarRegion *R =
+        StateMgr.getRegionManager().getVarRegion(VD, N->getLocationContext());
+
+        // What did we load?
+        SVal V = N->getSVal(S);
+
+        if (V.getAs<loc::ConcreteInt>() || V.getAs<nonloc::ConcreteInt>()) {
+          // Register a new visitor with the BugReport.
+          BR.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
+              V.castAs<KnownSVal>(), R, EnableNullFPSuppression, TKind));
+        }
+      }
+    }
+
+    for (const Stmt *SubStmt : Head->children())
+      WorkList.push_back(SubStmt);
+  }
 }
 
 /// Returns true if \p N represents the DeclStmt declaring and initializing
@@ -1333,7 +1371,7 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
   // should track the initializer expression.
   if (Optional<PostInitializer> PIP = Pred->getLocationAs<PostInitializer>()) {
     const MemRegion *FieldReg = (const MemRegion *)PIP->getLocationValue();
-    if (FieldReg && FieldReg == R) {
+    if (FieldReg == R) {
       StoreSite = Pred;
       InitE = PIP->getInitializer()->getInit();
     }
@@ -1398,8 +1436,8 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
     if (!IsParam)
       InitE = InitE->IgnoreParenCasts();
 
-    bugreporter::trackExpressionValue(StoreSite, InitE, BR,
-                                      EnableNullFPSuppression);
+    bugreporter::trackExpressionValue(
+        StoreSite, InitE, BR, TKind, EnableNullFPSuppression);
   }
 
   // Okay, we've found the binding. Emit an appropriate message.
@@ -1427,7 +1465,7 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
           if (const VarRegion *OriginalR = BDR->getOriginalRegion(VR)) {
             if (auto KV = State->getSVal(OriginalR).getAs<KnownSVal>())
               BR.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-                  *KV, OriginalR, EnableNullFPSuppression));
+                  *KV, OriginalR, EnableNullFPSuppression, TKind));
           }
         }
       }
@@ -1729,7 +1767,8 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
       // expression, hence the BugReport level set.
       if (BR.addTrackedCondition(N)) {
         bugreporter::trackExpressionValue(
-            N, Condition, BR, /*EnableNullFPSuppression=*/false);
+            N, Condition, BR, bugreporter::TrackingKind::Condition,
+            /*EnableNullFPSuppression=*/false);
         return constructDebugPieceForTrackedCondition(Condition, N, BRC);
       }
     }
@@ -1843,7 +1882,9 @@ static const ExplodedNode* findNodeForExpression(const ExplodedNode *N,
 
 bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
                                        const Expr *E, BugReport &report,
+                                       bugreporter::TrackingKind TKind,
                                        bool EnableNullFPSuppression) {
+
   if (!E || !InputNode)
     return false;
 
@@ -1867,12 +1908,13 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
   // At this point in the path, the receiver should be live since we are at the
   // message send expr. If it is nil, start tracking it.
   if (const Expr *Receiver = NilReceiverBRVisitor::getNilReceiver(Inner, LVNode))
-    trackExpressionValue(LVNode, Receiver, report, EnableNullFPSuppression);
+    trackExpressionValue(
+        LVNode, Receiver, report, TKind, EnableNullFPSuppression);
 
   // Track the index if this is an array subscript.
   if (const auto *Arr = dyn_cast<ArraySubscriptExpr>(Inner))
     trackExpressionValue(
-        LVNode, Arr->getIdx(), report, /*EnableNullFPSuppression*/ false);
+        LVNode, Arr->getIdx(), report, TKind, /*EnableNullFPSuppression*/false);
 
   // See if the expression we're interested refers to a variable.
   // If so, we can track both its contents and constraints on its value.
@@ -1888,7 +1930,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
     if (RR && !LVIsNull)
       if (auto KV = LVal.getAs<KnownSVal>())
         report.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-              *KV, RR, EnableNullFPSuppression));
+              *KV, RR, EnableNullFPSuppression, TKind));
 
     // In case of C++ references, we want to differentiate between a null
     // reference and reference to null pointer.
@@ -1925,7 +1967,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
 
       if (auto KV = V.getAs<KnownSVal>())
         report.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-              *KV, R, EnableNullFPSuppression));
+              *KV, R, EnableNullFPSuppression, TKind));
       return true;
     }
   }
@@ -1935,7 +1977,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
   SVal V = LVState->getSValAsScalarOrLoc(Inner, LVNode->getLocationContext());
 
   ReturnVisitor::addVisitorIfNecessary(
-    LVNode, Inner, report, EnableNullFPSuppression);
+    LVNode, Inner, report, EnableNullFPSuppression, TKind);
 
   // Is it a symbolic value?
   if (auto L = V.getAs<loc::MemRegionVal>()) {
@@ -1965,7 +2007,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
     if (CanDereference)
       if (auto KV = RVal.getAs<KnownSVal>())
         report.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-            *KV, L->getRegion(), EnableNullFPSuppression));
+            *KV, L->getRegion(), EnableNullFPSuppression, TKind));
 
     const MemRegion *RegionRVal = RVal.getAsRegion();
     if (RegionRVal && isa<SymbolicRegion>(RegionRVal)) {
@@ -2023,51 +2065,13 @@ NilReceiverBRVisitor::VisitNode(const ExplodedNode *N,
   // The receiver was nil, and hence the method was skipped.
   // Register a BugReporterVisitor to issue a message telling us how
   // the receiver was null.
-  bugreporter::trackExpressionValue(N, Receiver, BR,
-                               /*EnableNullFPSuppression*/ false);
+  bugreporter::trackExpressionValue(
+      N, Receiver, BR, bugreporter::TrackingKind::Thorough,
+      /*EnableNullFPSuppression*/ false);
   // Issue a message saying that the method was skipped.
   PathDiagnosticLocation L(Receiver, BRC.getSourceManager(),
                                      N->getLocationContext());
   return std::make_shared<PathDiagnosticEventPiece>(L, OS.str());
-}
-
-//===----------------------------------------------------------------------===//
-// Implementation of FindLastStoreBRVisitor.
-//===----------------------------------------------------------------------===//
-
-// Registers every VarDecl inside a Stmt with a last store visitor.
-void FindLastStoreBRVisitor::registerStatementVarDecls(BugReport &BR,
-                                                const Stmt *S,
-                                                bool EnableNullFPSuppression) {
-  const ExplodedNode *N = BR.getErrorNode();
-  std::deque<const Stmt *> WorkList;
-  WorkList.push_back(S);
-
-  while (!WorkList.empty()) {
-    const Stmt *Head = WorkList.front();
-    WorkList.pop_front();
-
-    ProgramStateManager &StateMgr = N->getState()->getStateManager();
-
-    if (const auto *DR = dyn_cast<DeclRefExpr>(Head)) {
-      if (const auto *VD = dyn_cast<VarDecl>(DR->getDecl())) {
-        const VarRegion *R =
-        StateMgr.getRegionManager().getVarRegion(VD, N->getLocationContext());
-
-        // What did we load?
-        SVal V = N->getSVal(S);
-
-        if (V.getAs<loc::ConcreteInt>() || V.getAs<nonloc::ConcreteInt>()) {
-          // Register a new visitor with the BugReport.
-          BR.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
-              V.castAs<KnownSVal>(), R, EnableNullFPSuppression));
-        }
-      }
-    }
-
-    for (const Stmt *SubStmt : Head->children())
-      WorkList.push_back(SubStmt);
-  }
 }
 
 //===----------------------------------------------------------------------===//
