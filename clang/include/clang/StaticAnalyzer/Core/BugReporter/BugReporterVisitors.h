@@ -83,6 +83,36 @@ public:
                     BugReport &BR);
 };
 
+namespace bugreporter {
+
+/// Attempts to add visitors to track expression value back to its point of
+/// origin.
+///
+/// \param N A node "downstream" from the evaluation of the statement.
+/// \param E The expression value which we are tracking
+/// \param R The bug report to which visitors should be attached.
+/// \param EnableNullFPSuppression Whether we should employ false positive
+///         suppression (inlined defensive checks, returned null).
+///
+/// \return Whether or not the function was able to add visitors for this
+///         statement. Note that returning \c true does not actually imply
+///         that any visitors were added.
+bool trackExpressionValue(const ExplodedNode *N, const Expr *E, BugReport &R,
+                          bool EnableNullFPSuppression = true);
+
+/// Specifies the type of tracking for an expression. For instance, we'd like to
+/// gather far more information about a variable found to be a cause of a null
+/// pointer dereference, while tracking a condition to that extent would pollute
+/// the bug report without much of an added value.
+enum class TrackingKind {
+  ThoroughTracking,
+  ConditionTracking
+};
+
+const Expr *getDerefExpr(const Stmt *S);
+
+} // namespace bugreporter
+
 /// Finds last store into the given region,
 /// which is different from a given symbolic value.
 class FindLastStoreBRVisitor final : public BugReporterVisitor {
@@ -94,15 +124,28 @@ class FindLastStoreBRVisitor final : public BugReporterVisitor {
   /// bug, we are going to employ false positive suppression.
   bool EnableNullFPSuppression;
 
+  using TrackingKind = bugreporter::TrackingKind;
+  TrackingKind TKind;
+
 public:
   /// Creates a visitor for every VarDecl inside a Stmt and registers it with
   /// the BugReport.
   static void registerStatementVarDecls(BugReport &BR, const Stmt *S,
-                                        bool EnableNullFPSuppression);
+                                        bool EnableNullFPSuppression,
+                                        TrackingKind TKind);
 
+  /// \param V We're searching for the store where \c R received this value.
+  /// \param R The region we're tracking.
+  /// \param EnableNullFPSuppression Whether we should employ false positive
+  ///         suppression (inlined defensive checks, returned null).
+  /// \param TKind May limit the amount of notes added to the bug report.
   FindLastStoreBRVisitor(KnownSVal V, const MemRegion *R,
-                         bool InEnableNullFPSuppression)
-      : R(R), V(V), EnableNullFPSuppression(InEnableNullFPSuppression) {}
+                         bool InEnableNullFPSuppression,
+                         TrackingKind TKind)
+      : R(R), V(V), EnableNullFPSuppression(InEnableNullFPSuppression),
+        TKind(TKind) {
+    assert(R);
+  }
 
   void Profile(llvm::FoldingSetNodeID &ID) const override;
 
@@ -344,27 +387,6 @@ public:
                                                  BugReporterContext &BRC,
                                                  BugReport &R) override;
 };
-
-namespace bugreporter {
-
-/// Attempts to add visitors to track expression value back to its point of
-/// origin.
-///
-/// \param N A node "downstream" from the evaluation of the statement.
-/// \param E The expression value which we are tracking
-/// \param R The bug report to which visitors should be attached.
-/// \param EnableNullFPSuppression Whether we should employ false positive
-///         suppression (inlined defensive checks, returned null).
-///
-/// \return Whether or not the function was able to add visitors for this
-///         statement. Note that returning \c true does not actually imply
-///         that any visitors were added.
-bool trackExpressionValue(const ExplodedNode *N, const Expr *E, BugReport &R,
-                          bool EnableNullFPSuppression = true);
-
-const Expr *getDerefExpr(const Stmt *S);
-
-} // namespace bugreporter
 
 } // namespace ento
 
