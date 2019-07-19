@@ -1024,8 +1024,8 @@ public:
 /// CFGElements can't be collected by address, as CFGBlock returns them by
 /// value.
 class CFGElementRef {
-  const CFGBlock *B;
-  size_t Index;
+  const CFGBlock *B = nullptr;
+  size_t Index = 0;
 
 public:
   const CFGBlock *getCFGBlock() const {
@@ -1040,13 +1040,21 @@ public:
     return (*B)[Index];
   }
 
+  CFGElementRef() = default;
   CFGElementRef(const CFGBlock *B, size_t Index) : B(B), Index(Index) {}
-
-  bool precedes(CFGElementRef Other) const {
-    assert(getCFGBlock() == Other.getCFGBlock());
-    return getIndex() < Other.getIndex();
-  }
 };
+
+inline bool operator==(CFGElementRef Lhs, CFGElementRef Rhs) {
+  return Lhs.getCFGBlock() == Rhs.getCFGBlock() &&
+         Lhs.getIndex() == Rhs.getIndex();
+}
+
+inline bool operator<(CFGElementRef Lhs, CFGElementRef Rhs) {
+  if (Lhs.getCFGBlock() != Rhs.getCFGBlock())
+    return Lhs.getCFGBlock() < Rhs.getCFGBlock();
+  else
+    return Lhs.getIndex() < Rhs.getIndex();
+}
 
 inline CFGElementRef CFGBlock::getCFGElementRef(size_t I) const {
   return {this, I};

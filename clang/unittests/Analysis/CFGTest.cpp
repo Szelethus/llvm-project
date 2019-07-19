@@ -67,49 +67,6 @@ TEST(CFG, IsLinear) {
   expectLinear(true,  "void foo() { foo(); }"); // Recursion is not our problem.
 }
 
-TEST(CFG, CFGElementRefTest) {
-  const char *Code = R"(int test3() {
-                          int x,y,z;
-
-                          x = y = z = 1;
-                          if (x > 0) {
-                            while (x >= 0){
-                              while (y >= x) {
-                                x = x-1;
-                                y = y/2;
-                              }
-                            }
-                          }
-                          z = y;
-
-                          return 0;
-                        })";
-
-  BuildResult Result = BuildCFG(Code);
-  CFG *cfg = Result.getCFG();
-  //                           <- [B2] <-
-  //                          /          \
-  // [B8 (ENTRY)] -> [B7] -> [B6] ---> [B5] -> [B4] -> [B3]
-  //                   \       |         \              /
-  //                    \      |          <-------------
-  //                     \      \
-  //                      --------> [B1] -> [B0 (EXIT)]
-  auto GetBlock = [cfg] (unsigned Index) -> CFGBlock * {
-    assert(Index < cfg->size());
-    return *(cfg->begin() + Index);
-  };
-
-  const CFGBlock *InnerMostLoopBody = GetBlock(4);
-  // Sanity check.
-  EXPECT_EQ(InnerMostLoopBody->size(), 2);
-
-  CFGElementRef AssignmentToX = InnerMostLoopBody->getCFGElementRef(0);
-  CFGElementRef AssignmentToY = InnerMostLoopBody->getCFGElementRef(1);
-
-  EXPECT_TRUE(AssignmentToX.precedes(AssignmentToY));
-  EXPECT_EQ((*AssignmentToX).getKind(), CFGElement::Statement);
-}
-
 } // namespace
 } // namespace analysis
 } // namespace clang
