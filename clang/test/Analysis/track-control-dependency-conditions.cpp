@@ -714,6 +714,18 @@ void f() {
 }
 } // end of namespace condition_variable_less
 
+namespace dont_crash_on_nonlogical_binary_operator {
+
+void f6(int x) {
+  int a[20];
+  if (x == 25) {} // expected-note{{Assuming 'x' is equal to 25}}
+                  // expected-note@-1{{Taking true branch}}
+  if (a[x] == 123) {} // expected-warning{{The left operand of '==' is a garbage value due to array index out of bounds}}
+                      // expected-note@-1{{The left operand of '==' is a garbage value due to array index out of bounds}}
+}
+
+} // end of namespace dont_crash_on_nonlogical_binary_operator
+
 namespace dont_track_assertlike_conditions {
 
 extern void __assert_fail(__const char *__assertion, __const char *__file,
@@ -787,7 +799,6 @@ void f(int flag) {
 }
 
 #undef assert
-
 } // end of namespace dont_track_assertlike_and_conditions
 
 namespace dont_track_assertlike_or_conditions {
