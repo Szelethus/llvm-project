@@ -2809,8 +2809,9 @@ FindReportInEquivalenceClass(BugReportEquivClass& EQ,
     // to being post-dominated by a sink. This works better when the analysis
     // is incomplete and we have never reached the no-return function call(s)
     // that we'd inevitably bump into on this path.
-    if (errorNode->getCFGBlock()->isInevitablySinking())
-      continue;
+    if (const CFGBlock *ErrorB = errorNode->getCFGBlock())
+      if (ErrorB->isInevitablySinking())
+        continue;
 
     // At this point we know that 'N' is not a sink and it has at least one
     // successor.  Use a DFS worklist to find a non-sink end-of-path node.
