@@ -458,3 +458,56 @@ void f(int flag) {
 }
 
 } // end of namespace unimportant_write_before_collapse_point
+
+namespace dont_track_assertlike_conditions {
+
+extern void __assert_fail (__const char *__assertion, __const char *__file,
+                           unsigned int __line, __const char *__function)
+__attribute__ ((__noreturn__));
+#define assert(expr) \
+((expr)  ? (void)(0)  : __assert_fail (#expr, __FILE__, __LINE__, __func__))
+
+int getInt();
+
+void f(int flag) {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+
+  flag = getInt();
+
+  assert(getInt()); // expected-note{{Assuming the condition is true}}
+                    // expected-note@-1{{'?' condition is true}}
+
+  if (flag) // expected-note{{'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
+            // debug-note@-2{{Tracking condition 'flag'}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+
+#undef assert
+} // end of namespace dont_track_assertlike_conditions
+
+namespace dont_track_assertlike_conditions2 {
+
+[[noreturn]] void __assert (const char *msg, const char *file, int line);
+#define assert(EX) (void)((EX) || (__assert (#EX, __FILE__, __LINE__),0))
+
+int getInt();
+
+void f(int flag) {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+
+  flag = getInt();
+
+  assert(getInt()); // expected-note{{Assuming the condition is true}}
+                    // expected-note@-1{{Left side of '||' is true}}
+
+  if (flag) // expected-note{{'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
+            // debug-note@-2{{Tracking condition 'flag'}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+
+#undef assert
+} // end of namespace dont_track_assertlike_conditions
