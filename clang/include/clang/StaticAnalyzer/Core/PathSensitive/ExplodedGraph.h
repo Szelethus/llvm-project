@@ -153,6 +153,8 @@ public:
 
   CFG &getCFG() const { return *getLocationContext()->getCFG(); }
 
+  const CFGBlock *getCFGBlock() const;
+
   ParentMap &getParentMap() const {return getLocationContext()->getParentMap();}
 
   template <typename T>

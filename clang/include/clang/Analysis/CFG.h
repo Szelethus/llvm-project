@@ -855,6 +855,11 @@ public:
   void setLoopTarget(const Stmt *loopTarget) { LoopTarget = loopTarget; }
   void setHasNoReturnElement() { HasNoReturnElement = true; }
 
+  /// Returns true if the block would eventually end with a sink. We scan the
+  /// child CFG blocks in a depth-first manner and see if all paths eventually
+  /// end up in an immediate sink block.
+  bool isInevitablySinking() const;
+
   CFGTerminator getTerminator() const { return Terminator; }
 
   Stmt *getTerminatorStmt() { return Terminator.getStmt(); }
