@@ -865,13 +865,13 @@ class ReturnVisitor : public BugReporterVisitor {
   bool EnableNullFPSuppression;
   bool ShouldInvalidate = true;
   AnalyzerOptions& Options;
+  bugreporter::TrackingKind TKind;
 
 public:
-  ReturnVisitor(const StackFrameContext *Frame,
-                bool Suppressed,
-                AnalyzerOptions &Options)
+  ReturnVisitor(const StackFrameContext *Frame, bool Suppressed,
+                AnalyzerOptions &Options, bugreporter::TrackingKind TKind)
       : CalleeSFC(Frame), EnableNullFPSuppression(Suppressed),
-        Options(Options) {}
+        Options(Options), TKind(TKind) {}
 
   static void *getTag() {
     static int Tag = 0;
@@ -893,7 +893,8 @@ public:
   /// bug report, so it can print a note later.
   static void addVisitorIfNecessary(const ExplodedNode *Node, const Stmt *S,
                                     BugReport &BR,
-                                    bool InEnableNullFPSuppression) {
+                                    bool InEnableNullFPSuppression,
+                                    bugreporter::TrackingKind TKind) {
     if (!CallEvent::isCallStmt(S))
       return;
 
@@ -966,7 +967,7 @@ public:
 
     BR.addVisitor(llvm::make_unique<ReturnVisitor>(CalleeContext,
                                                    EnableNullFPSuppression,
-                                                   Options));
+                                                   Options, TKind));
   }
 
   std::shared_ptr<PathDiagnosticPiece>
@@ -1014,8 +1015,14 @@ public:
 
     RetE = RetE->IgnoreParenCasts();
 
-    // If we're returning 0, we should track where that 0 came from.
+    // Let's track the return value.
     bugreporter::trackExpressionValue(N, RetE, BR, EnableNullFPSuppression);
+
+    if (TKind == bugreporter::TrackingKind::ConditionTracking)
+      if (const auto *Method = dyn_cast<CXXMemberCallExpr>(CalleeSFC->getCallSite()))
+        if (const auto *Op = dyn_cast<CXXConversionDecl>(Method->getMethodDecl()))
+          if (Op->getConversionType()->isBooleanType())
+            return nullptr;
 
     // Build an appropriate message based on the return value.
     SmallString<64> Msg;
@@ -1947,9 +1954,11 @@ static bool trackExpressionValue(
     // pointer. In addition, we should find the store at which the reference
     // got initialized.
     if (RR && !LVIsNull)
-      if (auto KV = LVal.getAs<KnownSVal>())
+      if (auto KV = LVal.getAs<KnownSVal>()) {
+        llvm::errs() << "FUCK\n";
         report.addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
               *KV, RR, EnableNullFPSuppression, TKind, SFC));
+      }
 
     // In case of C++ references, we want to differentiate between a null
     // reference and reference to null pointer.
@@ -1959,7 +1968,6 @@ static bool trackExpressionValue(
         LVNode->getSVal(Inner).getAsRegion();
 
     if (R) {
-
       // Mark both the variable region and its contents as interesting.
       SVal V = LVState->getRawSVal(loc::MemRegionVal(R));
       report.addVisitor(
@@ -1996,7 +2004,7 @@ static bool trackExpressionValue(
   SVal V = LVState->getSValAsScalarOrLoc(Inner, LVNode->getLocationContext());
 
   ReturnVisitor::addVisitorIfNecessary(
-    LVNode, Inner, report, EnableNullFPSuppression);
+    LVNode, Inner, report, EnableNullFPSuppression, TKind);
 
   // Is it a symbolic value?
   if (auto L = V.getAs<loc::MemRegionVal>()) {

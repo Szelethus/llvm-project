@@ -154,7 +154,39 @@ void test() {
             // expected-note@-1{{Dereference of null pointer}}
 }
 
-} // end of namespace variable_declaration_in_condition
+} // end of namespace conversion_to_bool
+
+namespace conversion_to_bool_nonlinear {
+bool coin();
+
+struct ConvertsToBool {
+  int i;
+  ConvertsToBool(int i) : i(i) {}
+
+  operator bool() const {
+    if (i)
+      return true;
+    return false;
+  }
+};
+
+ConvertsToBool conjure() {
+  if (coin())
+    return ConvertsToBool(5);
+  return ConvertsToBool(0);
+}
+
+void test() {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+
+  if (ConvertsToBool C = conjure())
+    // debug-note@-1{{Tracking condition 'C'}}
+    // expected-note@-2{{Taking true branch}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+
+} // end of namespace conversion_to_bool_nonlinear
 
 namespace note_from_different_but_not_nested_stackframe {
 
