@@ -717,6 +717,8 @@ public:
   using reverse_iterator = ElementList::reverse_iterator;
   using const_reverse_iterator = ElementList::const_reverse_iterator;
 
+  size_t getIndexInCFG() const;
+
   CFGElement                 front()       const { return Elements.front();   }
   CFGElement                 back()        const { return Elements.back();    }
 
