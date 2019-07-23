@@ -67,6 +67,37 @@ TEST(CFG, IsLinear) {
   expectLinear(true,  "void foo() { foo(); }"); // Recursion is not our problem.
 }
 
+TEST(CFG, ElementRefIterator) {
+  const char *Code = R"(void f() {
+                          int i;
+                          int j;
+                          i = 5;
+                          i = 6;
+                          j = 7;
+                        })";
+  
+  BuildResult B = BuildCFG(Code);
+  EXPECT_EQ(BuildResult::BuiltCFG, B.getStatus());
+  CFG *Cfg = B.getCFG();
+  // [B2 (ENTRY)]
+  //   Succs (1): B1
+
+  // [B1]
+  //   1: int i;
+  //   2: int j;
+  //   3: i = 5
+  //   4: i = 6
+  //   5: j = 7
+  //   Preds (1): B2
+  //   Succs (1): B0
+
+  // [B0 (EXIT)]
+  //   Preds (1): B1
+  CFGBlock *MainBlock = *(Cfg->begin() + 1);
+  for (CFGBlock::CFGElementRef : MainBlock->refs())
+    ;
+}
+
 } // namespace
 } // namespace analysis
 } // namespace clang

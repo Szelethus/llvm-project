@@ -613,14 +613,24 @@ class CFGBlock {
   };
 
   template <typename ElementListIteratorT>
-  class ElementRefIterator  {
+  class ElementRef {
   public:
     using IteratorTraits = typename std::iterator_traits<ElementListIteratorT>;
     using difference_type = typename IteratorTraits::difference_type;
     using value_type = typename IteratorTraits::value_type;
     using pointer = typename IteratorTraits::pointer;
     using reference = typename IteratorTraits::reference;
-    using iterator_category = typename IteratorTraits::iterator_category;
+
+    template<typename Iter>
+    struct strip_reverse_iterator { using type = Iter; };
+
+    template<typename Iter>
+    struct strip_reverse_iterator<std::reverse_iterator<Iter>>
+      : strip_reverse_iterator<Iter> {};
+
+    template<typename T>
+    struct remove_cv_ptr
+      : std::remove_cv<typename std::remove_pointer<T>::type> {};
 
     template<typename Iter>
     struct is_reverse_iterator : std::false_type {};
@@ -633,18 +643,17 @@ class CFGBlock {
     template <typename Iter>
     struct is_const_iterator
       : std::integral_constant<bool,
-          std::is_const<typename std::remove_pointer<Iter>::type>::value> {
-      static_assert(std::is_same<
-                    typename std::remove_cv<
-                        typename std::remove_pointer<Iter>::type>::type,
-                    CFGElement>::value,
+            std::is_const<typename std::remove_pointer<
+                typename strip_reverse_iterator<Iter>::type>::type>::value> {
+
+      static_assert(
+          std::is_same<
+              typename remove_cv_ptr<
+                  typename strip_reverse_iterator<Iter>::type>::type,
+              CFGElement>::value,
           "Can't determine whether the template parameter of "
           "ElementRefIterator is a const iterator!");
     };
-
-    template <typename Iter>
-    struct is_const_iterator<std::reverse_iterator<Iter>>
-      : is_const_iterator<Iter> {};
 
     using CFGBlockRef = 
         typename std::conditional<
@@ -656,12 +665,8 @@ class CFGBlock {
     ElementListIteratorT Pos;
 
   public:
-    ElementRefIterator(CFGBlockRef Parent, ElementListIteratorT Pos)
+    ElementRef(CFGBlockRef Parent, ElementListIteratorT Pos)
       : Parent(Parent), Pos(Pos) {}
-
-    template <typename OtherElementListIteratorT>
-    ElementRefIterator(OtherElementListIteratorT Other)
-      : ElementRefIterator(Other.Parent, Other.Pos) {}
 
     difference_type getIndexInBlock() const {
       if (is_reverse_iterator<ElementListIteratorT>::value)
@@ -672,34 +677,54 @@ class CFGBlock {
 
     CFGBlockRef getParent() { return Parent; }
 
-    difference_type operator-(ElementRefIterator Other) const {
-      return Pos - Other;
+    bool operator<(ElementRef Other) {
+      assert(Parent == Other.Parent);
+      return Pos < Other.Pos;
     }
+
+    bool operator==(ElementRef Other) {
+      return Parent == Other.Parent && Pos == Other.Pos;
+    }
+
+    bool operator!=(ElementRef Other) { return !(*this == Other); }
     value_type operator*() { return *Pos; }
     pointer operator->() { return Pos->operator->(); }
-    ElementRefIterator operator++() {
-      ++Pos;
+  };
+
+  template <typename ElementListIteratorT>
+  class ElementRefIterator : public ElementRef<ElementListIteratorT> {
+    using ElementRef = typename CFGBlock::ElementRef<ElementListIteratorT>;
+    using CFGBlockRef = typename ElementRef::CFGBlockRef;
+    using difference_type = typename ElementRef::difference_type;
+
+  public:
+    ElementRefIterator(CFGBlockRef Parent, ElementListIteratorT Pos)
+      : ElementRef(Parent, Pos) {}
+    //template <typename OtherElementListIteratorT>
+    //ElementRefIterator(OtherElementListIteratorT Other)
+    //  : ElementRefIterator(Other.Parent, Other.Pos) {}
+
+
+    difference_type operator-(ElementRefIterator Other) const {
+      return this->Pos - Other;
+    }
+
+    ElementRef operator++() {
+      ++this->Pos;
       return *this;
     }
     ElementRefIterator operator++(int) {
       ElementRefIterator Ret = *this;
       return operator++();
     }
-    bool operator<(ElementRefIterator Other) {
-      assert(Parent == Other.Parent);
-      return Pos < Other.Pos;
-    }
-    bool operator==(ElementRefIterator Other) {
-      return Parent == Other.Parent && Pos == Other.Pos;
-    }
     ElementRefIterator operator+(size_t count) {
-      assert(getIndexInBlock() + count < Parent->size());
-      Pos += count;
+      assert(this->getIndexInBlock() + count < this->Parent->size());
+      this->Pos += count;
       return *this;
     }
     ElementRefIterator operator-(size_t count) {
-      assert(getIndexInBlock() >= count);
-      Pos -= count;
+      assert(this->getIndexInBlock() >= count);
+      this->Pos -= count;
       return *this;
     }
   };
@@ -824,9 +849,10 @@ public:
   const_reverse_iterator     rbegin()      const { return Elements.rbegin();  }
   const_reverse_iterator     rend()        const { return Elements.rend();    }
 
-  using ref_iterator = ElementRefIterator<iterator>;
-  using ref_iterator_range = llvm::iterator_range<iterator>;
+  using CFGElementRef = ElementRef<iterator>;
+  using ConstCFGElementRef = ElementRef<const_iterator>;
 
+  using ref_iterator = ElementRefIterator<iterator>;
   using const_ref_iterator = ElementRefIterator<const_iterator>;
   using const_ref_iterator_range = llvm::iterator_range<const_ref_iterator>;
 
@@ -836,16 +862,6 @@ public:
   using const_reverse_ref_iterator = ElementRefIterator<const_reverse_iterator>;
   using const_reverse_ref_iterator_range =
       llvm::iterator_range<const_reverse_ref_iterator>;
-
-  ref_iterator ref_begin() { return {this, begin()}; }
-  ref_iterator ref_end() { return {this, end()}; }
-  const_ref_iterator cref_begin() const { return {this, begin()}; }
-  const_ref_iterator cref_end() const { return {this, end()}; }
-
-  reverse_ref_iterator rref_begin() { return {this, rbegin()}; }
-  reverse_ref_iterator rref_end() { return {this, rend()}; }
-  const_reverse_ref_iterator rref_begin() const { return {this, rbegin()}; }
-  const_reverse_ref_iterator rref_end() const { return {this, rend()}; }
 
   unsigned                   size()        const { return Elements.size();    }
   bool                       empty()       const { return Elements.empty();   }
