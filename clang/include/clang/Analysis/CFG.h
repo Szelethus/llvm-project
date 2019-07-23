@@ -717,7 +717,7 @@ public:
     value_type operator*();
 
     UnderlayingIteratorTy getUnderlayingIterator() { return Pos; }
-    CFGBlockRef getParent() { return Parent; }
+    const CFGBlock *getParent() const { return Parent; }
 
     difference_type operator-(ElementRefIterator Other) const {
       return Pos - Other.Pos;
@@ -1185,7 +1185,8 @@ public:
 
 template <bool IsConst>
 static size_t getIndexInBlock(CFGBlock::ElementRefIterator<true, IsConst> E) {
-    return E.getUnderlayingIterator() - E.getParent()->rbegin();
+    return E.getParent()->size() -
+           (E.getUnderlayingIterator() - E.getParent()->rbegin()) - 1;
 }
 
 template <bool IsConst>
