@@ -612,6 +612,98 @@ class CFGBlock {
     bool empty() const { return Impl.empty(); }
   };
 
+  template <typename ElementListIteratorT>
+  class ElementRefIterator  {
+  public:
+    using IteratorTraits = typename std::iterator_traits<ElementListIteratorT>;
+    using difference_type = typename IteratorTraits::difference_type;
+    using value_type = typename IteratorTraits::value_type;
+    using pointer = typename IteratorTraits::pointer;
+    using reference = typename IteratorTraits::reference;
+    using iterator_category = typename IteratorTraits::iterator_category;
+
+    template<typename Iter>
+    struct is_reverse_iterator : std::false_type {};
+
+    template<typename Iter>
+    struct is_reverse_iterator<std::reverse_iterator<Iter>>
+      : std::integral_constant<bool, !is_reverse_iterator<Iter>::value> {
+    };
+
+    template <typename Iter>
+    struct is_const_iterator
+      : std::integral_constant<bool,
+          std::is_const<typename std::remove_pointer<Iter>::type>::value> {
+      static_assert(std::is_same<
+                    typename std::remove_cv<
+                        typename std::remove_pointer<Iter>::type>::type,
+                    CFGElement>::value,
+          "Can't determine whether the template parameter of "
+          "ElementRefIterator is a const iterator!");
+    };
+
+    template <typename Iter>
+    struct is_const_iterator<std::reverse_iterator<Iter>>
+      : is_const_iterator<Iter> {};
+
+    using CFGBlockRef = 
+        typename std::conditional<
+            is_const_iterator<ElementListIteratorT>::value,
+            const CFGBlock *, CFGBlock *>::type;
+
+  private:
+    CFGBlockRef Parent;
+    ElementListIteratorT Pos;
+
+  public:
+    ElementRefIterator(CFGBlockRef Parent, ElementListIteratorT Pos)
+      : Parent(Parent), Pos(Pos) {}
+
+    template <typename OtherElementListIteratorT>
+    ElementRefIterator(OtherElementListIteratorT Other)
+      : ElementRefIterator(Other.Parent, Other.Pos) {}
+
+    difference_type getIndexInBlock() const {
+      if (is_reverse_iterator<ElementListIteratorT>::value)
+        return std::reverse_iterator<ElementListIteratorT>::base(Pos) -
+               Parent->begin();
+      return Pos - Parent->begin();
+    }
+
+    CFGBlockRef getParent() { return Parent; }
+
+    difference_type operator-(ElementRefIterator Other) const {
+      return Pos - Other;
+    }
+    value_type operator*() { return *Pos; }
+    pointer operator->() { return Pos->operator->(); }
+    ElementRefIterator operator++() {
+      ++Pos;
+      return *this;
+    }
+    ElementRefIterator operator++(int) {
+      ElementRefIterator Ret = *this;
+      return operator++();
+    }
+    bool operator<(ElementRefIterator Other) {
+      assert(Parent == Other.Parent);
+      return Pos < Other.Pos;
+    }
+    bool operator==(ElementRefIterator Other) {
+      return Parent == Other.Parent && Pos == Other.Pos;
+    }
+    ElementRefIterator operator+(size_t count) {
+      assert(getIndexInBlock() + count < Parent->size());
+      Pos += count;
+      return *this;
+    }
+    ElementRefIterator operator-(size_t count) {
+      assert(getIndexInBlock() >= count);
+      Pos -= count;
+      return *this;
+    }
+  };
+
   /// The set of statements in the basic block.
   ElementList Elements;
 
@@ -732,12 +824,33 @@ public:
   const_reverse_iterator     rbegin()      const { return Elements.rbegin();  }
   const_reverse_iterator     rend()        const { return Elements.rend();    }
 
+  using ref_iterator = ElementRefIterator<iterator>;
+  using ref_iterator_range = llvm::iterator_range<iterator>;
+
+  using const_ref_iterator = ElementRefIterator<const_iterator>;
+  using const_ref_iterator_range = llvm::iterator_range<const_ref_iterator>;
+
+  using reverse_ref_iterator = ElementRefIterator<reverse_iterator>;
+  using reverse_ref_iterator_range = llvm::iterator_range<reverse_ref_iterator>;
+
+  using const_reverse_ref_iterator = ElementRefIterator<const_reverse_iterator>;
+  using const_reverse_ref_iterator_range =
+      llvm::iterator_range<const_reverse_ref_iterator>;
+
+  ref_iterator ref_begin() { return {this, begin()}; }
+  ref_iterator ref_end() { return {this, end()}; }
+  const_ref_iterator cref_begin() const { return {this, begin()}; }
+  const_ref_iterator cref_end() const { return {this, end()}; }
+
+  reverse_ref_iterator rref_begin() { return {this, rbegin()}; }
+  reverse_ref_iterator rref_end() { return {this, rend()}; }
+  const_reverse_ref_iterator rref_begin() const { return {this, rbegin()}; }
+  const_reverse_ref_iterator rref_end() const { return {this, rend()}; }
+
   unsigned                   size()        const { return Elements.size();    }
   bool                       empty()       const { return Elements.empty();   }
 
   CFGElement operator[](size_t i) const  { return Elements[i]; }
-
-  CFGElementRef getCFGElementRef(size_t i) const;
 
   // CFG iterators
   using pred_iterator = AdjacentBlocks::iterator;
@@ -1021,46 +1134,6 @@ public:
     return ++I;
   }
 };
-
-/// A simply wrapper for a (CFGBlock, index) pair. This is needed because
-/// CFGElements can't be collected by address, as CFGBlock returns them by
-/// value.
-class CFGElementRef {
-  const CFGBlock *B = nullptr;
-  size_t Index = 0;
-
-public:
-  const CFGBlock *getCFGBlock() const {
-    return B;
-  }
-
-  size_t getIndex() const {
-    return Index;
-  }
-
-  CFGElement operator*() const {
-    return (*B)[Index];
-  }
-
-  CFGElementRef() = default;
-  CFGElementRef(const CFGBlock *B, size_t Index) : B(B), Index(Index) {}
-};
-
-inline bool operator==(CFGElementRef Lhs, CFGElementRef Rhs) {
-  return Lhs.getCFGBlock() == Rhs.getCFGBlock() &&
-         Lhs.getIndex() == Rhs.getIndex();
-}
-
-inline bool operator<(CFGElementRef Lhs, CFGElementRef Rhs) {
-  if (Lhs.getCFGBlock() != Rhs.getCFGBlock())
-    return Lhs.getCFGBlock() < Rhs.getCFGBlock();
-  else
-    return Lhs.getIndex() < Rhs.getIndex();
-}
-
-inline CFGElementRef CFGBlock::getCFGElementRef(size_t I) const {
-  return {this, I};
-}
 
 /// CFGCallback defines methods that should be called when a logical
 /// operator error is found when building the CFG.
