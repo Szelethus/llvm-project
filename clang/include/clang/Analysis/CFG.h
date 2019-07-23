@@ -657,7 +657,16 @@ class CFGBlock {
   };
 
   template <bool IsReverse, bool IsConst>
+  class ElementRefIterator;
+
+  template <bool IsConst>
+  static size_t getIndexInBlock(ElementRefIterator<true, IsConst> E);
+
+  template <bool IsReverse, bool IsConst>
   class ElementRefIterator {
+    template <bool IsParameterReverse>
+    friend size_t getIndexInBlock(ElementRefIterator<true, IsConst> E);
+
     using CFGBlockRef = 
         typename std::conditional<IsConst, const CFGBlock *, CFGBlock *>::type;
 
@@ -702,12 +711,8 @@ class CFGBlock {
     bool operator!=(ElementRefIterator Other) { return !(*this == Other); }
 
   private:
-    size_t getIndexInBlock() const {
-      if (IsReverse)
-        return Pos - Parent->rbegin();
-      return Pos - Parent->begin();
 
-    }
+  public:
     value_type operator*() { return *Pos; }
     pointer operator->() { return &*Pos; }
 
@@ -734,6 +739,11 @@ class CFGBlock {
       return *this;
     }
   };
+
+  template <bool IsConst>
+  static size_t getIndexInBlock(ElementRefIterator<true, IsConst> E) {
+      return E.Pos - E.Parent->rbegin();
+  }
 
   /// The set of statements in the basic block.
   ElementList Elements;
