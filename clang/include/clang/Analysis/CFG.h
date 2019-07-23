@@ -612,120 +612,110 @@ class CFGBlock {
     bool empty() const { return Impl.empty(); }
   };
 
-  template <typename ElementListIteratorT>
+  template <bool IsConst>
   class ElementRef {
-  public:
-    template <typename It> friend class ElementRef;
 
-    using IteratorTraits = typename std::iterator_traits<ElementListIteratorT>;
-    using difference_type = typename IteratorTraits::difference_type;
-    using value_type = typename IteratorTraits::value_type;
-    using pointer = typename IteratorTraits::pointer;
-    using reference = typename IteratorTraits::reference;
+    template <bool IsOtherConst> friend class ElementRef;
 
-    template<typename Iter>
-    struct strip_reverse_iterator { using type = Iter; };
+    using CFGBlockPtr = 
+        typename std::conditional<IsConst, const CFGBlock *, CFGBlock *>::type;
 
-    template<typename Iter>
-    struct strip_reverse_iterator<std::reverse_iterator<Iter>>
-      : strip_reverse_iterator<Iter> {};
-
-    using NonReversedElementListIteratorT =
-        typename ElementRef::strip_reverse_iterator<ElementListIteratorT>::type;
-
-    using UnderlayingValueType =
-        typename std::remove_pointer<NonReversedElementListIteratorT>::type;
-
-    template<typename Iter>
-    struct is_reverse_iterator : std::false_type {};
-
-    template<typename Iter>
-    struct is_reverse_iterator<std::reverse_iterator<Iter>>
-      : std::integral_constant<bool, !is_reverse_iterator<Iter>::value> {
-    };
-
-    using IsReversed =
-         typename ElementRef::is_reverse_iterator<ElementListIteratorT>;
-
-    template <typename Iter>
-    struct is_const_iterator
-      : std::integral_constant<bool,
-            std::is_const<UnderlayingValueType>::value> {
-
-      static_assert(
-          std::is_same<
-              typename std::remove_cv<UnderlayingValueType>::type,
-              CFGElement>::value,
-          "Can't determine whether the template parameter of "
-          "ElementRefIterator is a const iterator!");
-    };
-
-    using CFGBlockRef = 
+    using CFGElementPtr = 
         typename std::conditional<
-            is_const_iterator<ElementListIteratorT>::value,
-            const CFGBlock *, CFGBlock *>::type;
+            IsConst, const CFGElement *, CFGElement *>::type;
 
   protected:
-    CFGBlockRef Parent;
-    ElementListIteratorT Pos;
+    CFGBlockPtr Parent;
+    size_t Index;
 
   public:
-    ElementRef(CFGBlockRef Parent, ElementListIteratorT Pos)
-      : Parent(Parent), Pos(Pos) {}
+    ElementRef(CFGBlockPtr Parent, size_t Index)
+      : Parent(Parent), Index(Index) {}
 
-    ElementRef(ElementRef<std::reverse_iterator<
-        NonReversedElementListIteratorT>> Other)
-      : ElementRef(Other.Parent, Other.Pos.base()) {}
+    template <bool IsOtherConst>
+    ElementRef(ElementRef<IsOtherConst> Other)
+      : ElementRef(Other.Parent, Other.Index) {}
 
-    ElementRef(ElementRef<NonReversedElementListIteratorT> Other)
-      : ElementRef(Other.Parent, llvm::make_reverse_iterator(Other.Pos)) {}
-
-    difference_type getIndexInBlock() const {
-      if (std::is_same<ElementListIteratorT, decltype(Parent->begin())>::value)
-        return Pos - Parent->begin().base() + 1;
-      return std::reverse_iterator<NonReversedElementListIteratorT>(Pos) -
-             Parent->begin();
+    size_t getIndexInBlock() const {
+      return Index;
     }
 
-    CFGBlockRef getParent() { return Parent; }
+    CFGBlockPtr getParent() { return Parent; }
 
     bool operator<(ElementRef Other) {
+      assert(Parent == Other.Parent);
+      return Index < Other.Index;
+    }
+
+    bool operator==(ElementRef Other) {
+      return Parent == Other.Parent && Index == Other.Index;
+    }
+
+    bool operator!=(ElementRef Other) { return !(*this == Other); }
+    CFGElement operator*() { return (*Parent)[Index]; }
+    CFGElementPtr operator->() { return Parent->Elements[Index]; }
+  };
+
+  template <bool IsReverse, bool IsConst>
+  class ElementRefIterator {
+    using CFGBlockRef = 
+        typename std::conditional<IsConst, const CFGBlock *, CFGBlock *>::type;
+
+    using UnderlayingIteratorTy =
+        typename std::conditional<
+            IsConst,
+            typename std::conditional<
+                IsReverse,
+                ElementList::const_reverse_iterator,
+                ElementList::const_iterator>::type,
+            typename std::conditional<
+                IsReverse,
+                ElementList::reverse_iterator,
+                ElementList::iterator>::type>::type;
+
+    using IteratorTraits = typename std::iterator_traits<UnderlayingIteratorTy>;
+    using ElementRef = typename CFGBlock::ElementRef<IsConst>;
+
+  public:
+    using difference_type = typename IteratorTraits::difference_type;
+    using value_type = ElementRef;
+    using pointer = ElementRef *;
+    using iterator_category = typename IteratorTraits::iterator_category;
+
+  private:
+    CFGBlockRef Parent;
+    UnderlayingIteratorTy Pos;
+
+  public:
+    ElementRefIterator(CFGBlockRef Parent, UnderlayingIteratorTy Pos)
+      : Parent(Parent), Pos(Pos) {}
+
+    bool operator<(ElementRefIterator Other) {
       assert(Parent == Other.Parent);
       return Pos < Other.Pos;
     }
 
-    bool operator==(ElementRef Other) {
+    bool operator==(ElementRefIterator Other) {
       return Parent == Other.Parent && Pos == Other.Pos;
     }
 
-    bool operator!=(ElementRef Other) { return !(*this == Other); }
+    bool operator!=(ElementRefIterator Other) { return !(*this == Other); }
+
+  private:
+    size_t getIndexInBlock() const {
+      if (IsReverse)
+        return Pos - Parent->rbegin();
+      return Pos - Parent->begin();
+
+    }
     value_type operator*() { return *Pos; }
     pointer operator->() { return &*Pos; }
-  };
-
-  template <typename ElementListIteratorT>
-  class ElementRefIterator : public ElementRef<ElementListIteratorT> {
-    using ElementRef = typename CFGBlock::ElementRef<ElementListIteratorT>;
-    using CFGBlockRef = typename ElementRef::CFGBlockRef;
-    using difference_type = typename ElementRef::difference_type;
-    using value_type = ElementRef;
-    using pointer = value_type *;
-
-  public:
-    ElementRefIterator(CFGBlockRef Parent, ElementListIteratorT Pos)
-      : ElementRef(Parent, Pos) {}
-    //template <typename OtherElementListIteratorT>
-    //ElementRefIterator(OtherElementListIteratorT Other)
-    //  : ElementRefIterator(Other.Parent, Other.Pos) {}
-
-    value_type operator*() { return *this; }
-    pointer operator->() { return this; }
 
     difference_type operator-(ElementRefIterator Other) const {
       return this->Pos - Other;
     }
 
-    ElementRef operator++() {
+    ElementRefIterator operator++() {
       ++this->Pos;
       return *this;
     }
@@ -865,18 +855,18 @@ public:
   const_reverse_iterator     rbegin()      const { return Elements.rbegin();  }
   const_reverse_iterator     rend()        const { return Elements.rend();    }
 
-  using CFGElementRef = ElementRef<iterator>;
-  using ConstCFGElementRef = ElementRef<const_iterator>;
+  using CFGElementRef = ElementRef<false>;
+  using ConstCFGElementRef = ElementRef<true>;
 
-  using ref_iterator = ElementRefIterator<iterator>;
+  using ref_iterator = ElementRefIterator<false, false>;
   using ref_iterator_range = llvm::iterator_range<ref_iterator>;
-  using const_ref_iterator = ElementRefIterator<const_iterator>;
+  using const_ref_iterator = ElementRefIterator<false, true>;
   using const_ref_iterator_range = llvm::iterator_range<const_ref_iterator>;
 
-  using reverse_ref_iterator = ElementRefIterator<reverse_iterator>;
+  using reverse_ref_iterator = ElementRefIterator<true, false>;
   using reverse_ref_iterator_range = llvm::iterator_range<reverse_ref_iterator>;
 
-  using const_reverse_ref_iterator = ElementRefIterator<const_reverse_iterator>;
+  using const_reverse_ref_iterator = ElementRefIterator<true, true>;
   using const_reverse_ref_iterator_range =
       llvm::iterator_range<const_reverse_ref_iterator>;
 
