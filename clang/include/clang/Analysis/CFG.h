@@ -615,6 +615,8 @@ class CFGBlock {
   template <typename ElementListIteratorT>
   class ElementRef {
   public:
+    template <typename It> friend class ElementRef;
+
     using IteratorTraits = typename std::iterator_traits<ElementListIteratorT>;
     using difference_type = typename IteratorTraits::difference_type;
     using value_type = typename IteratorTraits::value_type;
@@ -628,9 +630,11 @@ class CFGBlock {
     struct strip_reverse_iterator<std::reverse_iterator<Iter>>
       : strip_reverse_iterator<Iter> {};
 
-    template<typename T>
-    struct remove_cv_ptr
-      : std::remove_cv<typename std::remove_pointer<T>::type> {};
+    using NonReversedElementListIteratorT =
+        typename ElementRef::strip_reverse_iterator<ElementListIteratorT>::type;
+
+    using UnderlayingValueType =
+        typename std::remove_pointer<NonReversedElementListIteratorT>::type;
 
     template<typename Iter>
     struct is_reverse_iterator : std::false_type {};
@@ -640,16 +644,17 @@ class CFGBlock {
       : std::integral_constant<bool, !is_reverse_iterator<Iter>::value> {
     };
 
+    using IsReversed =
+         typename ElementRef::is_reverse_iterator<ElementListIteratorT>;
+
     template <typename Iter>
     struct is_const_iterator
       : std::integral_constant<bool,
-            std::is_const<typename std::remove_pointer<
-                typename strip_reverse_iterator<Iter>::type>::type>::value> {
+            std::is_const<UnderlayingValueType>::value> {
 
       static_assert(
           std::is_same<
-              typename remove_cv_ptr<
-                  typename strip_reverse_iterator<Iter>::type>::type,
+              typename std::remove_cv<UnderlayingValueType>::type,
               CFGElement>::value,
           "Can't determine whether the template parameter of "
           "ElementRefIterator is a const iterator!");
@@ -660,7 +665,7 @@ class CFGBlock {
             is_const_iterator<ElementListIteratorT>::value,
             const CFGBlock *, CFGBlock *>::type;
 
-  private:
+  protected:
     CFGBlockRef Parent;
     ElementListIteratorT Pos;
 
@@ -668,11 +673,16 @@ class CFGBlock {
     ElementRef(CFGBlockRef Parent, ElementListIteratorT Pos)
       : Parent(Parent), Pos(Pos) {}
 
+    ElementRef(ElementRef<std::reverse_iterator<
+        NonReversedElementListIteratorT>> Other)
+      : ElementRef(Other.Parent, Other.Pos.base()) {}
+
+    ElementRef(ElementRef<NonReversedElementListIteratorT> Other)
+      : ElementRef(Other.Parent, llvm::make_reverse_iterator(Other.Pos)) {}
+
     difference_type getIndexInBlock() const {
-      if (is_reverse_iterator<ElementListIteratorT>::value)
-        return std::reverse_iterator<ElementListIteratorT>::base(Pos) -
-               Parent->begin();
-      return Pos - Parent->begin();
+      return std::reverse_iterator<NonReversedElementListIteratorT>(Pos) -
+             Parent->begin();
     }
 
     CFGBlockRef getParent() { return Parent; }
@@ -688,7 +698,7 @@ class CFGBlock {
 
     bool operator!=(ElementRef Other) { return !(*this == Other); }
     value_type operator*() { return *Pos; }
-    pointer operator->() { return Pos->operator->(); }
+    pointer operator->() { return &*Pos; }
   };
 
   template <typename ElementListIteratorT>
@@ -696,6 +706,8 @@ class CFGBlock {
     using ElementRef = typename CFGBlock::ElementRef<ElementListIteratorT>;
     using CFGBlockRef = typename ElementRef::CFGBlockRef;
     using difference_type = typename ElementRef::difference_type;
+    using value_type = ElementRef;
+    using pointer = value_type *;
 
   public:
     ElementRefIterator(CFGBlockRef Parent, ElementListIteratorT Pos)
@@ -704,6 +716,8 @@ class CFGBlock {
     //ElementRefIterator(OtherElementListIteratorT Other)
     //  : ElementRefIterator(Other.Parent, Other.Pos) {}
 
+    value_type operator*() { return *this; }
+    pointer operator->() { return this; }
 
     difference_type operator-(ElementRefIterator Other) const {
       return this->Pos - Other;
@@ -853,6 +867,7 @@ public:
   using ConstCFGElementRef = ElementRef<const_iterator>;
 
   using ref_iterator = ElementRefIterator<iterator>;
+  using ref_iterator_range = llvm::iterator_range<ref_iterator>;
   using const_ref_iterator = ElementRefIterator<const_iterator>;
   using const_ref_iterator_range = llvm::iterator_range<const_ref_iterator>;
 
@@ -862,6 +877,23 @@ public:
   using const_reverse_ref_iterator = ElementRefIterator<const_reverse_iterator>;
   using const_reverse_ref_iterator_range =
       llvm::iterator_range<const_reverse_ref_iterator>;
+
+  ref_iterator ref_begin() { return {this, begin()}; }
+  ref_iterator ref_end() { return {this, end()}; }
+  const_ref_iterator ref_begin() const { return {this, begin()}; }
+  const_ref_iterator ref_end() const { return {this, end()}; }
+
+  reverse_ref_iterator rref_begin() { return {this, rbegin()}; }
+  reverse_ref_iterator rref_end() { return {this, rend()}; }
+  const_reverse_ref_iterator rref_begin() const { return {this, rbegin()}; }
+  const_reverse_ref_iterator rref_end() const { return {this, rend()}; }
+
+  ref_iterator_range refs() { return {ref_begin(), ref_end()}; }
+  const_ref_iterator_range refs() const { return {ref_begin(), ref_end()}; }
+  reverse_ref_iterator_range rrefs() { return {rref_begin(), rref_end()}; }
+  const_reverse_ref_iterator_range rrefs() const {
+    return {rref_begin(), rref_end()};
+  }
 
   unsigned                   size()        const { return Elements.size();    }
   bool                       empty()       const { return Elements.empty();   }
