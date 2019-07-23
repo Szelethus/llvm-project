@@ -75,7 +75,7 @@ TEST(CFG, ElementRefIterator) {
                           i = 6;
                           j = 7;
                         })";
-  
+
   BuildResult B = BuildCFG(Code);
   EXPECT_EQ(BuildResult::BuiltCFG, B.getStatus());
   CFG *Cfg = B.getCFG();

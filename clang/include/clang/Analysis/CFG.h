@@ -610,15 +610,18 @@ class CFGBlock {
     bool empty() const { return Impl.empty(); }
   };
 
+  /// A convenience class for comparing CFGElements, since methods of CFGBlock
+  /// like operator[] return CFGElements by value. This is practically a wrapper
+  /// around a (CFGBlock, Index) pair.
   template <bool IsConst>
   class ElementRef {
 
     template <bool IsOtherConst> friend class ElementRef;
 
-    using CFGBlockPtr = 
+    using CFGBlockPtr =
         typename std::conditional<IsConst, const CFGBlock *, CFGBlock *>::type;
 
-    using CFGElementPtr = 
+    using CFGElementPtr =
         typename std::conditional<
             IsConst, const CFGElement *, CFGElement *>::type;
 
@@ -661,7 +664,7 @@ public:
     template <bool IsOtherReverse, bool IsOtherConst>
     friend class ElementRefIterator;
 
-    using CFGBlockRef = 
+    using CFGBlockRef =
         typename std::conditional<IsConst, const CFGBlock *, CFGBlock *>::type;
 
     using UnderlayingIteratorTy =
@@ -740,7 +743,7 @@ public:
       this->Pos -= count;
       return *this;
     }
-  }; 
+  };
 
 public:
   /// The set of statements in the basic block.
@@ -1065,7 +1068,7 @@ public:
   void printTerminator(raw_ostream &OS, const LangOptions &LO) const;
   void printTerminatorJson(raw_ostream &Out, const LangOptions &LO,
                            bool AddQuotes) const;
-  
+
   void printAsOperand(raw_ostream &OS, bool /*PrintType*/) {
     OS << "BB#" << getBlockID();
   }
