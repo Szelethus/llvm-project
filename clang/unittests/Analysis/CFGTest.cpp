@@ -109,17 +109,14 @@ TEST(CFG, ElementRefIterator) {
   EXPECT_TRUE(*MainBlock->ref_begin() == *MainBlock->ref_begin());
   EXPECT_FALSE(*MainBlock->ref_begin() != *MainBlock->ref_begin());
 
-  Index = 0;
-  for (CFGBlock::ref_iterator It = MainBlock->ref_begin();
-       It != MainBlock->ref_end(); ++It) {
-    EXPECT_EQ(It->getParent(), MainBlock);
-    EXPECT_EQ(It->getIndexInBlock(), Index);
-    EXPECT_TRUE((*It)->getAs<CFGStmt>());
-    ++Index;
-  }
   EXPECT_TRUE(MainBlock->ref_begin() < MainBlock->ref_begin() + 1);
   EXPECT_TRUE(MainBlock->ref_begin() == MainBlock->ref_begin());
   EXPECT_FALSE(MainBlock->ref_begin() != MainBlock->ref_begin());
+  EXPECT_EQ(MainBlock->ref_end() - MainBlock->ref_begin(), 4);
+  EXPECT_EQ(MainBlock->ref_end() - 4, MainBlock->ref_begin());
+  EXPECT_EQ(MainBlock->ref_begin() + 4, MainBlock->ref_end());
+  EXPECT_EQ(MainBlock->ref_begin()++, MainBlock->ref_begin());
+  EXPECT_EQ(++(MainBlock->ref_begin()), MainBlock->ref_begin() + 1);
 
   // Non-reverse, non-const version
   const CFGBlock *CMainBlock = MainBlock;
@@ -135,18 +132,14 @@ TEST(CFG, ElementRefIterator) {
   EXPECT_TRUE(*CMainBlock->ref_begin() == *CMainBlock->ref_begin());
   EXPECT_FALSE(*CMainBlock->ref_begin() != *CMainBlock->ref_begin());
 
-  Index = 0;
-  for (CFGBlock::const_ref_iterator It = CMainBlock->ref_begin();
-       It != CMainBlock->ref_end(); ++It) {
-    llvm::errs() << "Fine \n";
-    EXPECT_EQ(It->getParent(), CMainBlock);
-    EXPECT_EQ(It->getIndexInBlock(), Index);
-    EXPECT_TRUE((*It)->getAs<CFGStmt>());
-    ++Index;
-  }
   EXPECT_TRUE(CMainBlock->ref_begin() < CMainBlock->ref_begin() + 1);
   EXPECT_TRUE(CMainBlock->ref_begin() == CMainBlock->ref_begin());
   EXPECT_FALSE(CMainBlock->ref_begin() != CMainBlock->ref_begin());
+  EXPECT_EQ(CMainBlock->ref_end() - CMainBlock->ref_begin(), 4);
+  EXPECT_EQ(CMainBlock->ref_end() - 4, CMainBlock->ref_begin());
+  EXPECT_EQ(CMainBlock->ref_begin() + 4, CMainBlock->ref_end());
+  EXPECT_EQ(CMainBlock->ref_begin()++, CMainBlock->ref_begin());
+  EXPECT_EQ(++(CMainBlock->ref_begin()), CMainBlock->ref_begin() + 1);
 
   // Reverse, non-const version
   Index = 4;
@@ -158,21 +151,18 @@ TEST(CFG, ElementRefIterator) {
     EXPECT_TRUE((*ElementRef).getAs<CFGStmt>());
     --Index;
   }
-  EXPECT_TRUE(*MainBlock->ref_begin() < *(MainBlock->ref_begin() + 1));
-  EXPECT_TRUE(*MainBlock->ref_begin() == *MainBlock->ref_begin());
-  EXPECT_FALSE(*MainBlock->ref_begin() != *MainBlock->ref_begin());
+  EXPECT_TRUE(*MainBlock->rref_begin() < *(MainBlock->rref_begin() + 1));
+  EXPECT_TRUE(*MainBlock->rref_begin() == *MainBlock->rref_begin());
+  EXPECT_FALSE(*MainBlock->rref_begin() != *MainBlock->rref_begin());
 
-  Index = 4;
-  for (CFGBlock::reverse_ref_iterator It = MainBlock->rref_begin();
-       It != MainBlock->rref_end(); ++It) {
-    EXPECT_EQ(It->getParent(), MainBlock);
-    EXPECT_EQ(It->getIndexInBlock(), Index);
-    EXPECT_TRUE((*It)->getAs<CFGStmt>());
-    --Index;
-  }
-  EXPECT_TRUE(MainBlock->ref_begin() < MainBlock->ref_begin() + 1);
-  EXPECT_TRUE(MainBlock->ref_begin() == MainBlock->ref_begin());
-  EXPECT_FALSE(MainBlock->ref_begin() != MainBlock->ref_begin());
+  EXPECT_TRUE(MainBlock->rref_begin() < MainBlock->rref_begin() + 1);
+  EXPECT_TRUE(MainBlock->rref_begin() == MainBlock->rref_begin());
+  EXPECT_FALSE(MainBlock->rref_begin() != MainBlock->rref_begin());
+  EXPECT_EQ(MainBlock->rref_end() - MainBlock->rref_begin(), 4);
+  EXPECT_EQ(MainBlock->rref_end() - 4, MainBlock->rref_begin());
+  EXPECT_EQ(MainBlock->rref_begin() + 4, MainBlock->rref_end());
+  EXPECT_EQ(MainBlock->rref_begin()++, MainBlock->rref_begin());
+  EXPECT_EQ(++(MainBlock->ref_begin()), MainBlock->rref_begin() + 1);
 
   // Reverse, const version
   Index = 4;
@@ -183,21 +173,18 @@ TEST(CFG, ElementRefIterator) {
     EXPECT_TRUE((*ElementRef).getAs<CFGStmt>());
     --Index;
   }
-  EXPECT_TRUE(*CMainBlock->ref_begin() < *(CMainBlock->ref_begin() + 1));
-  EXPECT_TRUE(*CMainBlock->ref_begin() == *CMainBlock->ref_begin());
-  EXPECT_FALSE(*CMainBlock->ref_begin() != *CMainBlock->ref_begin());
+  EXPECT_TRUE(*CMainBlock->rref_begin() < *(CMainBlock->rref_begin() + 1));
+  EXPECT_TRUE(*CMainBlock->rref_begin() == *CMainBlock->rref_begin());
+  EXPECT_FALSE(*CMainBlock->rref_begin() != *CMainBlock->rref_begin());
 
-  Index = 4;
-  for (CFGBlock::const_reverse_ref_iterator It = CMainBlock->rref_begin();
-       It != CMainBlock->rref_end(); ++It) {
-    EXPECT_EQ(It->getParent(), CMainBlock);
-    EXPECT_EQ(It->getIndexInBlock(), Index);
-    EXPECT_TRUE((*It)->getAs<CFGStmt>());
-    --Index;
-  }
-  EXPECT_TRUE(CMainBlock->ref_begin() < CMainBlock->ref_begin() + 1);
-  EXPECT_TRUE(CMainBlock->ref_begin() == CMainBlock->ref_begin());
-  EXPECT_FALSE(CMainBlock->ref_begin() != CMainBlock->ref_begin());
+  EXPECT_TRUE(CMainBlock->rref_begin() < CMainBlock->rref_begin() + 1);
+  EXPECT_TRUE(CMainBlock->rref_begin() == CMainBlock->rref_begin());
+  EXPECT_FALSE(CMainBlock->rref_begin() != CMainBlock->rref_begin());
+  EXPECT_EQ(CMainBlock->rref_end() - CMainBlock->rref_begin(), 4);
+  EXPECT_EQ(CMainBlock->rref_end() - 4, CMainBlock->rref_begin());
+  EXPECT_EQ(CMainBlock->rref_begin() + 4, CMainBlock->rref_end());
+  EXPECT_EQ(CMainBlock->rref_begin()++, CMainBlock->rref_begin());
+  EXPECT_EQ(++(CMainBlock->rref_begin()), CMainBlock->rref_begin() + 1);
 }
 
 } // namespace

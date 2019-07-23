@@ -541,8 +541,6 @@ public:
   }
 };
 
-class CFGElementRef;
-
 /// Represents a single basic block in a source-level CFG.
 ///  It consists of:
 ///
@@ -642,30 +640,26 @@ class CFGBlock {
 
     CFGBlockPtr getParent() { return Parent; }
 
-    bool operator<(ElementRef Other) {
+    bool operator<(ElementRef Other) const {
       assert(Parent == Other.Parent);
       return Index < Other.Index;
     }
 
-    bool operator==(ElementRef Other) {
+    bool operator==(ElementRef Other) const {
       return Parent == Other.Parent && Index == Other.Index;
     }
 
-    bool operator!=(ElementRef Other) { return !(*this == Other); }
+    bool operator!=(ElementRef Other) const { return !(*this == Other); }
     CFGElement operator*() { return (*Parent)[Index]; }
-    CFGElementPtr operator->() { return Parent->Elements[Index]; }
+    CFGElementPtr operator->() { return &*(Parent->begin() + Index); }
   };
 
-  template <bool IsReverse, bool IsConst>
-  class ElementRefIterator;
-
-  template <bool IsConst>
-  static size_t getIndexInBlock(ElementRefIterator<true, IsConst> E);
-
+public:
   template <bool IsReverse, bool IsConst>
   class ElementRefIterator {
-    template <bool IsParameterReverse>
-    friend size_t getIndexInBlock(ElementRefIterator<true, IsConst> E);
+
+    template <bool IsOtherReverse, bool IsOtherConst>
+    friend class ElementRefIterator;
 
     using CFGBlockRef = 
         typename std::conditional<IsConst, const CFGBlock *, CFGBlock *>::type;
@@ -699,25 +693,34 @@ class CFGBlock {
     ElementRefIterator(CFGBlockRef Parent, UnderlayingIteratorTy Pos)
       : Parent(Parent), Pos(Pos) {}
 
-    bool operator<(ElementRefIterator Other) {
+    template <bool IsOtherConst>
+    ElementRefIterator(ElementRefIterator<false, IsOtherConst> E)
+      : ElementRefIterator(E.Parent, E.Pos.base()) {}
+
+    template <bool IsOtherConst>
+    ElementRefIterator(ElementRefIterator<true, IsOtherConst> E)
+      : ElementRefIterator(E.Parent, llvm::make_reverse_iterator(E.Pos)) {}
+
+    bool operator<(ElementRefIterator Other) const {
       assert(Parent == Other.Parent);
       return Pos < Other.Pos;
     }
 
-    bool operator==(ElementRefIterator Other) {
+    bool operator==(ElementRefIterator Other) const {
       return Parent == Other.Parent && Pos == Other.Pos;
     }
 
-    bool operator!=(ElementRefIterator Other) { return !(*this == Other); }
+    bool operator!=(ElementRefIterator Other) const {
+      return !(*this == Other);
+    }
 
-  private:
+    value_type operator*();
 
-  public:
-    value_type operator*() { return *Pos; }
-    pointer operator->() { return &*Pos; }
+    UnderlayingIteratorTy getUnderlayingIterator() { return Pos; }
+    CFGBlockRef getParent() { return Parent; }
 
     difference_type operator-(ElementRefIterator Other) const {
-      return this->Pos - Other;
+      return Pos - Other.Pos;
     }
 
     ElementRefIterator operator++() {
@@ -726,25 +729,20 @@ class CFGBlock {
     }
     ElementRefIterator operator++(int) {
       ElementRefIterator Ret = *this;
-      return operator++();
+      ++*this;
+      return Ret;
     }
     ElementRefIterator operator+(size_t count) {
-      assert(this->getIndexInBlock() + count < this->Parent->size());
       this->Pos += count;
       return *this;
     }
     ElementRefIterator operator-(size_t count) {
-      assert(this->getIndexInBlock() >= count);
       this->Pos -= count;
       return *this;
     }
-  };
+  }; 
 
-  template <bool IsConst>
-  static size_t getIndexInBlock(ElementRefIterator<true, IsConst> E) {
-      return E.Pos - E.Parent->rbegin();
-  }
-
+public:
   /// The set of statements in the basic block.
   ElementList Elements;
 
@@ -1184,6 +1182,22 @@ public:
     return ++I;
   }
 };
+
+template <bool IsConst>
+static size_t getIndexInBlock(CFGBlock::ElementRefIterator<true, IsConst> E) {
+    return E.getUnderlayingIterator() - E.getParent()->rbegin();
+}
+
+template <bool IsConst>
+static size_t getIndexInBlock(CFGBlock::ElementRefIterator<false, IsConst> E) {
+    return E.getUnderlayingIterator() - E.getParent()->begin();
+}
+
+template <bool IsReverse, bool IsConst>
+typename CFGBlock::ElementRefIterator<IsReverse, IsConst>::value_type
+CFGBlock::ElementRefIterator<IsReverse, IsConst>::operator*() {
+  return {Parent, getIndexInBlock(*this)};
+}
 
 /// CFGCallback defines methods that should be called when a logical
 /// operator error is found when building the CFG.
