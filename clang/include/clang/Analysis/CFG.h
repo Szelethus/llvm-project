@@ -642,6 +642,7 @@ class CFGBlock {
     }
 
     CFGBlockPtr getParent() { return Parent; }
+    CFGBlockPtr getParent() const { return Parent; }
 
     bool operator<(ElementRef Other) const {
       assert(Parent == Other.Parent);
