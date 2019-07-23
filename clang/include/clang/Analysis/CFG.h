@@ -681,6 +681,8 @@ class CFGBlock {
       : ElementRef(Other.Parent, llvm::make_reverse_iterator(Other.Pos)) {}
 
     difference_type getIndexInBlock() const {
+      if (std::is_same<ElementListIteratorT, decltype(Parent->begin())>::value)
+        return Pos - Parent->begin().base() + 1;
       return std::reverse_iterator<NonReversedElementListIteratorT>(Pos) -
              Parent->begin();
     }
