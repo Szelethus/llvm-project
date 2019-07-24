@@ -109,6 +109,7 @@ TEST(CFG, ElementRefIterator) {
     EXPECT_EQ(ElementRef.getIndexInBlock(), Index);
     EXPECT_TRUE(ElementRef->getAs<CFGStmt>());
     EXPECT_TRUE((*ElementRef).getAs<CFGStmt>());
+    EXPECT_EQ(ElementRef.getParent(), MainBlock);
     ++Index;
   }
   EXPECT_TRUE(*MainBlock->ref_begin() < *(MainBlock->ref_begin() + 1));
@@ -132,6 +133,7 @@ TEST(CFG, ElementRefIterator) {
     EXPECT_EQ(ElementRef.getIndexInBlock(), Index);
     EXPECT_TRUE(ElementRef->getAs<CFGStmt>());
     EXPECT_TRUE((*ElementRef).getAs<CFGStmt>());
+    EXPECT_EQ(ElementRef.getParent(), MainBlock);
     ++Index;
   }
   EXPECT_TRUE(*CMainBlock->ref_begin() < *(CMainBlock->ref_begin() + 1));
@@ -155,6 +157,7 @@ TEST(CFG, ElementRefIterator) {
     EXPECT_EQ(ElementRef.getIndexInBlock(), Index);
     EXPECT_TRUE(ElementRef->getAs<CFGStmt>());
     EXPECT_TRUE((*ElementRef).getAs<CFGStmt>());
+    EXPECT_EQ(ElementRef.getParent(), MainBlock);
     --Index;
   }
   EXPECT_FALSE(*MainBlock->rref_begin() < *(MainBlock->rref_begin() + 1));
@@ -177,6 +180,7 @@ TEST(CFG, ElementRefIterator) {
     EXPECT_EQ(ElementRef.getIndexInBlock(), Index);
     EXPECT_TRUE(ElementRef->getAs<CFGStmt>());
     EXPECT_TRUE((*ElementRef).getAs<CFGStmt>());
+    EXPECT_EQ(ElementRef.getParent(), MainBlock);
     --Index;
   }
   EXPECT_FALSE(*CMainBlock->rref_begin() < *(CMainBlock->rref_begin() + 1));

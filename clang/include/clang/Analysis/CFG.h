@@ -659,7 +659,6 @@ class CFGBlock {
     CFGElementPtr operator->() { return &*(Parent->begin() + Index); }
   };
 
-public:
   template <bool IsReverse, bool IsConst>
   class ElementRefIterator {
 
