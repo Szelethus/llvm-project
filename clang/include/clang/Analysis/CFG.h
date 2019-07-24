@@ -645,8 +645,9 @@ class CFGBlock {
     CFGBlockPtr getParent() const { return Parent; }
 
     bool operator<(ElementRef Other) const {
-      assert(Parent == Other.Parent);
-      return Index < Other.Index;
+      if (Parent == Other.Parent)
+        return Index < Other.Index;
+      return Parent < Other.Parent;
     }
 
     bool operator==(ElementRef Other) const {
