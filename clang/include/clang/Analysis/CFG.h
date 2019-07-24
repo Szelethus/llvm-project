@@ -719,10 +719,21 @@ public:
       return !(*this == Other);
     }
 
-    value_type operator*();
+  private:
+    template <bool IsOtherConst>
+    static size_t getIndexInBlock(
+        CFGBlock::ElementRefIterator<true, IsOtherConst> E) {
+        return E.Parent->size() - (E.Pos - E.Parent->rbegin()) - 1;
+    }
 
-    UnderlayingIteratorTy getUnderlayingIterator() { return Pos; }
-    const CFGBlock *getParent() const { return Parent; }
+    template <bool IsOtherConst>
+    static size_t getIndexInBlock(
+        CFGBlock::ElementRefIterator<false, IsOtherConst> E) {
+        return E.Pos - E.Parent->begin();
+    }
+
+  public:
+    value_type operator*() { return {Parent, getIndexInBlock(*this)}; }
 
     difference_type operator-(ElementRefIterator Other) const {
       return Pos - Other.Pos;
@@ -1187,23 +1198,6 @@ public:
     return ++I;
   }
 };
-
-template <bool IsConst>
-static size_t getIndexInBlock(CFGBlock::ElementRefIterator<true, IsConst> E) {
-    return E.getParent()->size() -
-           (E.getUnderlayingIterator() - E.getParent()->rbegin()) - 1;
-}
-
-template <bool IsConst>
-static size_t getIndexInBlock(CFGBlock::ElementRefIterator<false, IsConst> E) {
-    return E.getUnderlayingIterator() - E.getParent()->begin();
-}
-
-template <bool IsReverse, bool IsConst>
-typename CFGBlock::ElementRefIterator<IsReverse, IsConst>::value_type
-CFGBlock::ElementRefIterator<IsReverse, IsConst>::operator*() {
-  return {Parent, getIndexInBlock(*this)};
-}
 
 /// CFGCallback defines methods that should be called when a logical
 /// operator error is found when building the CFG.
