@@ -156,6 +156,28 @@ void test() {
 
 } // end of namespace variable_declaration_in_condition
 
+namespace note_from_different_but_not_nested_stackframe {
+
+void nullptrDeref(int *ptr, bool True) {
+  if (True) // expected-note{{'True' is true}}
+            // expected-note@-1{{Taking true branch}}
+            // debug-note@-2{{Tracking condition 'True}}
+    *ptr = 5;
+    // expected-note@-1{{Dereference of null pointer (loaded from variable 'ptr')}}
+    // expected-warning@-2{{Dereference of null pointer (loaded from variable 'ptr')}}
+}
+
+void f() {
+  int *ptr = nullptr;
+  // expected-note@-1{{'ptr' initialized to a null pointer value}}
+  bool True = true;
+  nullptrDeref(ptr, True);
+  // expected-note@-1{{Passing null pointer value via 1st parameter 'ptr'}}
+  // expected-note@-2{{Calling 'nullptrDeref'}}
+}
+
+} // end of namespace note_from_different_but_not_nested_stackframe
+
 namespace important_returning_pointer_loaded_from {
 bool coin();
 
