@@ -865,13 +865,13 @@ class ReturnVisitor : public BugReporterVisitor {
   bool EnableNullFPSuppression;
   bool ShouldInvalidate = true;
   AnalyzerOptions& Options;
+  bugreporter::TrackingKind TKind;
 
 public:
-  ReturnVisitor(const StackFrameContext *Frame,
-                bool Suppressed,
-                AnalyzerOptions &Options)
+  ReturnVisitor(const StackFrameContext *Frame, bool Suppressed,
+                AnalyzerOptions &Options, bugreporter::TrackingKind TKind)
       : CalleeSFC(Frame), EnableNullFPSuppression(Suppressed),
-        Options(Options) {}
+        Options(Options), TKind(TKind) {}
 
   static void *getTag() {
     static int Tag = 0;
@@ -893,7 +893,8 @@ public:
   /// bug report, so it can print a note later.
   static void addVisitorIfNecessary(const ExplodedNode *Node, const Stmt *S,
                                     BugReport &BR,
-                                    bool InEnableNullFPSuppression) {
+                                    bool InEnableNullFPSuppression,
+                                    bugreporter::TrackingKind TKind) {
     if (!CallEvent::isCallStmt(S))
       return;
 
@@ -966,7 +967,7 @@ public:
 
     BR.addVisitor(llvm::make_unique<ReturnVisitor>(CalleeContext,
                                                    EnableNullFPSuppression,
-                                                   Options));
+                                                   Options, TKind));
   }
 
   std::shared_ptr<PathDiagnosticPiece>
@@ -1014,8 +1015,8 @@ public:
 
     RetE = RetE->IgnoreParenCasts();
 
-    // If we're returning 0, we should track where that 0 came from.
-    bugreporter::trackExpressionValue(N, RetE, BR, EnableNullFPSuppression);
+    // Let's track the return value.
+    ::trackExpressionValue(N, RetE, BR, EnableNullFPSuppression, TKind);
 
     // Build an appropriate message based on the return value.
     SmallString<64> Msg;
@@ -1128,7 +1129,7 @@ public:
       if (!State->isNull(*ArgV).isConstrainedTrue())
         continue;
 
-      if (bugreporter::trackExpressionValue(N, ArgE, BR, EnableNullFPSuppression))
+      if (::trackExpressionValue(N, ArgE, BR, EnableNullFPSuppression, TKind))
         ShouldInvalidate = false;
 
       // If we /can't/ track the null pointer, we should err on the side of
@@ -1987,7 +1988,7 @@ static bool trackExpressionValue(
   SVal V = LVState->getSValAsScalarOrLoc(Inner, LVNode->getLocationContext());
 
   ReturnVisitor::addVisitorIfNecessary(
-    LVNode, Inner, report, EnableNullFPSuppression);
+    LVNode, Inner, report, EnableNullFPSuppression, TKind);
 
   // Is it a symbolic value?
   if (auto L = V.getAs<loc::MemRegionVal>()) {
