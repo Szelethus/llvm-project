@@ -85,6 +85,18 @@ public:
 
 namespace bugreporter {
 
+/// Specifies the type of tracking for an expression.
+enum class TrackingKind {
+  /// Default tracking kind -- specifies that as much information should be
+  /// gathered about the tracked expression value as possible.
+  Thorough,
+  /// Specifies that a more moderate tracking should be used for the expression
+  /// value. This will essentially make sure that functions relevant to the it
+  /// aren't pruned, but otherwise relies on the user reading the code or
+  /// following the arrows.
+  Condition
+};
+
 /// Attempts to add visitors to track expression value back to its point of
 /// origin.
 ///
@@ -98,16 +110,8 @@ namespace bugreporter {
 ///         statement. Note that returning \c true does not actually imply
 ///         that any visitors were added.
 bool trackExpressionValue(const ExplodedNode *N, const Expr *E, BugReport &R,
+                          TrackingKind TKind = TrackingKind::Thorough,
                           bool EnableNullFPSuppression = true);
-
-/// Specifies the type of tracking for an expression. For instance, we'd like to
-/// gather far more information about a variable found to be a cause of a null
-/// pointer dereference, while tracking a condition to that extent would pollute
-/// the bug report without much of an added value.
-enum class TrackingKind {
-  ThoroughTracking,
-  ConditionTracking
-};
 
 const Expr *getDerefExpr(const Stmt *S);
 

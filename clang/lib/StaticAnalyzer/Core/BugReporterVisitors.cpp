@@ -71,20 +71,6 @@ using namespace ento;
 // Utility functions.
 //===----------------------------------------------------------------------===//
 
-/// Implementation function for trackExpressionValue().
-static bool trackExpressionValue(
-    const ExplodedNode *InputNode,
-    const Expr *E, BugReport &report,
-    bool EnableNullFPSuppression,
-    bugreporter::TrackingKind TKind);
-
-bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
-                                       const Expr *E, BugReport &report,
-                                       bool EnableNullFPSuppression) {
-  return ::trackExpressionValue(InputNode, E, report, EnableNullFPSuppression,
-                                TrackingKind::ThoroughTracking);
-}
-
 static const Expr *peelOffPointerArithmetic(const BinaryOperator *B) {
   if (B->isAdditiveOp() && B->getType()->isPointerType()) {
     if (B->getLHS()->getType()->isPointerType()) {
@@ -1016,7 +1002,8 @@ public:
     RetE = RetE->IgnoreParenCasts();
 
     // Let's track the return value.
-    ::trackExpressionValue(N, RetE, BR, EnableNullFPSuppression, TKind);
+    bugreporter::trackExpressionValue(
+        N, RetE, BR, TKind, EnableNullFPSuppression);
 
     // Build an appropriate message based on the return value.
     SmallString<64> Msg;
@@ -1129,7 +1116,7 @@ public:
       if (!State->isNull(*ArgV).isConstrainedTrue())
         continue;
 
-      if (::trackExpressionValue(N, ArgE, BR, EnableNullFPSuppression, TKind))
+      if (trackExpressionValue(N, ArgE, BR, TKind, EnableNullFPSuppression))
         ShouldInvalidate = false;
 
       // If we /can't/ track the null pointer, we should err on the side of
@@ -1447,7 +1434,8 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
     if (!IsParam)
       InitE = InitE->IgnoreParenCasts();
 
-    trackExpressionValue(StoreSite, InitE, BR, EnableNullFPSuppression, TKind);
+    bugreporter::trackExpressionValue(
+        StoreSite, InitE, BR, TKind, EnableNullFPSuppression);
   }
 
   // Okay, we've found the binding. Emit an appropriate message.
@@ -1776,9 +1764,9 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
       // isn't sufficient, because a new visitor is created for each tracked
       // expression, hence the BugReport level set.
       if (BR.addTrackedCondition(N)) {
-        trackExpressionValue(
-            N, Condition, BR, /*EnableNullFPSuppression=*/false,
-            bugreporter::TrackingKind::ConditionTracking);
+        bugreporter::trackExpressionValue(
+            N, Condition, BR, bugreporter::TrackingKind::Condition,
+            /*EnableNullFPSuppression=*/false);
         return constructDebugPieceForTrackedCondition(Condition, N, BRC);
       }
     }
@@ -1890,11 +1878,10 @@ static const ExplodedNode* findNodeForExpression(const ExplodedNode *N,
   return N;
 }
 
-static bool trackExpressionValue(
-    const ExplodedNode *InputNode,
-    const Expr *E, BugReport &report,
-    bool EnableNullFPSuppression,
-    bugreporter::TrackingKind TKind /* = TrackingKind::ThoroughTracking*/) {
+bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
+                                       const Expr *E, BugReport &report,
+                                       bugreporter::TrackingKind TKind,
+                                       bool EnableNullFPSuppression) {
 
   if (!E || !InputNode)
     return false;
@@ -1920,12 +1907,12 @@ static bool trackExpressionValue(
   // message send expr. If it is nil, start tracking it.
   if (const Expr *Receiver = NilReceiverBRVisitor::getNilReceiver(Inner, LVNode))
     trackExpressionValue(
-        LVNode, Receiver, report, EnableNullFPSuppression, TKind);
+        LVNode, Receiver, report, TKind, EnableNullFPSuppression);
 
   // Track the index if this is an array subscript.
   if (const auto *Arr = dyn_cast<ArraySubscriptExpr>(Inner))
     trackExpressionValue(
-        LVNode, Arr->getIdx(), report, /*EnableNullFPSuppression*/false, TKind);
+        LVNode, Arr->getIdx(), report, TKind, /*EnableNullFPSuppression*/false);
 
   // See if the expression we're interested refers to a variable.
   // If so, we can track both its contents and constraints on its value.
@@ -2076,8 +2063,9 @@ NilReceiverBRVisitor::VisitNode(const ExplodedNode *N,
   // The receiver was nil, and hence the method was skipped.
   // Register a BugReporterVisitor to issue a message telling us how
   // the receiver was null.
-  bugreporter::trackExpressionValue(N, Receiver, BR,
-                               /*EnableNullFPSuppression*/ false);
+  bugreporter::trackExpressionValue(
+      N, Receiver, BR, bugreporter::TrackingKind::Thorough,
+      /*EnableNullFPSuppression*/ false);
   // Issue a message saying that the method was skipped.
   PathDiagnosticLocation L(Receiver, BRC.getSourceManager(),
                                      N->getLocationContext());

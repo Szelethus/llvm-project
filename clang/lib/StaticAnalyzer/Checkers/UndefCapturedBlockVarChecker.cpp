@@ -88,7 +88,7 @@ UndefCapturedBlockVarChecker::checkPostStmt(const BlockExpr *BE,
           R->addRange(Ex->getSourceRange());
         R->addVisitor(llvm::make_unique<FindLastStoreBRVisitor>(
             *V, VR, /*EnableNullFPSuppression*/ false,
-            bugreporter::TrackingKind::ThoroughTracking));
+            bugreporter::TrackingKind::Thorough));
         R->disablePathPruning();
         // need location of block
         C.emitReport(std::move(R));
