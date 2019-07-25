@@ -1440,7 +1440,7 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
         StoreSite, InitE, BR, TKind, EnableNullFPSuppression);
   }
 
-  if (TKind == TrackingKind::ConditionTracking &&
+  if (TKind == TrackingKind::Condition &&
       !OriginSFC->isParentOf(StoreSite->getStackFrame()))
     return nullptr;
 
