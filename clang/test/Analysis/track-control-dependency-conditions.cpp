@@ -215,8 +215,8 @@ bool coin();
 int *getIntPtr();
 
 int *conjurePointer() {
-  int *i = getIntPtr(); // tracking-note{{'i' initialized here}}
-  return i; // tracking-note{{Returning pointer (loaded from 'i')}}
+  int *i = getIntPtr();
+  return i;
 }
 
 void f(int *ptr) {
@@ -224,11 +224,9 @@ void f(int *ptr) {
            // expected-note@-1{{Taking false branch}}
     ;
   if (!conjurePointer())
-    // tracking-note@-1{{Calling 'conjurePointer'}}
-    // tracking-note@-2{{Returning from 'conjurePointer'}}
-    // debug-note@-3{{Tracking condition '!conjurePointer()'}}
-    // expected-note@-4{{Assuming the condition is true}}
-    // expected-note@-5{{Taking true branch}}
+    // debug-note@-1{{Tracking condition '!conjurePointer()'}}
+    // expected-note@-2{{Assuming the condition is true}}
+    // expected-note@-3{{Taking true branch}}
     *ptr = 5; // expected-warning{{Dereference of null pointer}}
               // expected-note@-1{{Dereference of null pointer}}
 }
