@@ -1732,7 +1732,7 @@ constructDebugPieceForTrackedCondition(const Expr *Cond,
           (Twine() + "Tracking condition '" + ConditionText + "'").str());
 }
 
-static bool isAssertlikeBlock(const CFGBlock *B) {
+static bool isAssertlikeBlock(const CFGBlock *B, ASTContext &Context) {
   if (B->succ_size() != 2)
     return false;
 
@@ -1742,7 +1742,32 @@ static bool isAssertlikeBlock(const CFGBlock *B) {
   if (!Then || !Else)
     return false;
 
-  return Then->isInevitablySinking() || Else->isInevitablySinking();
+  if (Then->isInevitablySinking() || Else->isInevitablySinking())
+    return true;
+
+  // For the following condition the following CFG would be built:
+  //
+  //
+  //                       [B1] -> [B2] -> [B3] -> [sink]
+  // assert(A && B || C);    \       \       \
+  //                          -------------------> [go on with the execution]
+  //
+  // It so happens that CFGBlock::getTerminatorCondition returns 'A' for block
+  // B1, 'A && B' for B2, and 'A && B || C' for B3. Let's check whether we
+  // reached the end of the condition!
+  if (const Stmt *ElseCond = Else->getTerminatorCondition()) {
+    const Stmt *OuterCond = B->getTerminatorCondition();
+    assert(OuterCond);
+
+    using namespace ast_matchers;
+    auto IsSubStmtOfCondition =
+        stmt(forEachDescendant(equalsNode(OuterCond))).bind("s");
+
+    if (selectFirst<Stmt>("s", match(IsSubStmtOfCondition, *ElseCond, Context)))
+      return isAssertlikeBlock(Else, Context);
+  }
+
+  return false;
 }
 
 std::shared_ptr<PathDiagnosticPiece>
@@ -1765,7 +1790,7 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
   if (!OriginB || !NB)
     return nullptr;
 
-  if (isAssertlikeBlock(NB))
+  if (isAssertlikeBlock(NB, BRC.getASTContext()))
     return nullptr;
 
   if (ControlDeps.isControlDependent(OriginB, NB)) {
