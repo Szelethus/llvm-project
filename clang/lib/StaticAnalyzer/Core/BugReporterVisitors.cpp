@@ -1439,7 +1439,7 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
   }
 
   if (TKind == TrackingKind::ConditionTracking &&
-      StoreSite->getStackFrame() == OriginSFC)
+      !OriginSFC->isParentOf(StoreSite->getStackFrame()))
     return nullptr;
 
   // Okay, we've found the binding. Emit an appropriate message.
