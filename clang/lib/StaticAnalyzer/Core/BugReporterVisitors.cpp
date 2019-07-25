@@ -611,6 +611,9 @@ void NoStoreFuncVisitor::findModifyingFrames(const ExplodedNode *N) {
   } while (N);
 }
 
+static llvm::StringLiteral WillBeUsedForACondition =
+    ", which will be (a part of a) condition";
+
 std::shared_ptr<PathDiagnosticPiece> NoStoreFuncVisitor::maybeEmitNote(
     BugReport &R, const CallEvent &Call, const ExplodedNode *N,
     const RegionVector &FieldChain, const MemRegion *MatchedRegion,
@@ -657,6 +660,8 @@ std::shared_ptr<PathDiagnosticPiece> NoStoreFuncVisitor::maybeEmitNote(
     return nullptr;
 
   os << "'";
+  if (TKind == bugreporter::TrackingKind::Condition)
+    os << WillBeUsedForACondition;
   return std::make_shared<PathDiagnosticEventPiece>(L, os.str());
 }
 
@@ -1065,6 +1070,9 @@ public:
     PathDiagnosticLocation L(Ret, BRC.getSourceManager(), CalleeSFC);
     if (!L.isValid() || !L.asLocation().isValid())
       return nullptr;
+
+    if (TKind == bugreporter::TrackingKind::Condition)
+      Out << WillBeUsedForACondition;
 
     auto EventPiece = std::make_shared<PathDiagnosticEventPiece>(L, Out.str());
 
@@ -1482,6 +1490,9 @@ FindLastStoreBRVisitor::VisitNode(const ExplodedNode *Succ,
 
   if (os.str().empty())
     showBRDefaultDiagnostics(os, R, V);
+
+  if (TKind == bugreporter::TrackingKind::Condition)
+    os << WillBeUsedForACondition;
 
   // Construct a new PathDiagnosticPiece.
   ProgramPoint P = StoreSite->getLocation();
