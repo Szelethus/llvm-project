@@ -213,6 +213,29 @@ void f(int *ptr) {
 }
 } // end of namespace unimportant_returning_pointer_loaded_from
 
+namespace unimportant_returning_pointer_loaded_from_through_cast {
+
+void *conjure();
+
+int *cast(void *P) {
+  return static_cast<int *>(P);
+}
+
+void f() {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+
+  if (cast(conjure()))
+    // tracking-note@-1{{Passing value via 1st parameter 'P'}}
+    // debug-note@-2{{Tracking condition 'cast(conjure())'}}
+    // expected-note@-3{{Assuming the condition is false}}
+    // expected-note@-4{{Taking false branch}}
+    return;
+  *x = 5; // expected-warning{{Dereference of null pointer}}
+          // expected-note@-1{{Dereference of null pointer}}
+}
+
+} // end of namespace unimportant_returning_pointer_loaded_from_through_cast
+
 namespace unimportant_returning_value_note {
 bool coin();
 
