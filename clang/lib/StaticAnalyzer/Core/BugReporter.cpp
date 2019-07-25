@@ -799,7 +799,7 @@ void generateMinimalDiagForBlockEdge(const ExplodedNode *N, BlockEdge BE,
 
       PD.getActivePath().push_front(
           std::make_shared<PathDiagnosticControlFlowPiece>(
-              Start, End, "Loop condition is true.  Entering loop body"));
+              Start, End, "Loop condition is true. Entering loop body"));
     }
 
     break;
