@@ -1048,7 +1048,6 @@ public:
     if (LValue) {
       if (const MemRegion *MR = LValue->getAsRegion()) {
         if (MR->canPrintPretty()) {
-          WouldEventBeMeaningless = false;
           Out << " (reference to ";
           MR->printPretty(Out);
           Out << ")";
@@ -1056,12 +1055,9 @@ public:
       }
     } else {
       // FIXME: We should have a more generalized location printing mechanism.
-      if (const auto *DR = dyn_cast<DeclRefExpr>(RetE)) {
-        if (const auto *DD = dyn_cast<DeclaratorDecl>(DR->getDecl())) {
-          WouldEventBeMeaningless = false;
+      if (const auto *DR = dyn_cast<DeclRefExpr>(RetE))
+        if (const auto *DD = dyn_cast<DeclaratorDecl>(DR->getDecl()))
           Out << " (loaded from '" << *DD << "')";
-        }
-      }
     }
 
     PathDiagnosticLocation L(Ret, BRC.getSourceManager(), CalleeSFC);

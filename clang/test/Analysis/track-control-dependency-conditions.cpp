@@ -157,6 +157,62 @@ void test() {
 
 } // end of namespace variable_declaration_in_condition
 
+namespace important_returning_pointer_loaded_from {
+bool coin();
+
+int *getIntPtr();
+
+void storeValue(int **i) {
+  *i = getIntPtr(); // tracking-note{{Value assigned to 'i'}}
+}
+
+int *conjurePointer() {
+  int *i;
+  storeValue(&i); // tracking-note{{Calling 'storeValue'}}
+                  // tracking-note@-1{{Returning from 'storeValue'}}
+  return i; // tracking-note{{Returning pointer (loaded from 'i')}}
+}
+
+void f(int *ptr) {
+  if (ptr) // expected-note{{Assuming 'ptr' is null}}
+           // expected-note@-1{{Taking false branch}}
+    ;
+  if (!conjurePointer())
+    // tracking-note@-1{{Calling 'conjurePointer'}}
+    // tracking-note@-2{{Returning from 'conjurePointer'}}
+    // debug-note@-3{{Tracking condition '!conjurePointer()'}}
+    // expected-note@-4{{Assuming the condition is true}}
+    // expected-note@-5{{Taking true branch}}
+    *ptr = 5; // expected-warning{{Dereference of null pointer}}
+              // expected-note@-1{{Dereference of null pointer}}
+}
+} // end of namespace important_returning_pointer_loaded_from
+
+namespace unimportant_returning_pointer_loaded_from {
+bool coin();
+
+int *getIntPtr();
+
+int *conjurePointer() {
+  int *i = getIntPtr(); // tracking-note{{'i' initialized here}}
+  return i; // tracking-note{{Returning pointer (loaded from 'i')}}
+}
+
+void f(int *ptr) {
+  if (ptr) // expected-note{{Assuming 'ptr' is null}}
+           // expected-note@-1{{Taking false branch}}
+    ;
+  if (!conjurePointer())
+    // tracking-note@-1{{Calling 'conjurePointer'}}
+    // tracking-note@-2{{Returning from 'conjurePointer'}}
+    // debug-note@-3{{Tracking condition '!conjurePointer()'}}
+    // expected-note@-4{{Assuming the condition is true}}
+    // expected-note@-5{{Taking true branch}}
+    *ptr = 5; // expected-warning{{Dereference of null pointer}}
+              // expected-note@-1{{Dereference of null pointer}}
+}
+} // end of namespace unimportant_returning_pointer_loaded_from
+
 namespace unimportant_returning_value_note {
 bool coin();
 
