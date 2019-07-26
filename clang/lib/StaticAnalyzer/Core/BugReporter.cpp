@@ -2267,6 +2267,8 @@ class BugGraph {
   using ReportNewNodePair = std::pair<BugReport *, const ExplodedNode *>;
   SmallVector<ReportNewNodePair, 32> ReportNodes;
 
+  BugPathInfo CurrentBugPath;
+
   /// A helper class for sorting ExplodedNodes by priority.
   template <bool Descending>
   class PriorityCompare {
@@ -2299,7 +2301,7 @@ public:
   BugGraph(const ExplodedGraph *OriginalGraph,
            ArrayRef<BugReport *> &bugReports);
 
-  bool popNextReportGraph(BugPathInfo &GraphWrapper);
+  BugPathInfo *getNextBugPath();
 };
 
 } // namespace
@@ -2368,19 +2370,19 @@ BugGraph::BugGraph(const ExplodedGraph *OriginalGraph,
   llvm::sort(ReportNodes, PriorityCompare<true>(PriorityMap));
 }
 
-bool BugGraph::popNextReportGraph(BugPathInfo &GraphWrapper) {
+BugPathInfo *BugGraph::getNextBugPath() {
   if (ReportNodes.empty())
-    return false;
+    return nullptr;
 
   const ExplodedNode *OrigN;
-  std::tie(GraphWrapper.Report, OrigN) = ReportNodes.pop_back_val();
+  std::tie(CurrentBugPath.Report, OrigN) = ReportNodes.pop_back_val();
   assert(PriorityMap.find(OrigN) != PriorityMap.end() &&
          "error node not accessible from root");
 
   // Create a new graph with a single path. This is the graph that will be
   // returned to the caller.
   auto GNew = llvm::make_unique<ExplodedGraph>();
-  GraphWrapper.MapToOriginNodes.clear();
+  CurrentBugPath.MapToOriginNodes.clear();
 
   // Now walk from the error node up the BFS path, always taking the
   // predeccessor with the lowest number.
@@ -2394,13 +2396,13 @@ bool BugGraph::popNextReportGraph(BugPathInfo &GraphWrapper) {
     // Store the mapping to the original node.
     InterExplodedGraphMap::const_iterator IMitr = InverseMap.find(OrigN);
     assert(IMitr != InverseMap.end() && "No mapping to original node.");
-    GraphWrapper.MapToOriginNodes[NewN] = IMitr->second;
+    CurrentBugPath.MapToOriginNodes[NewN] = IMitr->second;
 
     // Link up the new node with the previous node.
     if (Succ)
       Succ->addPredecessor(NewN, *GNew);
     else
-      GraphWrapper.ErrorNode = NewN;
+      CurrentBugPath.ErrorNode = NewN;
 
     Succ = NewN;
 
@@ -2416,9 +2418,9 @@ bool BugGraph::popNextReportGraph(BugPathInfo &GraphWrapper) {
                           PriorityCompare<false>(PriorityMap));
   }
 
-  GraphWrapper.Path = std::move(GNew);
+  CurrentBugPath.Path = std::move(GNew);
 
-  return true;
+  return &CurrentBugPath;
 }
 
 /// CompactMacroExpandedPieces - This function postprocesses a PathDiagnostic
@@ -2568,23 +2570,44 @@ generateVisitorsDiagnostics(BugReport *R, const ExplodedNode *ErrorNode,
   return Notes;
 }
 
+class ReportInfo {
+  BugPathInfo BugPath;
+  std::unique_ptr<VisitorsDiagnosticsTy> VisitorDiagnostics;
+
+public:
+  ReportInfo(BugPathInfo &&BugPath, std::unique_ptr<VisitorsDiagnosticsTy> V)
+    : BugPath(std::move(BugPath)), VisitorDiagnostics(std::move(V)) {}
+
+  ReportInfo() = default;
+
+  bool isValid() { return static_cast<bool>(VisitorDiagnostics); }
+
+  BugReport *getBugReport() { return BugPath.Report; }
+  const ExplodedNode *getErrorNode() { return BugPath.ErrorNode; }
+
+  InterExplodedGraphMap &getMapToOriginNodes() {
+    return BugPath.MapToOriginNodes;
+  }
+
+  VisitorsDiagnosticsTy &getVisitorsDiagnostics() {
+    return *VisitorDiagnostics;
+  }
+};
+
 /// Find a non-invalidated report for a given equivalence class,
 /// and return together with a cache of visitors notes.
 /// If none found, return a nullptr paired with an empty cache.
 static
-std::pair<BugReport*, std::unique_ptr<VisitorsDiagnosticsTy>> findValidReport(
-  BugPathInfo &BugPath,
-  ArrayRef<BugReport *> &bugReports,
-  GRBugReporter &Reporter) {
-
+ReportInfo findValidReport(ArrayRef<BugReport *> &bugReports,
+                           GRBugReporter &Reporter) {
   BugGraph BugG(&Reporter.getGraph(), bugReports);
 
-  while (BugG.popNextReportGraph(BugPath)) {
+  while (BugPathInfo *BugPath = BugG.getNextBugPath()) {
     // Find the BugReport with the original location.
-    BugReport *R = BugPath.Report;
+    BugReport *R = BugPath->Report;
     assert(R && "No original report found for sliced graph.");
     assert(R->isValid() && "Report selected by trimmed graph marked invalid.");
-    const ExplodedNode *ErrorNode = BugPath.ErrorNode;
+    const ExplodedNode *ErrorNode = BugPath->ErrorNode;
 
     // Register refutation visitors first, if they mark the bug invalid no
     // further analysis is required
@@ -2595,7 +2618,7 @@ std::pair<BugReport*, std::unique_ptr<VisitorsDiagnosticsTy>> findValidReport(
     R->addVisitor(llvm::make_unique<ConditionBRVisitor>());
     R->addVisitor(llvm::make_unique<TagVisitor>());
 
-    BugReporterContext BRC(Reporter, BugPath.MapToOriginNodes);
+    BugReporterContext BRC(Reporter, BugPath->MapToOriginNodes);
 
     // Run all visitors on a given graph, once.
     std::unique_ptr<VisitorsDiagnosticsTy> visitorNotes =
@@ -2610,16 +2633,16 @@ std::pair<BugReport*, std::unique_ptr<VisitorsDiagnosticsTy>> findValidReport(
 
         // We don't overrite the notes inserted by other visitors because the
         // refutation manager does not add any new note to the path
-        generateVisitorsDiagnostics(R, BugPath.ErrorNode, BRC);
+        generateVisitorsDiagnostics(R, BugPath->ErrorNode, BRC);
       }
 
       // Check if the bug is still valid
       if (R->isValid())
-        return std::make_pair(R, std::move(visitorNotes));
+        return {std::move(*BugPath), std::move(visitorNotes)};
     }
   }
 
-  return {nullptr, llvm::make_unique<VisitorsDiagnosticsTy>()};
+  return {};
 }
 
 std::unique_ptr<DiagnosticForConsumerMapTy>
@@ -2630,16 +2653,15 @@ GRBugReporter::generatePathDiagnostics(
 
   auto Out = llvm::make_unique<DiagnosticForConsumerMapTy>();
 
-  BugPathInfo BugPath;
-  auto ReportInfo = findValidReport(BugPath, bugReports, *this);
-  BugReport *R = ReportInfo.first;
+  ReportInfo Info = findValidReport(bugReports, *this);
 
-  if (R && R->isValid()) {
-    const ExplodedNode *ErrorNode = BugPath.ErrorNode;
+  if (Info.isValid()) {
     for (PathDiagnosticConsumer *PC : consumers) {
-      PathDiagnosticBuilder PDB(*this, R, BugPath.MapToOriginNodes, PC);
+      PathDiagnosticBuilder PDB(
+          *this, Info.getBugReport(), Info.getMapToOriginNodes(), PC);
       std::unique_ptr<PathDiagnostic> PD = generatePathDiagnosticForConsumer(
-          PC->getGenerationScheme(), PDB, ErrorNode, *ReportInfo.second);
+          PC->getGenerationScheme(), PDB, Info.getErrorNode(),
+          Info.getVisitorsDiagnostics());
       (*Out)[PC] = std::move(PD);
     }
   }
