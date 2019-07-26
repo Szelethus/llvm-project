@@ -2241,8 +2241,9 @@ void BugReporter::FlushReports() {
 
 namespace {
 
-/// A wrapper around a report graph, which contains only a single path, and its
-/// node maps.
+/// A wrapper around an ExplodedGraph that contains a single path from the root
+/// to the error node, and a map that maps the nodes in this path to the ones in
+/// the original ExplodedGraph.
 class BugPathInfo {
 public:
   InterExplodedGraphMap MapToOriginNodes;
@@ -2253,19 +2254,18 @@ public:
 
 /// A wrapper around an ExplodedGraph whose leafs are all error nodes.
 class BugGraph {
+  std::unique_ptr<ExplodedGraph> TrimmedGraph;
+
+  /// Map from the trimmed graph to the original.
   InterExplodedGraphMap InverseMap;
 
   using PriorityMapTy = llvm::DenseMap<const ExplodedNode *, unsigned>;
-
   PriorityMapTy PriorityMap;
 
   // Since the error node the BugReport is in to the original ExplodedGraph,
   // we need to map it the one found in the trimmed graph.
   using ReportNewNodePair = std::pair<BugReport *, const ExplodedNode *>;
-
   SmallVector<ReportNewNodePair, 32> ReportNodes;
-
-  std::unique_ptr<ExplodedGraph> TrimmedGraph;
 
   /// A helper class for sorting ExplodedNodes by priority.
   template <bool Descending>
@@ -2348,8 +2348,7 @@ BugGraph::BugGraph(const ExplodedGraph *OriginalGraph,
 
     PriorityMapTy::iterator PriorityEntry;
     bool IsNew;
-    std::tie(PriorityEntry, IsNew) =
-      PriorityMap.insert(std::make_pair(Node, Priority));
+    std::tie(PriorityEntry, IsNew) = PriorityMap.insert({Node, Priority});
     ++Priority;
 
     if (!IsNew) {
