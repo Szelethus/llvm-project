@@ -2252,14 +2252,17 @@ public:
   const ExplodedNode *ErrorNode;
 };
 
-/// A wrapper around an ExplodedGraph whose leafs are all error nodes.
-class BugGraph {
+/// A wrapper around an ExplodedGraph whose leafs are all error nodes. Can
+/// conveniently retrieve bug paths from a single error node to the root.
+class BugPathGetter {
   std::unique_ptr<ExplodedGraph> TrimmedGraph;
 
   /// Map from the trimmed graph to the original.
   InterExplodedGraphMap InverseMap;
 
   using PriorityMapTy = llvm::DenseMap<const ExplodedNode *, unsigned>;
+
+  /// Assign each node with its distance from the root.
   PriorityMapTy PriorityMap;
 
   // Since the error node the BugReport is in to the original ExplodedGraph,
@@ -2298,7 +2301,7 @@ class BugGraph {
   };
 
 public:
-  BugGraph(const ExplodedGraph *OriginalGraph,
+  BugPathGetter(const ExplodedGraph *OriginalGraph,
            ArrayRef<BugReport *> &bugReports);
 
   BugPathInfo *getNextBugPath();
@@ -2306,7 +2309,7 @@ public:
 
 } // namespace
 
-BugGraph::BugGraph(const ExplodedGraph *OriginalGraph,
+BugPathGetter::BugPathGetter(const ExplodedGraph *OriginalGraph,
                    ArrayRef<BugReport *> &bugReports) {
   SmallVector<const ExplodedNode *, 32> Nodes;
   for (const auto I : bugReports) {
@@ -2370,7 +2373,7 @@ BugGraph::BugGraph(const ExplodedGraph *OriginalGraph,
   llvm::sort(ReportNodes, PriorityCompare<true>(PriorityMap));
 }
 
-BugPathInfo *BugGraph::getNextBugPath() {
+BugPathInfo *BugPathGetter::getNextBugPath() {
   if (ReportNodes.empty())
     return nullptr;
 
@@ -2594,15 +2597,15 @@ public:
   }
 };
 
-/// Find a non-invalidated report for a given equivalence class,
-/// and return together with a cache of visitors notes.
-/// If none found, return a nullptr paired with an empty cache.
+/// Find a non-invalidated report for a given equivalence class,  and returns
+/// the bug path associated with it together with a cache of visitors notes.
+/// If none found, returns an isInvalid() object.
 static
 ReportInfo findValidReport(ArrayRef<BugReport *> &bugReports,
                            GRBugReporter &Reporter) {
-  BugGraph BugG(&Reporter.getGraph(), bugReports);
+  BugPathGetter BugGraph(&Reporter.getGraph(), bugReports);
 
-  while (BugPathInfo *BugPath = BugG.getNextBugPath()) {
+  while (BugPathInfo *BugPath = BugGraph.getNextBugPath()) {
     // Find the BugReport with the original location.
     BugReport *R = BugPath->Report;
     assert(R && "No original report found for sliced graph.");
