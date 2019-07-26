@@ -2534,12 +2534,14 @@ generateVisitorsDiagnostics(BugReport *R, const ExplodedNode *ErrorNode,
   const ExplodedNode *NextNode = ErrorNode->getFirstPred();
   while (NextNode) {
 
-    // At each iteration, move all visitors from report to visitor list.
-    for (BugReport::visitor_iterator I = R->visitor_begin(),
-                                     E = R->visitor_end();
-         I != E; ++I) {
-      visitors.push_back(std::move(*I));
-    }
+    // At each iteration, move all visitors from report to visitor list. This is
+    // important, because the Profile() functions of the visitors make sure that
+    // a visitor isn't added multiple times for the same node, but it's fine
+    // to add the a visitor with Profile() for different nodes (e.g. tracking
+    // a region at different points of the symbolic execution).
+    for (std::unique_ptr<BugReporterVisitor> &Visitor :  R->visitors())
+      visitors.push_back(std::move(Visitor));
+
     R->clearVisitors();
 
     const ExplodedNode *Pred = NextNode->getFirstPred();
@@ -2551,6 +2553,8 @@ generateVisitorsDiagnostics(BugReport *R, const ExplodedNode *ErrorNode,
         if (auto Piece = V->getEndPath(BRC, ErrorNode, *R)) {
           assert(!LastPiece &&
                  "There can only be one final piece in a diagnostic.");
+          assert(Piece->getKind() == PathDiagnosticPiece::Kind::Event &&
+                 "The final piece must contain a message!");
           LastPiece = std::move(Piece);
           (*Notes)[ErrorNode].push_back(LastPiece);
         }
