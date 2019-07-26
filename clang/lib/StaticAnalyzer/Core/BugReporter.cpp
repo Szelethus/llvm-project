@@ -2573,13 +2573,11 @@ generateVisitorsDiagnostics(BugReport *R, const ExplodedNode *ErrorNode,
 /// If none found, return a nullptr paired with an empty cache.
 static
 std::pair<BugReport*, std::unique_ptr<VisitorsDiagnosticsTy>> findValidReport(
-  ExplodedGraph *OriginGraph,
   BugPathInfo &BugPath,
   ArrayRef<BugReport *> &bugReports,
-  AnalyzerOptions &Opts,
   GRBugReporter &Reporter) {
 
-  BugGraph BugG(OriginGraph, bugReports);
+  BugGraph BugG(&Reporter.getGraph(), bugReports);
 
   while (BugG.popNextReportGraph(BugPath)) {
     // Find the BugReport with the original location.
@@ -2604,7 +2602,7 @@ std::pair<BugReport*, std::unique_ptr<VisitorsDiagnosticsTy>> findValidReport(
         generateVisitorsDiagnostics(R, ErrorNode, BRC);
 
     if (R->isValid()) {
-      if (Opts.ShouldCrosscheckWithZ3) {
+      if (Reporter.getAnalyzerOptions().ShouldCrosscheckWithZ3) {
         // If crosscheck is enabled, remove all visitors, add the refutation
         // visitor and check again
         R->clearVisitors();
@@ -2633,8 +2631,7 @@ GRBugReporter::generatePathDiagnostics(
   auto Out = llvm::make_unique<DiagnosticForConsumerMapTy>();
 
   BugPathInfo BugPath;
-  auto ReportInfo = findValidReport(
-      &getGraph(), BugPath, bugReports, getAnalyzerOptions(), *this);
+  auto ReportInfo = findValidReport(BugPath, bugReports, *this);
   BugReport *R = ReportInfo.first;
 
   if (R && R->isValid()) {
