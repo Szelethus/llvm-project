@@ -2247,23 +2247,25 @@ class BugPathInfo {
 public:
   InterExplodedGraphMap MapToOriginNodes;
   std::unique_ptr<ExplodedGraph> Path;
+  BugReport *Report;
   const ExplodedNode *ErrorNode;
-  size_t Index;
 };
 
-/// A wrapper around a trimmed graph and its node maps.
-class TrimmedGraph {
+/// A wrapper around an ExplodedGraph whose leafs are all error nodes.
+class BugGraph {
   InterExplodedGraphMap InverseMap;
 
   using PriorityMapTy = llvm::DenseMap<const ExplodedNode *, unsigned>;
 
   PriorityMapTy PriorityMap;
 
-  using NodeIndexPair = std::pair<const ExplodedNode *, size_t>;
+  // Since the error node the BugReport is in to the original ExplodedGraph,
+  // we need to map it the one found in the trimmed graph.
+  using ReportNewNodePair = std::pair<BugReport *, const ExplodedNode *>;
 
-  SmallVector<NodeIndexPair, 32> ReportNodes;
+  SmallVector<ReportNewNodePair, 32> ReportNodes;
 
-  std::unique_ptr<ExplodedGraph> G;
+  std::unique_ptr<ExplodedGraph> TrimmedGraph;
 
   /// A helper class for sorting ExplodedNodes by priority.
   template <bool Descending>
@@ -2287,37 +2289,48 @@ class TrimmedGraph {
                         : LI->second < RI->second;
     }
 
-    bool operator()(const NodeIndexPair &LHS, const NodeIndexPair &RHS) const {
-      return (*this)(LHS.first, RHS.first);
+    bool operator()(const ReportNewNodePair &LHS,
+                    const ReportNewNodePair &RHS) const {
+      return (*this)(LHS.second, RHS.second);
     }
   };
 
 public:
-  TrimmedGraph(const ExplodedGraph *OriginalGraph,
-               ArrayRef<const ExplodedNode *> Nodes);
+  BugGraph(const ExplodedGraph *OriginalGraph,
+           ArrayRef<BugReport *> &bugReports);
 
   bool popNextReportGraph(BugPathInfo &GraphWrapper);
 };
 
 } // namespace
 
-TrimmedGraph::TrimmedGraph(const ExplodedGraph *OriginalGraph,
-                           ArrayRef<const ExplodedNode *> Nodes) {
+BugGraph::BugGraph(const ExplodedGraph *OriginalGraph,
+                   ArrayRef<BugReport *> &bugReports) {
+  SmallVector<const ExplodedNode *, 32> Nodes;
+  for (const auto I : bugReports) {
+    assert(I->isValid() &&
+           "We only allow BugReporterVisitors and BugReporter itself to "
+           "invalidate reports!");
+    Nodes.emplace_back(I->getErrorNode());
+  }
+
   // The trimmed graph is created in the body of the constructor to ensure
   // that the DenseMaps have been initialized already.
   InterExplodedGraphMap ForwardMap;
-  G = OriginalGraph->trim(Nodes, &ForwardMap, &InverseMap);
+  TrimmedGraph = OriginalGraph->trim(Nodes, &ForwardMap, &InverseMap);
 
   // Find the (first) error node in the trimmed graph.  We just need to consult
   // the node map which maps from nodes in the original graph to nodes
   // in the new graph.
   llvm::SmallPtrSet<const ExplodedNode *, 32> RemainingNodes;
 
-  for (unsigned i = 0, count = Nodes.size(); i < count; ++i) {
-    if (const ExplodedNode *NewNode = ForwardMap.lookup(Nodes[i])) {
-      ReportNodes.push_back(std::make_pair(NewNode, i));
-      RemainingNodes.insert(NewNode);
-    }
+  for (BugReport *Report : bugReports) {
+    const ExplodedNode *NewNode = ForwardMap.lookup(Report->getErrorNode());
+    assert(NewNode &&
+           "Failed to construct a trimmed graph that contains this error "
+           "node!");
+    ReportNodes.emplace_back(Report, NewNode);
+    RemainingNodes.insert(NewNode);
   }
 
   assert(!RemainingNodes.empty() && "No error node found in the trimmed graph");
@@ -2325,8 +2338,8 @@ TrimmedGraph::TrimmedGraph(const ExplodedGraph *OriginalGraph,
   // Perform a forward BFS to find all the shortest paths.
   std::queue<const ExplodedNode *> WS;
 
-  assert(G->num_roots() == 1);
-  WS.push(*G->roots_begin());
+  assert(TrimmedGraph->num_roots() == 1);
+  WS.push(*TrimmedGraph->roots_begin());
   unsigned Priority = 0;
 
   while (!WS.empty()) {
@@ -2348,9 +2361,7 @@ TrimmedGraph::TrimmedGraph(const ExplodedGraph *OriginalGraph,
       if (RemainingNodes.empty())
         break;
 
-    for (ExplodedNode::const_pred_iterator I = Node->succ_begin(),
-                                           E = Node->succ_end();
-         I != E; ++I)
+    for (auto I = Node->succ_begin(), E = Node->succ_end(); I != E; ++I)
       WS.push(*I);
   }
 
@@ -2358,17 +2369,17 @@ TrimmedGraph::TrimmedGraph(const ExplodedGraph *OriginalGraph,
   llvm::sort(ReportNodes, PriorityCompare<true>(PriorityMap));
 }
 
-bool TrimmedGraph::popNextReportGraph(BugPathInfo &GraphWrapper) {
+bool BugGraph::popNextReportGraph(BugPathInfo &GraphWrapper) {
   if (ReportNodes.empty())
     return false;
 
   const ExplodedNode *OrigN;
-  std::tie(OrigN, GraphWrapper.Index) = ReportNodes.pop_back_val();
+  std::tie(GraphWrapper.Report, OrigN) = ReportNodes.pop_back_val();
   assert(PriorityMap.find(OrigN) != PriorityMap.end() &&
          "error node not accessible from root");
 
-  // Create a new graph with a single path.  This is the graph
-  // that will be returned to the caller.
+  // Create a new graph with a single path. This is the graph that will be
+  // returned to the caller.
   auto GNew = llvm::make_unique<ExplodedGraph>();
   GraphWrapper.MapToOriginNodes.clear();
 
@@ -2569,20 +2580,11 @@ std::pair<BugReport*, std::unique_ptr<VisitorsDiagnosticsTy>> findValidReport(
   AnalyzerOptions &Opts,
   GRBugReporter &Reporter) {
 
-  SmallVector<const ExplodedNode *, 32> errorNodes;
-  for (const auto I : bugReports) {
-    assert(I->isValid() &&
-           "We only allow BugReporterVisitors and BugReporter itself to "
-           "invalidate reports!");
-    errorNodes.push_back(I->getErrorNode());
-  }
+  BugGraph BugG(OriginGraph, bugReports);
 
-  TrimmedGraph TrimG(OriginGraph, errorNodes);
-
-  while (TrimG.popNextReportGraph(BugPath)) {
+  while (BugG.popNextReportGraph(BugPath)) {
     // Find the BugReport with the original location.
-    assert(BugPath.Index < bugReports.size());
-    BugReport *R = bugReports[BugPath.Index];
+    BugReport *R = BugPath.Report;
     assert(R && "No original report found for sliced graph.");
     assert(R->isValid() && "Report selected by trimmed graph marked invalid.");
     const ExplodedNode *ErrorNode = BugPath.ErrorNode;
