@@ -525,6 +525,8 @@ public:
   ///  engine.
   ProgramStateManager &getStateManager();
 
+  const ProgramStateManager &getStateManager() const;
+
   /// \p bugReports A set of bug reports within a *single* equivalence class
   ///
   /// \return A mapping from consumers to the corresponding diagnostics.
@@ -568,23 +570,25 @@ public:
 
   const ExplodedGraph &getGraph() const { return BR.getGraph(); }
 
-  ProgramStateManager& getStateManager() {
+  ProgramStateManager& getStateManager() { return BR.getStateManager(); }
+
+  const ProgramStateManager& getStateManager() const {
     return BR.getStateManager();
   }
 
-  const SValBuilder &getSValBuilder() {
+  const SValBuilder &getSValBuilder() const {
     return getStateManager().getSValBuilder();
   }
 
-  ASTContext &getASTContext() {
+  ASTContext &getASTContext() const {
     return BR.getContext();
   }
 
-  const SourceManager& getSourceManager() {
+  const SourceManager& getSourceManager() const {
     return BR.getSourceManager();
   }
 
-  const AnalyzerOptions &getAnalyzerOptions() {
+  const AnalyzerOptions &getAnalyzerOptions() const {
     return BR.getAnalyzerOptions();
   }
 
