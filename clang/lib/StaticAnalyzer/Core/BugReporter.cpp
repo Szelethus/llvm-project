@@ -351,18 +351,27 @@ static void removePiecesWithInvalidLocations(PathPieces &Pieces) {
 
 namespace {
 
+using VisitorsDiagnosticsTy =
+    llvm::DenseMap<const ExplodedNode *, std::vector<PathDiagnosticPieceRef>>;
+
 class PathDiagnosticBuilder : public BugReporterContext {
   BugReport *R;
   const PathDiagnosticConsumer *PDC;
+  const ExplodedNode *ErrorNode;
+  const VisitorsDiagnosticsTy &VisitorsDiagnostics;
 
 public:
   const LocationContext *LC;
 
-  PathDiagnosticBuilder(GRBugReporter &br,
-                        BugReport *r, InterExplodedGraphMap &Backmap,
-                        const PathDiagnosticConsumer *pdc)
-      : BugReporterContext(br, Backmap), R(r), PDC(pdc),
+  PathDiagnosticBuilder(const BugReporterContext &BRC, BugReport *r,
+                        const PathDiagnosticConsumer *pdc,
+                        const ExplodedNode *ErrorNode,
+                        const VisitorsDiagnosticsTy &VisitorsDiagnostics)
+      : BugReporterContext(BRC), R(r), PDC(pdc), ErrorNode(ErrorNode),
+        VisitorsDiagnostics(VisitorsDiagnostics),
         LC(r->getErrorNode()->getLocationContext()) {}
+
+  std::unique_ptr<PathDiagnostic> generate();
 
   PathDiagnosticLocation ExecutionContinues(const ExplodedNode *N) const;
 
@@ -1880,9 +1889,6 @@ static void dropFunctionEntryEdge(PathPieces &Path,
   Path.pop_front();
 }
 
-using VisitorsDiagnosticsTy =
-    llvm::DenseMap<const ExplodedNode *, std::vector<PathDiagnosticPieceRef>>;
-
 /// Populate executes lines with lines containing at least one diagnostics.
 static void updateExecutedLinesWithDiagnosticPieces(PathDiagnostic &PD) {
 
@@ -1910,17 +1916,15 @@ static void updateExecutedLinesWithDiagnosticPieces(PathDiagnostic &PD) {
 /// edges.
 /// Otherwise, more detailed diagnostics is emitted for block edges, explaining
 /// the transitions in words.
-static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
-    PathDiagnosticConsumer::PathGenerationScheme ActiveScheme,
-    PathDiagnosticBuilder &PDB,
-    const ExplodedNode *ErrorNode,
-    const VisitorsDiagnosticsTy &VisitorsDiagnostics) {
+std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
 
+  PathDiagnosticConsumer::PathGenerationScheme ActiveScheme =
+      PDC->getGenerationScheme();
   bool GenerateDiagnostics = (ActiveScheme != PathDiagnosticConsumer::None);
   bool AddPathEdges = (ActiveScheme == PathDiagnosticConsumer::Extensive);
-  const SourceManager &SM = PDB.getSourceManager();
-  const BugReport *R = PDB.getBugReport();
-  const AnalyzerOptions &Opts = PDB.getBugReporter().getAnalyzerOptions();
+  const SourceManager &SM = getSourceManager();
+  const BugReport *R = getBugReport();
+  const AnalyzerOptions &Opts = getBugReporter().getAnalyzerOptions();
   StackDiagVector CallStack;
   InterestingExprs IE;
   LocationContextMap LCM;
@@ -1933,8 +1937,8 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
       assert(!EndNotes->second.empty());
       LastPiece = EndNotes->second[0];
     } else {
-      LastPiece = BugReporterVisitor::getDefaultEndPath(PDB, ErrorNode,
-                                                        *PDB.getBugReport());
+      LastPiece = BugReporterVisitor::getDefaultEndPath(*this, ErrorNode,
+                                                        *getBugReport());
     }
     PD->setEndOfPath(LastPiece);
   }
@@ -1944,7 +1948,7 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
   while (NextNode) {
     if (GenerateDiagnostics)
       generatePathDiagnosticsForNode(
-          NextNode, *PD, PrevLoc, PDB, LCM, CallStack, IE, AddPathEdges);
+          NextNode, *PD, PrevLoc, *this, LCM, CallStack, IE, AddPathEdges);
 
     auto VisitorNotes = VisitorsDiagnostics.find(NextNode);
     NextNode = NextNode->getFirstPred();
@@ -1972,7 +1976,7 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
   if (AddPathEdges) {
     // Add an edge to the start of the function.
     // We'll prune it out later, but it helps make diagnostics more uniform.
-    const StackFrameContext *CalleeLC = PDB.LC->getStackFrame();
+    const StackFrameContext *CalleeLC = LC->getStackFrame();
     const Decl *D = CalleeLC->getDecl();
     addEdgeToPath(PD->getActivePath(), PrevLoc,
                   PathDiagnosticLocation::createBegin(D, SM));
@@ -2578,34 +2582,34 @@ generateVisitorsDiagnostics(BugReport *R, const ExplodedNode *ErrorNode,
 }
 
 class ReportInfo {
+  BugReporterContext BRC;
   BugPathInfo BugPath;
   std::unique_ptr<VisitorsDiagnosticsTy> VisitorDiagnostics;
 
 public:
-  ReportInfo(BugPathInfo &&BugPath, std::unique_ptr<VisitorsDiagnosticsTy> V)
-      : BugPath(std::move(BugPath)), VisitorDiagnostics(std::move(V)) {}
+  ReportInfo(BugReporterContext &&BRC, BugPathInfo &&BugPath,
+             std::unique_ptr<VisitorsDiagnosticsTy> V)
+    : BRC(BRC), BugPath(std::move(BugPath)), VisitorDiagnostics(std::move(V)) {}
 
-  ReportInfo() = default;
+  static
+  Optional<ReportInfo> findValidReport(ArrayRef<BugReport *> &bugReports,
+                                       GRBugReporter &Reporter);
 
-  bool isValid() { return static_cast<bool>(VisitorDiagnostics); }
+  std::unique_ptr<PathDiagnostic>
+  generatePathDiagnosticForConsumer(const PathDiagnosticConsumer *PC) {
 
-  BugReport *getBugReport() { return BugPath.Report; }
-  const ExplodedNode *getErrorNode() { return BugPath.ErrorNode; }
-
-  InterExplodedGraphMap &getMapToOriginNodes() {
-    return BugPath.MapToOriginNodes;
-  }
-
-  VisitorsDiagnosticsTy &getVisitorsDiagnostics() {
-    return *VisitorDiagnostics;
+    PathDiagnosticBuilder PDB(BRC, BugPath.Report, PC, BugPath.ErrorNode,
+                                *VisitorDiagnostics);
+    return PDB.generate();
   }
 };
 
 /// Find a non-invalidated report for a given equivalence class,  and returns
 /// the bug path associated with it together with a cache of visitors notes.
 /// If none found, returns an isInvalid() object.
-static ReportInfo findValidReport(ArrayRef<BugReport *> &bugReports,
-                                  GRBugReporter &Reporter) {
+Optional<ReportInfo> ReportInfo::findValidReport(
+    ArrayRef<BugReport *> &bugReports, GRBugReporter &Reporter) {
+
   BugPathGetter BugGraph(&Reporter.getGraph(), bugReports);
 
   while (BugPathInfo *BugPath = BugGraph.getNextBugPath()) {
@@ -2644,7 +2648,8 @@ static ReportInfo findValidReport(ArrayRef<BugReport *> &bugReports,
 
       // Check if the bug is still valid
       if (R->isValid())
-        return {std::move(*BugPath), std::move(visitorNotes)};
+        return ReportInfo(
+            std::move(BRC), std::move(*BugPath), std::move(visitorNotes));
     }
   }
 
@@ -2659,18 +2664,11 @@ GRBugReporter::generatePathDiagnostics(
 
   auto Out = llvm::make_unique<DiagnosticForConsumerMapTy>();
 
-  ReportInfo Info = findValidReport(bugReports, *this);
+  Optional<ReportInfo> Info = ReportInfo::findValidReport(bugReports, *this);
 
-  if (Info.isValid()) {
-    for (PathDiagnosticConsumer *PC : consumers) {
-      PathDiagnosticBuilder PDB(*this, Info.getBugReport(),
-                                Info.getMapToOriginNodes(), PC);
-      std::unique_ptr<PathDiagnostic> PD = generatePathDiagnosticForConsumer(
-          PC->getGenerationScheme(), PDB, Info.getErrorNode(),
-          Info.getVisitorsDiagnostics());
-      (*Out)[PC] = std::move(PD);
-    }
-  }
+  if (Info)
+    for (PathDiagnosticConsumer *PC : consumers)
+      (*Out)[PC] = Info->generatePathDiagnosticForConsumer(PC);
 
   return Out;
 }
