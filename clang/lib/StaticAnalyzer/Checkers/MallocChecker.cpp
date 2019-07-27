@@ -510,19 +510,19 @@ private:
       // released -> allocated, it must be the realloc return value
       // check. If we have to handle more cases here, it might be cleaner just
       // to track this extra bit in the state itself.
-      return ((!Stmt || !isa<CallExpr>(Stmt)) &&
-              (S && (S->isAllocated() || S->isAllocatedOfSizeZero())) &&
-              (SPrev && !(SPrev->isAllocated() ||
-                          SPrev->isAllocatedOfSizeZero())));
+      return (
+          (!Stmt || !isa<CallExpr>(Stmt)) &&
+          (S && (S->isAllocated() || S->isAllocatedOfSizeZero())) &&
+          (SPrev && !(SPrev->isAllocated() || SPrev->isAllocatedOfSizeZero())));
     }
 
-    std::shared_ptr<PathDiagnosticPiece> VisitNode(const ExplodedNode *N,
-                                                   BugReporterContext &BRC,
-                                                   BugReport &BR) override;
+    PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
+                                     BugReporterContext &BRC,
+                                     BugReport &BR) override;
 
-    std::shared_ptr<PathDiagnosticPiece>
-    getEndPath(BugReporterContext &BRC, const ExplodedNode *EndPathNode,
-               BugReport &BR) override {
+    PathDiagnosticPieceRef getEndPath(BugReporterContext &BRC,
+                                      const ExplodedNode *EndPathNode,
+                                      BugReport &BR) override {
       if (!IsLeak)
         return nullptr;
 
@@ -2869,7 +2869,7 @@ static bool isReferenceCountingPointerDestructor(const CXXDestructorDecl *DD) {
   return false;
 }
 
-std::shared_ptr<PathDiagnosticPiece> MallocChecker::MallocBugVisitor::VisitNode(
+PathDiagnosticPieceRef MallocChecker::MallocBugVisitor::VisitNode(
     const ExplodedNode *N, BugReporterContext &BRC, BugReport &BR) {
 
   ProgramStateRef state = N->getState();
