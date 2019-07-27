@@ -155,7 +155,9 @@ public:
 
   const CFGBlock *getCFGBlock() const;
 
-  ParentMap &getParentMap() const {return getLocationContext()->getParentMap();}
+  const ParentMap &getParentMap() const {
+    return getLocationContext()->getParentMap();
+  }
 
   template <typename T>
   T &getAnalysis() const {

@@ -258,7 +258,7 @@ public:
     return getAnalysisDeclContext()->getAnalysis<T>();
   }
 
-  ParentMap &getParentMap() const {
+  const ParentMap &getParentMap() const {
     return getAnalysisDeclContext()->getParentMap();
   }
 
