@@ -1921,8 +1921,8 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
   bool GenerateDiagnostics = (ActiveScheme != PathDiagnosticConsumer::None);
   bool AddPathEdges = (ActiveScheme == PathDiagnosticConsumer::Extensive);
   const SourceManager &SM = PDB.getSourceManager();
-  BugReport *R = PDB.getBugReport();
-  AnalyzerOptions &Opts = PDB.getBugReporter().getAnalyzerOptions();
+  const BugReport *R = PDB.getBugReport();
+  const AnalyzerOptions &Opts = PDB.getBugReporter().getAnalyzerOptions();
   StackDiagVector CallStack;
   InterestingExprs IE;
   LocationContextMap LCM;
@@ -1935,7 +1935,8 @@ static std::unique_ptr<PathDiagnostic> generatePathDiagnosticForConsumer(
       assert(!EndNotes->second.empty());
       LastPiece = EndNotes->second[0];
     } else {
-      LastPiece = BugReporterVisitor::getDefaultEndPath(PDB, ErrorNode, *R);
+      LastPiece = BugReporterVisitor::getDefaultEndPath(PDB, ErrorNode,
+                                                        *PDB.getBugReport());
     }
     PD->setEndOfPath(LastPiece);
   }
@@ -2202,7 +2203,7 @@ PathDiagnosticLocation BugReport::getLocation(const SourceManager &SM) const {
 // Methods for BugReporter and subclasses.
 //===----------------------------------------------------------------------===//
 
-ExplodedGraph &GRBugReporter::getGraph() { return Eng.getGraph(); }
+const ExplodedGraph &GRBugReporter::getGraph() const { return Eng.getGraph(); }
 
 ProgramStateManager&
 GRBugReporter::getStateManager() { return Eng.getStateManager(); }
@@ -3005,7 +3006,7 @@ BugReporter::generateDiagnosticForConsumerMap(
 
   // Examine the report and see if the last piece is in a header. Reset the
   // report location to the last piece in the main source file.
-  AnalyzerOptions &Opts = getAnalyzerOptions();
+  const AnalyzerOptions &Opts = getAnalyzerOptions();
   for (auto const &P : *Out)
     if (Opts.ShouldReportIssuesInMainSourceFile && !Opts.AnalyzeAll)
       P.second->resetDiagnosticLocationToMainFile();

@@ -469,9 +469,9 @@ public:
 
   ASTContext &getContext() { return D.getASTContext(); }
 
-  SourceManager &getSourceManager() { return D.getSourceManager(); }
+  const SourceManager &getSourceManager() { return D.getSourceManager(); }
 
-  AnalyzerOptions &getAnalyzerOptions() { return D.getAnalyzerOptions(); }
+  const AnalyzerOptions &getAnalyzerOptions() { return D.getAnalyzerOptions(); }
 
   virtual std::unique_ptr<DiagnosticForConsumerMapTy>
   generatePathDiagnostics(ArrayRef<PathDiagnosticConsumer *> consumers,
@@ -519,7 +519,7 @@ public:
 
   /// getGraph - Get the exploded graph created by the analysis engine
   ///  for the analyzed method or function.
-  ExplodedGraph &getGraph();
+  const ExplodedGraph &getGraph() const;
 
   /// getStateManager - Return the state manager used by the analysis
   ///  engine.
@@ -566,13 +566,13 @@ public:
 
   GRBugReporter& getBugReporter() { return BR; }
 
-  ExplodedGraph &getGraph() { return BR.getGraph(); }
+  const ExplodedGraph &getGraph() const { return BR.getGraph(); }
 
   ProgramStateManager& getStateManager() {
     return BR.getStateManager();
   }
 
-  SValBuilder &getSValBuilder() {
+  const SValBuilder &getSValBuilder() {
     return getStateManager().getSValBuilder();
   }
 
@@ -580,11 +580,11 @@ public:
     return BR.getContext();
   }
 
-  SourceManager& getSourceManager() {
+  const SourceManager& getSourceManager() {
     return BR.getSourceManager();
   }
 
-  AnalyzerOptions &getAnalyzerOptions() {
+  const AnalyzerOptions &getAnalyzerOptions() {
     return BR.getAnalyzerOptions();
   }
 
