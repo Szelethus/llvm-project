@@ -190,8 +190,8 @@ using LocationContextMap =
 /// Recursively scan through a path and prune out calls and macros pieces
 /// that aren't needed.  Return true if afterwards the path contains
 /// "interesting stuff" which means it shouldn't be pruned from the parent path.
-static bool removeUnneededCalls(PathPieces &pieces, BugReport *R,
-                                LocationContextMap &LCM,
+static bool removeUnneededCalls(PathPieces &pieces, const BugReport *R,
+                                const LocationContextMap &LCM,
                                 bool IsInteresting = false) {
   bool containsSomethingInteresting = IsInteresting;
   const unsigned N = pieces.size();
@@ -208,7 +208,7 @@ static bool removeUnneededCalls(PathPieces &pieces, BugReport *R,
         // Check if the location context is interesting.
         assert(LCM.count(&call.path));
         if (!removeUnneededCalls(call.path, R, LCM,
-                                 R->isInteresting(LCM[&call.path])))
+                                 R->isInteresting(LCM.lookup(&call.path))))
           continue;
 
         containsSomethingInteresting = true;
@@ -353,14 +353,14 @@ namespace {
 
 class PathDiagnosticBuilder : public BugReporterContext {
   BugReport *R;
-  PathDiagnosticConsumer *PDC;
+  const PathDiagnosticConsumer *PDC;
 
 public:
   const LocationContext *LC;
 
   PathDiagnosticBuilder(GRBugReporter &br,
                         BugReport *r, InterExplodedGraphMap &Backmap,
-                        PathDiagnosticConsumer *pdc)
+                        const PathDiagnosticConsumer *pdc)
       : BugReporterContext(br, Backmap), R(r), PDC(pdc),
         LC(r->getErrorNode()->getLocationContext()) {}
 
@@ -2122,11 +2122,11 @@ void BugReport::markInteresting(const LocationContext *LC) {
   InterestingLocationContexts.insert(LC);
 }
 
-bool BugReport::isInteresting(SVal V) {
+bool BugReport::isInteresting(SVal V)  const {
   return isInteresting(V.getAsRegion()) || isInteresting(V.getAsSymbol());
 }
 
-bool BugReport::isInteresting(SymbolRef sym) {
+bool BugReport::isInteresting(SymbolRef sym)  const {
   if (!sym)
     return false;
   // We don't currently consider metadata symbols to be interesting
@@ -2134,7 +2134,7 @@ bool BugReport::isInteresting(SymbolRef sym) {
   return InterestingSymbols.count(sym);
 }
 
-bool BugReport::isInteresting(const MemRegion *R) {
+bool BugReport::isInteresting(const MemRegion *R)  const {
   if (!R)
     return false;
   R = R->getBaseRegion();
@@ -2146,7 +2146,7 @@ bool BugReport::isInteresting(const MemRegion *R) {
   return false;
 }
 
-bool BugReport::isInteresting(const LocationContext *LC) {
+bool BugReport::isInteresting(const LocationContext *LC)  const {
   if (!LC)
     return false;
   return InterestingLocationContexts.count(LC);
