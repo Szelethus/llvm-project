@@ -217,10 +217,10 @@ public:
   void markInteresting(SVal V);
   void markInteresting(const LocationContext *LC);
 
-  bool isInteresting(SymbolRef sym);
-  bool isInteresting(const MemRegion *R);
-  bool isInteresting(SVal V);
-  bool isInteresting(const LocationContext *LC);
+  bool isInteresting(SymbolRef sym) const;
+  bool isInteresting(const MemRegion *R) const;
+  bool isInteresting(SVal V) const;
+  bool isInteresting(const LocationContext *LC) const;
 
   /// Returns whether or not this report should be considered valid.
   ///
