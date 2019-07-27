@@ -2365,8 +2365,8 @@ BugPathGetter::BugPathGetter(const ExplodedGraph *OriginalGraph,
       if (RemainingNodes.empty())
         break;
 
-    for (auto I = Node->succ_begin(), E = Node->succ_end(); I != E; ++I)
-      WS.push(*I);
+    for (const ExplodedNode *Succ : Node->succs())
+      WS.push(Succ);
   }
 
   // Sort the error paths from longest to shortest.
@@ -2418,7 +2418,7 @@ BugPathInfo *BugPathGetter::getNextBugPath() {
     // Find the next predeccessor node.  We choose the node that is marked
     // with the lowest BFS number.
     OrigN = *std::min_element(OrigN->pred_begin(), OrigN->pred_end(),
-                          PriorityCompare<false>(PriorityMap));
+                              PriorityCompare<false>(PriorityMap));
   }
 
   CurrentBugPath.Path = std::move(GNew);
