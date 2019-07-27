@@ -351,14 +351,36 @@ static void removePiecesWithInvalidLocations(PathPieces &Pieces) {
 
 namespace {
 
+using StackDiagPair =
+    std::pair<PathDiagnosticCallPiece *, const ExplodedNode *>;
+using StackDiagVector = SmallVector<StackDiagPair, 6>;
+
 using VisitorsDiagnosticsTy =
     llvm::DenseMap<const ExplodedNode *, std::vector<PathDiagnosticPieceRef>>;
+
+// Cone-of-influence: support the reverse propagation of "interesting" symbols
+// and values by tracing interesting calculations backwards through evaluated
+// expressions along a path.  This is probably overly complicated, but the idea
+// is that if an expression computed an "interesting" value, the child
+// expressions are also likely to be "interesting" as well (which then
+// propagates to the values they in turn compute).  This reverse propagation
+// is needed to track interesting correlations across function call boundaries,
+// where formal arguments bind to actual arguments, etc.  This is also needed
+// because the constraint solver sometimes simplifies certain symbolic values
+// into constants when appropriate, and this complicates reasoning about
+// interesting values.
+using InterestingExprs = llvm::DenseSet<const Expr *>;
 
 class PathDiagnosticBuilder : public BugReporterContext {
   BugReport *R;
   const PathDiagnosticConsumer *PDC;
   const ExplodedNode *ErrorNode;
   const VisitorsDiagnosticsTy &VisitorsDiagnostics;
+  StackDiagVector CallStack;
+  InterestingExprs IE;
+  LocationContextMap LCM;
+
+  std::unique_ptr<PathDiagnostic> PD;
 
 public:
   const LocationContext *LC;
@@ -366,12 +388,16 @@ public:
   PathDiagnosticBuilder(const BugReporterContext &BRC, BugReport *r,
                         const PathDiagnosticConsumer *pdc,
                         const ExplodedNode *ErrorNode,
-                        const VisitorsDiagnosticsTy &VisitorsDiagnostics)
-      : BugReporterContext(BRC), R(r), PDC(pdc), ErrorNode(ErrorNode),
-        VisitorsDiagnostics(VisitorsDiagnostics),
-        LC(r->getErrorNode()->getLocationContext()) {}
+                        const VisitorsDiagnosticsTy &VisitorsDiagnostics);
 
   std::unique_ptr<PathDiagnostic> generate();
+
+  /// Generate diagnostics for the node \p N,
+  /// and write it into \p PD.
+  /// \p AddPathEdges Whether diagnostic consumer can generate path arrows
+  /// showing both row and column.
+  void generatePathDiagnosticsForNode(const ExplodedNode *N,
+                                      PathDiagnosticLocation &PrevLoc);
 
   PathDiagnosticLocation ExecutionContinues(const ExplodedNode *N) const;
 
@@ -396,6 +422,14 @@ public:
 
   bool supportsLogicalOpControlFlow() const {
     return PDC ? PDC->supportsLogicalOpControlFlow() : true;
+  }
+
+  bool shouldGenerateDiagnostics() const {
+    return PDC->getGenerationScheme() != PathDiagnosticConsumer::None;
+  }
+
+  bool shouldAddPathEdges() const {
+    return PDC->getGenerationScheme() == PathDiagnosticConsumer::Extensive;
   }
 };
 
@@ -540,9 +574,6 @@ PathDiagnosticBuilder::getEnclosingStmtLocation(const Stmt *S) const {
 //===----------------------------------------------------------------------===//
 // "Minimal" path diagnostic generation algorithm.
 //===----------------------------------------------------------------------===//
-using StackDiagPair =
-    std::pair<PathDiagnosticCallPiece *, const ExplodedNode *>;
-using StackDiagVector = SmallVector<StackDiagPair, 6>;
 
 static void updateStackPiecesWithMessage(PathDiagnosticPiece &P,
                                          const StackDiagVector &CallStack) {
@@ -831,19 +862,6 @@ void generateMinimalDiagForBlockEdge(const ExplodedNode *N, BlockEdge BE,
   }
 }
 
-// Cone-of-influence: support the reverse propagation of "interesting" symbols
-// and values by tracing interesting calculations backwards through evaluated
-// expressions along a path.  This is probably overly complicated, but the idea
-// is that if an expression computed an "interesting" value, the child
-// expressions are also likely to be "interesting" as well (which then
-// propagates to the values they in turn compute).  This reverse propagation
-// is needed to track interesting correlations across function call boundaries,
-// where formal arguments bind to actual arguments, etc.  This is also needed
-// because the constraint solver sometimes simplifies certain symbolic values
-// into constants when appropriate, and this complicates reasoning about
-// interesting values.
-using InterestingExprs = llvm::DenseSet<const Expr *>;
-
 static void reversePropagateIntererstingSymbols(BugReport &R,
                                                 InterestingExprs &IE,
                                                 const ProgramState *State,
@@ -1028,16 +1046,10 @@ findExecutedLines(const SourceManager &SM, const ExplodedNode *N);
 /// and write it into \p PD.
 /// \p AddPathEdges Whether diagnostic consumer can generate path arrows
 /// showing both row and column.
-static void generatePathDiagnosticsForNode(const ExplodedNode *N,
-      PathDiagnostic &PD,
-      PathDiagnosticLocation &PrevLoc,
-      PathDiagnosticBuilder &PDB,
-      LocationContextMap &LCM,
-      StackDiagVector &CallStack,
-      InterestingExprs &IE,
-      bool AddPathEdges) {
+void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
+    const ExplodedNode *N, PathDiagnosticLocation &PrevLoc) {
   ProgramPoint P = N->getLocation();
-  const SourceManager& SM = PDB.getSourceManager();
+  const SourceManager& SM = getSourceManager();
 
   // Have we encountered an entrance to a call?  It may be
   // the case that we have not encountered a matching
@@ -1045,7 +1057,7 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
   // terminated within the call itself.
   if (auto CE = P.getAs<CallEnter>()) {
 
-    if (AddPathEdges) {
+    if (shouldAddPathEdges()) {
       // Add an edge to the start of the function.
       const StackFrameContext *CalleeLC = CE->getCalleeContext();
       const Decl *D = CalleeLC->getDecl();
@@ -1056,27 +1068,27 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
       // because the exit edge comes from a statement (i.e. return),
       // not from declaration.
       if (D->hasBody())
-        addEdgeToPath(PD.getActivePath(), PrevLoc,
+        addEdgeToPath(PD->getActivePath(), PrevLoc,
             PathDiagnosticLocation::createBegin(D, SM));
     }
 
     // Did we visit an entire call?
-    bool VisitedEntireCall = PD.isWithinCall();
-    PD.popActivePath();
+    bool VisitedEntireCall = PD->isWithinCall();
+    PD->popActivePath();
 
     PathDiagnosticCallPiece *C;
     if (VisitedEntireCall) {
-      C = cast<PathDiagnosticCallPiece>(PD.getActivePath().front().get());
+      C = cast<PathDiagnosticCallPiece>(PD->getActivePath().front().get());
     } else {
       const Decl *Caller = CE->getLocationContext()->getDecl();
-      C = PathDiagnosticCallPiece::construct(PD.getActivePath(), Caller);
+      C = PathDiagnosticCallPiece::construct(PD->getActivePath(), Caller);
 
-      if (AddPathEdges) {
+      if (shouldAddPathEdges()) {
         // Since we just transferred the path over to the call piece,
         // reset the mapping from active to location context.
-        assert(PD.getActivePath().size() == 1 &&
-            PD.getActivePath().front().get() == C);
-        LCM[&PD.getActivePath()] = nullptr;
+        assert(PD->getActivePath().size() == 1 &&
+            PD->getActivePath().front().get() == C);
+        LCM[&PD->getActivePath()] = nullptr;
       }
 
       // Record the location context mapping for the path within
@@ -1087,11 +1099,11 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
 
       // If this is the first item in the active path, record
       // the new mapping from active path to location context.
-      const LocationContext *&NewLC = LCM[&PD.getActivePath()];
+      const LocationContext *&NewLC = LCM[&PD->getActivePath()];
       if (!NewLC)
         NewLC = N->getLocationContext();
 
-      PDB.LC = NewLC;
+      LC = NewLC;
     }
     C->setCallee(*CE, SM);
 
@@ -1106,15 +1118,15 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
   }
 
 
-  if (AddPathEdges) {
+  if (shouldAddPathEdges()) {
     // Query the location context here and the previous location
     // as processing CallEnter may change the active path.
-    PDB.LC = N->getLocationContext();
+    LC = N->getLocationContext();
 
     // Record the mapping from the active path to the location
     // context.
-    assert(!LCM[&PD.getActivePath()] || LCM[&PD.getActivePath()] == PDB.LC);
-    LCM[&PD.getActivePath()] = PDB.LC;
+    assert(!LCM[&PD->getActivePath()] || LCM[&PD->getActivePath()] == LC);
+    LCM[&PD->getActivePath()] = LC;
   }
 
   // Have we encountered an exit from a function call?
@@ -1126,36 +1138,36 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
     // Record the mapping from call piece to LocationContext.
     LCM[&C->path] = CE->getCalleeContext();
 
-    if (AddPathEdges) {
+    if (shouldAddPathEdges()) {
       const Stmt *S = CE->getCalleeContext()->getCallSite();
       // Propagate the interesting symbols accordingly.
       if (const auto *Ex = dyn_cast_or_null<Expr>(S)) {
-        reversePropagateIntererstingSymbols(*PDB.getBugReport(), IE,
+        reversePropagateIntererstingSymbols(*getBugReport(), IE,
             N->getState().get(), Ex,
             N->getLocationContext());
       }
       // Add the edge to the return site.
-      addEdgeToPath(PD.getActivePath(), PrevLoc, C->callReturn);
+      addEdgeToPath(PD->getActivePath(), PrevLoc, C->callReturn);
       PrevLoc.invalidate();
     }
 
     auto *P = C.get();
-    PD.getActivePath().push_front(std::move(C));
+    PD->getActivePath().push_front(std::move(C));
 
     // Make the contents of the call the active path for now.
-    PD.pushActivePath(&P->path);
+    PD->pushActivePath(&P->path);
     CallStack.push_back(StackDiagPair(P, N));
     return;
   }
 
   if (auto PS = P.getAs<PostStmt>()) {
-    if (!AddPathEdges)
+    if (!shouldAddPathEdges())
       return;
 
     // For expressions, make sure we propagate the
     // interesting symbols correctly.
     if (const Expr *Ex = PS->getStmtAs<Expr>())
-      reversePropagateIntererstingSymbols(*PDB.getBugReport(), IE,
+      reversePropagateIntererstingSymbols(*getBugReport(), IE,
           N->getState().get(), Ex,
           N->getLocationContext());
 
@@ -1164,14 +1176,14 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
     // as a terminator and as a terminator condition.
     if (!isa<ObjCForCollectionStmt>(PS->getStmt())) {
       PathDiagnosticLocation L =
-        PathDiagnosticLocation(PS->getStmt(), SM, PDB.LC);
-      addEdgeToPath(PD.getActivePath(), PrevLoc, L);
+        PathDiagnosticLocation(PS->getStmt(), SM, LC);
+      addEdgeToPath(PD->getActivePath(), PrevLoc, L);
     }
 
   } else if (auto BE = P.getAs<BlockEdge>()) {
 
-    if (!AddPathEdges) {
-      generateMinimalDiagForBlockEdge(N, *BE, SM, PDB, PD);
+    if (!shouldAddPathEdges()) {
+      generateMinimalDiagForBlockEdge(N, *BE, SM, *this, *PD);
       return;
     }
 
@@ -1179,16 +1191,16 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
     // interesting symbols across call boundaries.
     if (const ExplodedNode *NextNode = N->getFirstPred()) {
       const LocationContext *CallerCtx = NextNode->getLocationContext();
-      const LocationContext *CalleeCtx = PDB.LC;
-      if (CallerCtx != CalleeCtx && AddPathEdges) {
-        reversePropagateInterestingSymbols(*PDB.getBugReport(), IE,
+      const LocationContext *CalleeCtx = LC;
+      if (CallerCtx != CalleeCtx && shouldAddPathEdges()) {
+        reversePropagateInterestingSymbols(*getBugReport(), IE,
             N->getState().get(), CalleeCtx);
       }
     }
 
     // Are we jumping to the head of a loop?  Add a special diagnostic.
     if (const Stmt *Loop = BE->getSrc()->getLoopTarget()) {
-      PathDiagnosticLocation L(Loop, SM, PDB.LC);
+      PathDiagnosticLocation L(Loop, SM, LC);
       const Stmt *Body = nullptr;
 
       if (const auto *FS = dyn_cast<ForStmt>(Loop))
@@ -1207,17 +1219,17 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
           "of the loop");
       p->setPrunable(true);
 
-      addEdgeToPath(PD.getActivePath(), PrevLoc, p->getLocation());
-      PD.getActivePath().push_front(std::move(p));
+      addEdgeToPath(PD->getActivePath(), PrevLoc, p->getLocation());
+      PD->getActivePath().push_front(std::move(p));
 
       if (const auto *CS = dyn_cast_or_null<CompoundStmt>(Body)) {
-        addEdgeToPath(PD.getActivePath(), PrevLoc,
+        addEdgeToPath(PD->getActivePath(), PrevLoc,
             PathDiagnosticLocation::createEndBrace(CS, SM));
       }
     }
 
     const CFGBlock *BSrc = BE->getSrc();
-    const ParentMap &PM = PDB.getParentMap();
+    const ParentMap &PM = getParentMap();
 
     if (const Stmt *Term = BSrc->getTerminatorStmt()) {
       // Are we jumping past the loop body without ever executing the
@@ -1244,17 +1256,17 @@ static void generatePathDiagnosticsForNode(const ExplodedNode *N,
         }
 
         if (!str.empty()) {
-          PathDiagnosticLocation L(TermCond ? TermCond : Term, SM, PDB.LC);
+          PathDiagnosticLocation L(TermCond ? TermCond : Term, SM, LC);
           auto PE = std::make_shared<PathDiagnosticEventPiece>(L, str);
           PE->setPrunable(true);
-          addEdgeToPath(PD.getActivePath(), PrevLoc,
+          addEdgeToPath(PD->getActivePath(), PrevLoc,
               PE->getLocation());
-          PD.getActivePath().push_front(std::move(PE));
+          PD->getActivePath().push_front(std::move(PE));
         }
       } else if (isa<BreakStmt>(Term) || isa<ContinueStmt>(Term) ||
           isa<GotoStmt>(Term)) {
-        PathDiagnosticLocation L(Term, SM, PDB.LC);
-        addEdgeToPath(PD.getActivePath(), PrevLoc, L);
+        PathDiagnosticLocation L(Term, SM, LC);
+        addEdgeToPath(PD->getActivePath(), PrevLoc, L);
       }
     }
   }
@@ -1904,6 +1916,15 @@ static void updateExecutedLinesWithDiagnosticPieces(PathDiagnostic &PD) {
   }
 }
 
+PathDiagnosticBuilder::PathDiagnosticBuilder(
+    const BugReporterContext &BRC, BugReport *r,
+    const PathDiagnosticConsumer *pdc, const ExplodedNode *ErrorNode,
+    const VisitorsDiagnosticsTy &VisitorsDiagnostics)
+      : BugReporterContext(BRC), R(r), PDC(pdc), ErrorNode(ErrorNode),
+        VisitorsDiagnostics(VisitorsDiagnostics),
+        PD(generateEmptyDiagnosticForReport(R, getSourceManager())),
+        LC(r->getErrorNode()->getLocationContext()) {}
+
 /// This function is responsible for generating diagnostic pieces that are
 /// *not* provided by bug report visitors.
 /// These diagnostics may differ depending on the consumer's settings,
@@ -1918,19 +1939,11 @@ static void updateExecutedLinesWithDiagnosticPieces(PathDiagnostic &PD) {
 /// the transitions in words.
 std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
 
-  PathDiagnosticConsumer::PathGenerationScheme ActiveScheme =
-      PDC->getGenerationScheme();
-  bool GenerateDiagnostics = (ActiveScheme != PathDiagnosticConsumer::None);
-  bool AddPathEdges = (ActiveScheme == PathDiagnosticConsumer::Extensive);
   const SourceManager &SM = getSourceManager();
   const BugReport *R = getBugReport();
   const AnalyzerOptions &Opts = getBugReporter().getAnalyzerOptions();
-  StackDiagVector CallStack;
-  InterestingExprs IE;
-  LocationContextMap LCM;
-  std::unique_ptr<PathDiagnostic> PD = generateEmptyDiagnosticForReport(R, SM);
 
-  if (GenerateDiagnostics) {
+  if (shouldGenerateDiagnostics()) {
     auto EndNotes = VisitorsDiagnostics.find(ErrorNode);
     PathDiagnosticPieceRef LastPiece;
     if (EndNotes != VisitorsDiagnostics.end()) {
@@ -1946,13 +1959,12 @@ std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
   PathDiagnosticLocation PrevLoc = PD->getLocation();
   const ExplodedNode *NextNode = ErrorNode->getFirstPred();
   while (NextNode) {
-    if (GenerateDiagnostics)
-      generatePathDiagnosticsForNode(
-          NextNode, *PD, PrevLoc, *this, LCM, CallStack, IE, AddPathEdges);
+    if (shouldGenerateDiagnostics())
+      generatePathDiagnosticsForNode(NextNode, PrevLoc);
 
     auto VisitorNotes = VisitorsDiagnostics.find(NextNode);
     NextNode = NextNode->getFirstPred();
-    if (!GenerateDiagnostics || VisitorNotes == VisitorsDiagnostics.end())
+    if (!shouldGenerateDiagnostics() || VisitorNotes == VisitorsDiagnostics.end())
       continue;
 
     // This is a workaround due to inability to put shared PathDiagnosticPiece
@@ -1966,14 +1978,14 @@ std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
       if (!DeduplicationSet.insert(ID).second)
         continue;
 
-      if (AddPathEdges)
+      if (shouldAddPathEdges())
         addEdgeToPath(PD->getActivePath(), PrevLoc, Note->getLocation());
       updateStackPiecesWithMessage(*Note, CallStack);
       PD->getActivePath().push_front(Note);
     }
   }
 
-  if (AddPathEdges) {
+  if (shouldAddPathEdges()) {
     // Add an edge to the start of the function.
     // We'll prune it out later, but it helps make diagnostics more uniform.
     const StackFrameContext *CalleeLC = LC->getStackFrame();
@@ -2000,7 +2012,7 @@ std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
     adjustCallLocations(PD->getMutablePieces());
     removePiecesWithInvalidLocations(PD->getMutablePieces());
 
-    if (AddPathEdges) {
+    if (shouldAddPathEdges()) {
 
       // Reduce the number of edges from a very conservative set
       // to an aesthetically pleasing subset that conveys the
@@ -2020,10 +2032,10 @@ std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
     removeEdgesToDefaultInitializers(PD->getMutablePieces());
   }
 
-  if (GenerateDiagnostics && Opts.ShouldDisplayMacroExpansions)
+  if (shouldGenerateDiagnostics() && Opts.ShouldDisplayMacroExpansions)
     CompactMacroExpandedPieces(PD->getMutablePieces(), SM);
 
-  return PD;
+  return std::move(PD);
 }
 
 
