@@ -381,10 +381,8 @@ class PathDiagnosticBuilder : public BugReporterContext {
   LocationContextMap LCM;
 
   std::unique_ptr<PathDiagnostic> PD;
-  const LocationContext *LC;
 
 public:
-
   PathDiagnosticBuilder(const BugReporterContext &BRC, BugReport *r,
                         const PathDiagnosticConsumer *pdc,
                         const ExplodedNode *ErrorNode,
@@ -411,6 +409,10 @@ public:
   void generatePathDiagnosticsForNode(const ExplodedNode *N,
                                       PathDiagnosticLocation &PrevLoc);
 
+  const LocationContext *getCurrLocationContext() const {
+    return LCM.find(&PD->getActivePath())->getSecond();
+  }
+
   PathDiagnosticLocation ExecutionContinues(const ExplodedNode *N) const;
 
   PathDiagnosticLocation ExecutionContinues(llvm::raw_string_ostream &os,
@@ -420,7 +422,9 @@ public:
 
   const Decl &getCodeDecl() const { return ErrorNode->getCodeDecl(); }
 
-  const ParentMap& getParentMap() const { return LC->getParentMap(); }
+  const ParentMap& getParentMap() const {
+    return getCurrLocationContext()->getParentMap();
+  }
 
   const Stmt *getParent(const Stmt *S) const {
     return getParentMap().getParent(S);
@@ -450,7 +454,8 @@ public:
 PathDiagnosticLocation
 PathDiagnosticBuilder::ExecutionContinues(const ExplodedNode *N) const {
   if (const Stmt *S = PathDiagnosticLocation::getNextStmt(N))
-    return PathDiagnosticLocation(S, getSourceManager(), LC);
+    return PathDiagnosticLocation(
+        S, getSourceManager(), getCurrLocationContext());
 
   return PathDiagnosticLocation::createDeclEnd(N->getLocationContext(),
                                                getSourceManager());
@@ -579,7 +584,8 @@ getEnclosingStmtLocation(const Stmt *S, const SourceManager &SMgr,
 PathDiagnosticLocation
 PathDiagnosticBuilder::getEnclosingStmtLocation(const Stmt *S) const {
   assert(S && "Null Stmt passed to getEnclosingStmtLocation");
-  return ::getEnclosingStmtLocation(S, getSourceManager(), getParentMap(), LC,
+  return ::getEnclosingStmtLocation(S, getSourceManager(), getParentMap(),
+                                    getCurrLocationContext(),
                                     /*allowNestedContexts=*/false);
 }
 
@@ -1121,17 +1127,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     return;
   }
 
-
-  if (shouldAddPathEdges()) {
-    // Query the location context here and the previous location
-    // as processing CallEnter may change the active path.
-    LC = N->getLocationContext();
-
-    // Record the mapping from the active path to the location
-    // context.
-    assert(LCM[&PD->getActivePath()] == LC);
-    LCM[&PD->getActivePath()] = LC;
-  }
+  assert(getCurrLocationContext() == N->getLocationContext());
 
   // Have we encountered an exit from a function call?
   if (Optional<CallExitEnd> CE = P.getAs<CallExitEnd>()) {
@@ -1183,7 +1179,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     // as a terminator and as a terminator condition.
     if (!isa<ObjCForCollectionStmt>(PS->getStmt())) {
       PathDiagnosticLocation L =
-        PathDiagnosticLocation(PS->getStmt(), SM, LC);
+        PathDiagnosticLocation(PS->getStmt(), SM, getCurrLocationContext());
       addEdgeToPath(PD->getActivePath(), PrevLoc, L);
     }
 
@@ -1198,7 +1194,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     // interesting symbols across call boundaries.
     if (const ExplodedNode *NextNode = N->getFirstPred()) {
       const LocationContext *CallerCtx = NextNode->getLocationContext();
-      const LocationContext *CalleeCtx = LC;
+      const LocationContext *CalleeCtx = getCurrLocationContext();
       if (CallerCtx != CalleeCtx && shouldAddPathEdges()) {
         reversePropagateInterestingSymbols(*getBugReport(), IE,
             N->getState().get(), CalleeCtx);
@@ -1207,7 +1203,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
 
     // Are we jumping to the head of a loop?  Add a special diagnostic.
     if (const Stmt *Loop = BE->getSrc()->getLoopTarget()) {
-      PathDiagnosticLocation L(Loop, SM, LC);
+      PathDiagnosticLocation L(Loop, SM, getCurrLocationContext());
       const Stmt *Body = nullptr;
 
       if (const auto *FS = dyn_cast<ForStmt>(Loop))
@@ -1263,7 +1259,8 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
         }
 
         if (!str.empty()) {
-          PathDiagnosticLocation L(TermCond ? TermCond : Term, SM, LC);
+          PathDiagnosticLocation L(TermCond ?
+              TermCond : Term, SM, getCurrLocationContext());
           auto PE = std::make_shared<PathDiagnosticEventPiece>(L, str);
           PE->setPrunable(true);
           addEdgeToPath(PD->getActivePath(), PrevLoc,
@@ -1272,7 +1269,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
         }
       } else if (isa<BreakStmt>(Term) || isa<ContinueStmt>(Term) ||
           isa<GotoStmt>(Term)) {
-        PathDiagnosticLocation L(Term, SM, LC);
+        PathDiagnosticLocation L(Term, SM, getCurrLocationContext());
         addEdgeToPath(PD->getActivePath(), PrevLoc, L);
       }
     }
@@ -1929,9 +1926,8 @@ PathDiagnosticBuilder::PathDiagnosticBuilder(
     const VisitorsDiagnosticsTy &VisitorsDiagnostics)
       : BugReporterContext(BRC), R(r), PDC(pdc), ErrorNode(ErrorNode),
         VisitorsDiagnostics(VisitorsDiagnostics),
-        PD(generateEmptyDiagnosticForReport(R, getSourceManager())),
-        LC(r->getErrorNode()->getLocationContext()) {
-  LCM[&PD->getActivePath()] = LC;
+        PD(generateEmptyDiagnosticForReport(R, getSourceManager())) {
+  LCM[&PD->getActivePath()] = ErrorNode->getLocationContext();
 }
 
 std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
@@ -1986,7 +1982,8 @@ std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
   if (shouldAddPathEdges()) {
     // Add an edge to the start of the function.
     // We'll prune it out later, but it helps make diagnostics more uniform.
-    const StackFrameContext *CalleeLC = LC->getStackFrame();
+    const StackFrameContext *CalleeLC =
+        getCurrLocationContext()->getStackFrame();
     const Decl *D = CalleeLC->getDecl();
     addEdgeToPath(PD->getActivePath(), PrevLoc,
                   PathDiagnosticLocation::createBegin(D, SM));
