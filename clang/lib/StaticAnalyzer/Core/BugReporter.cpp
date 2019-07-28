@@ -1092,30 +1092,22 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     if (VisitedEntireCall) {
       C = cast<PathDiagnosticCallPiece>(PD->getActivePath().front().get());
     } else {
+      // The path terminated within a nested location context, create a new
+      // call piece to encapsulate the rest of the path pieces.
       const Decl *Caller = CE->getLocationContext()->getDecl();
       C = PathDiagnosticCallPiece::construct(PD->getActivePath(), Caller);
+      assert(PD->getActivePath().size() == 1 &&
+             PD->getActivePath().front().get() == C);
 
-      if (shouldAddPathEdges()) {
-        // Since we just transferred the path over to the call piece,
-        // reset the mapping from active to location context.
-        assert(PD->getActivePath().size() == 1 &&
-            PD->getActivePath().front().get() == C);
-        LCM[&PD->getActivePath()] = nullptr;
-      }
+      // Since we just transferred the path over to the call piece, reset the 
+      // mapping of the active path to the current location context.
+      LCM[&PD->getActivePath()] = N->getLocationContext();
 
-      // Record the location context mapping for the path within
-      // the call.
-      assert(LCM[&C->path] == nullptr ||
-          LCM[&C->path] == CE->getCalleeContext());
+      // Record the location context mapping for the path within the call.
+      assert(!LCM.count(&C->path) &&
+             "If we didn't visit an entire call, this must've been the first "
+             "time we encounter the caller context!");
       LCM[&C->path] = CE->getCalleeContext();
-
-      // If this is the first item in the active path, record
-      // the new mapping from active path to location context.
-      const LocationContext *&NewLC = LCM[&PD->getActivePath()];
-      if (!NewLC)
-        NewLC = N->getLocationContext();
-
-      LC = NewLC;
     }
     C->setCallee(*CE, SM);
 
@@ -1137,7 +1129,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
 
     // Record the mapping from the active path to the location
     // context.
-    assert(!LCM[&PD->getActivePath()] || LCM[&PD->getActivePath()] == LC);
+    assert(LCM[&PD->getActivePath()] == LC);
     LCM[&PD->getActivePath()] = LC;
   }
 
@@ -1148,6 +1140,9 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     // a new call piece to contain the path pieces for that call.
     auto C = PathDiagnosticCallPiece::construct(*CE, SM);
     // Record the mapping from call piece to LocationContext.
+    assert(!LCM.count(&C->path) &&
+           "We just entered a call, this must've been the first time we "
+           "encounter its context!");
     LCM[&C->path] = CE->getCalleeContext();
 
     if (shouldAddPathEdges()) {
@@ -1935,7 +1930,9 @@ PathDiagnosticBuilder::PathDiagnosticBuilder(
       : BugReporterContext(BRC), R(r), PDC(pdc), ErrorNode(ErrorNode),
         VisitorsDiagnostics(VisitorsDiagnostics),
         PD(generateEmptyDiagnosticForReport(R, getSourceManager())),
-        LC(r->getErrorNode()->getLocationContext()) {}
+        LC(r->getErrorNode()->getLocationContext()) {
+  LCM[&PD->getActivePath()] = LC;
+}
 
 std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
 
