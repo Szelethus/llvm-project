@@ -1107,12 +1107,16 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
 
       // Since we just transferred the path over to the call piece, reset the 
       // mapping of the active path to the current location context.
+      assert(LCM.count(&PD->getActivePath()) &&
+             "When we ascend to a previously unvisited call, the active path's "
+             "address shouldn't change, but rather should be compacted into "
+             "a single CallEvent!");
       LCM[&PD->getActivePath()] = N->getLocationContext();
 
       // Record the location context mapping for the path within the call.
       assert(!LCM.count(&C->path) &&
-             "If we didn't visit an entire call, this must've been the first "
-             "time we encounter the caller context!");
+             "When we ascend to a previously unvisited call, this must be the "
+             "first time we encounter the caller context!");
       LCM[&C->path] = CE->getCalleeContext();
     }
     C->setCallee(*CE, SM);
