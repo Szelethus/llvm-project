@@ -381,15 +381,27 @@ class PathDiagnosticBuilder : public BugReporterContext {
   LocationContextMap LCM;
 
   std::unique_ptr<PathDiagnostic> PD;
+  const LocationContext *LC;
 
 public:
-  const LocationContext *LC;
 
   PathDiagnosticBuilder(const BugReporterContext &BRC, BugReport *r,
                         const PathDiagnosticConsumer *pdc,
                         const ExplodedNode *ErrorNode,
                         const VisitorsDiagnosticsTy &VisitorsDiagnostics);
 
+  /// This function is responsible for generating diagnostic pieces that are
+  /// *not* provided by bug report visitors.
+  /// These diagnostics may differ depending on the consumer's settings,
+  /// and are therefore constructed separately for each consumer.
+  ///
+  /// There are two path diagnostics generation modes: with adding edges (used
+  /// for plists) and without  (used for HTML and text).
+  /// When edges are added (\p ActiveScheme is Extensive),
+  /// the path is modified to insert artificially generated
+  /// edges.
+  /// Otherwise, more detailed diagnostics is emitted for block edges,
+  /// explaining the transitions in words.
   std::unique_ptr<PathDiagnostic> generate();
 
   /// Generate diagnostics for the node \p N,
@@ -406,7 +418,7 @@ public:
 
   BugReport *getBugReport() { return R; }
 
-  const Decl &getCodeDecl() const { return R->getErrorNode()->getCodeDecl(); }
+  const Decl &getCodeDecl() const { return ErrorNode->getCodeDecl(); }
 
   const ParentMap& getParentMap() const { return LC->getParentMap(); }
 
@@ -417,11 +429,11 @@ public:
   PathDiagnosticLocation getEnclosingStmtLocation(const Stmt *S) const;
 
   PathDiagnosticConsumer::PathGenerationScheme getGenerationScheme() const {
-    return PDC ? PDC->getGenerationScheme() : PathDiagnosticConsumer::Minimal;
+    return PDC->getGenerationScheme();
   }
 
   bool supportsLogicalOpControlFlow() const {
-    return PDC ? PDC->supportsLogicalOpControlFlow() : true;
+    return PDC->supportsLogicalOpControlFlow();
   }
 
   bool shouldGenerateDiagnostics() const {
@@ -1925,18 +1937,6 @@ PathDiagnosticBuilder::PathDiagnosticBuilder(
         PD(generateEmptyDiagnosticForReport(R, getSourceManager())),
         LC(r->getErrorNode()->getLocationContext()) {}
 
-/// This function is responsible for generating diagnostic pieces that are
-/// *not* provided by bug report visitors.
-/// These diagnostics may differ depending on the consumer's settings,
-/// and are therefore constructed separately for each consumer.
-///
-/// There are two path diagnostics generation modes: with adding edges (used
-/// for plists) and without  (used for HTML and text).
-/// When edges are added (\p ActiveScheme is Extensive),
-/// the path is modified to insert artificially generated
-/// edges.
-/// Otherwise, more detailed diagnostics is emitted for block edges, explaining
-/// the transitions in words.
 std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
 
   const SourceManager &SM = getSourceManager();
@@ -1964,7 +1964,8 @@ std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
 
     auto VisitorNotes = VisitorsDiagnostics.find(NextNode);
     NextNode = NextNode->getFirstPred();
-    if (!shouldGenerateDiagnostics() || VisitorNotes == VisitorsDiagnostics.end())
+    if (!shouldGenerateDiagnostics() ||
+        VisitorNotes == VisitorsDiagnostics.end())
       continue;
 
     // This is a workaround due to inability to put shared PathDiagnosticPiece
