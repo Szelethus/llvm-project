@@ -377,7 +377,6 @@ class PathDiagnosticBuilder : public BugReporterContext {
   const ExplodedNode *ErrorNode;
   const VisitorsDiagnosticsTy &VisitorsDiagnostics;
   StackDiagVector CallStack;
-  InterestingExprs IE;
   LocationContextMap LCM;
 
   std::unique_ptr<PathDiagnostic> PD;
@@ -880,63 +879,6 @@ void generateMinimalDiagForBlockEdge(const ExplodedNode *N, BlockEdge BE,
   }
 }
 
-static void reversePropagateInterestingSymbols(BugReport &R,
-                                               InterestingExprs &IE,
-                                               const ProgramState *State,
-                                               const Expr *Ex,
-                                               const LocationContext *LCtx) {
-  SVal V = State->getSVal(Ex, LCtx);
-  if (!(R.isInteresting(V) || IE.count(Ex)))
-    return;
-
-  switch (Ex->getStmtClass()) {
-  default:
-    if (!isa<CastExpr>(Ex))
-      break;
-    LLVM_FALLTHROUGH;
-  case Stmt::BinaryOperatorClass:
-  case Stmt::UnaryOperatorClass:
-    for (const Stmt *SubStmt : Ex->children()) {
-      if (const auto *child = dyn_cast_or_null<Expr>(SubStmt)) {
-        IE.insert(child);
-        SVal ChildV = State->getSVal(child, LCtx);
-        R.markInteresting(ChildV);
-      }
-    }
-    break;
-  }
-
-  R.markInteresting(V);
-}
-
-static void reversePropagateInterestingSymbols(
-    BugReport &R, InterestingExprs &IE, const ProgramState *State,
-    const LocationContext *CalleeCtx) {
-
-  // FIXME: Handle non-CallExpr-based CallEvents.
-  const StackFrameContext *Callee = CalleeCtx->getStackFrame();
-  const Stmt *CallSite = Callee->getCallSite();
-  const auto *CE = dyn_cast_or_null<CallExpr>(CallSite);
-  const auto *FD = dyn_cast<FunctionDecl>(CalleeCtx->getDecl());
-  if (!CE || !FD)
-    return;
-
-  FunctionDecl::param_const_iterator PI = FD->param_begin(),
-                                     PE = FD->param_end();
-  CallExpr::const_arg_iterator AI = CE->arg_begin(), AE = CE->arg_end();
-
-  for (; AI != AE && PI != PE; ++AI, ++PI) {
-    const Expr *ArgE = *AI;
-    const ParmVarDecl *PD = *PI;
-    if (!ArgE || !PD)
-      continue;
-
-    Loc LV = State->getLValue(PD, CalleeCtx);
-    if (R.isInteresting(LV) || R.isInteresting(State->getRawSVal(LV)))
-      IE.insert(ArgE);
-  }
-}
-
 //===----------------------------------------------------------------------===//
 // Functions for determining if a loop was executed 0 times.
 //===----------------------------------------------------------------------===//
@@ -1147,13 +1089,6 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     LCM[&C->path] = CE->getCalleeContext();
 
     if (shouldAddPathEdges()) {
-      const Stmt *S = CE->getCalleeContext()->getCallSite();
-      // Propagate the interesting symbols accordingly.
-      if (const auto *Ex = dyn_cast_or_null<Expr>(S)) {
-        reversePropagateInterestingSymbols(*getBugReport(), IE,
-            N->getState().get(), Ex,
-            N->getLocationContext());
-      }
       // Add the edge to the return site.
       addEdgeToPath(PD->getActivePath(), PrevLoc, C->callReturn);
       PrevLoc.invalidate();
@@ -1171,14 +1106,6 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
   if (auto PS = P.getAs<PostStmt>()) {
     if (!shouldAddPathEdges())
       return;
-
-    // For expressions, make sure we propagate the
-    // interesting symbols correctly.
-    if (const Expr *Ex = PS->getStmtAs<Expr>())
-      reversePropagateInterestingSymbols(*getBugReport(), IE,
-          N->getState().get(), Ex,
-          N->getLocationContext());
-
     // Add an edge.  If this is an ObjCForCollectionStmt do
     // not add an edge here as it appears in the CFG both
     // as a terminator and as a terminator condition.
@@ -1193,17 +1120,6 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     if (!shouldAddPathEdges()) {
       generateMinimalDiagForBlockEdge(N, *BE, SM, *this, *PD);
       return;
-    }
-
-    // Does this represent entering a call?  If so, look at propagating
-    // interesting symbols across call boundaries.
-    if (const ExplodedNode *NextNode = N->getFirstPred()) {
-      const LocationContext *CallerCtx = NextNode->getLocationContext();
-      const LocationContext *CalleeCtx = getCurrLocationContext();
-      if (CallerCtx != CalleeCtx && shouldAddPathEdges()) {
-        reversePropagateInterestingSymbols(*getBugReport(), IE,
-            N->getState().get(), CalleeCtx);
-      }
     }
 
     // Are we jumping to the head of a loop?  Add a special diagnostic.
