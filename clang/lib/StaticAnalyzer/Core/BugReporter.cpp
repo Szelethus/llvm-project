@@ -880,59 +880,60 @@ void generateMinimalDiagForBlockEdge(const ExplodedNode *N, BlockEdge BE,
   }
 }
 
-static void reversePropagateIntererstingSymbols(BugReport &R,
-                                                InterestingExprs &IE,
-                                                const ProgramState *State,
-                                                const Expr *Ex,
-                                                const LocationContext *LCtx) {
+static void reversePropagateInterestingSymbols(BugReport &R,
+                                               InterestingExprs &IE,
+                                               const ProgramState *State,
+                                               const Expr *Ex,
+                                               const LocationContext *LCtx) {
   SVal V = State->getSVal(Ex, LCtx);
   if (!(R.isInteresting(V) || IE.count(Ex)))
     return;
 
   switch (Ex->getStmtClass()) {
-    default:
-      if (!isa<CastExpr>(Ex))
-        break;
-      LLVM_FALLTHROUGH;
-    case Stmt::BinaryOperatorClass:
-    case Stmt::UnaryOperatorClass: {
-      for (const Stmt *SubStmt : Ex->children()) {
-        if (const auto *child = dyn_cast_or_null<Expr>(SubStmt)) {
-          IE.insert(child);
-          SVal ChildV = State->getSVal(child, LCtx);
-          R.markInteresting(ChildV);
-        }
-      }
+  default:
+    if (!isa<CastExpr>(Ex))
       break;
+    LLVM_FALLTHROUGH;
+  case Stmt::BinaryOperatorClass:
+  case Stmt::UnaryOperatorClass:
+    for (const Stmt *SubStmt : Ex->children()) {
+      if (const auto *child = dyn_cast_or_null<Expr>(SubStmt)) {
+        IE.insert(child);
+        SVal ChildV = State->getSVal(child, LCtx);
+        R.markInteresting(ChildV);
+      }
     }
+    break;
   }
 
   R.markInteresting(V);
 }
 
-static void reversePropagateInterestingSymbols(BugReport &R,
-                                               InterestingExprs &IE,
-                                               const ProgramState *State,
-                                               const LocationContext *CalleeCtx)
-{
+static void reversePropagateInterestingSymbols(
+    BugReport &R, InterestingExprs &IE, const ProgramState *State,
+    const LocationContext *CalleeCtx) {
+
   // FIXME: Handle non-CallExpr-based CallEvents.
   const StackFrameContext *Callee = CalleeCtx->getStackFrame();
   const Stmt *CallSite = Callee->getCallSite();
-  if (const auto *CE = dyn_cast_or_null<CallExpr>(CallSite)) {
-    if (const auto *FD = dyn_cast<FunctionDecl>(CalleeCtx->getDecl())) {
-      FunctionDecl::param_const_iterator PI = FD->param_begin(),
-                                         PE = FD->param_end();
-      CallExpr::const_arg_iterator AI = CE->arg_begin(), AE = CE->arg_end();
-      for (; AI != AE && PI != PE; ++AI, ++PI) {
-        if (const Expr *ArgE = *AI) {
-          if (const ParmVarDecl *PD = *PI) {
-            Loc LV = State->getLValue(PD, CalleeCtx);
-            if (R.isInteresting(LV) || R.isInteresting(State->getRawSVal(LV)))
-              IE.insert(ArgE);
-          }
-        }
-      }
-    }
+  const auto *CE = dyn_cast_or_null<CallExpr>(CallSite);
+  const auto *FD = dyn_cast<FunctionDecl>(CalleeCtx->getDecl());
+  if (!CE || !FD)
+    return;
+
+  FunctionDecl::param_const_iterator PI = FD->param_begin(),
+                                     PE = FD->param_end();
+  CallExpr::const_arg_iterator AI = CE->arg_begin(), AE = CE->arg_end();
+
+  for (; AI != AE && PI != PE; ++AI, ++PI) {
+    const Expr *ArgE = *AI;
+    const ParmVarDecl *PD = *PI;
+    if (!ArgE || !PD)
+      continue;
+
+    Loc LV = State->getLValue(PD, CalleeCtx);
+    if (R.isInteresting(LV) || R.isInteresting(State->getRawSVal(LV)))
+      IE.insert(ArgE);
   }
 }
 
@@ -1149,7 +1150,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
       const Stmt *S = CE->getCalleeContext()->getCallSite();
       // Propagate the interesting symbols accordingly.
       if (const auto *Ex = dyn_cast_or_null<Expr>(S)) {
-        reversePropagateIntererstingSymbols(*getBugReport(), IE,
+        reversePropagateInterestingSymbols(*getBugReport(), IE,
             N->getState().get(), Ex,
             N->getLocationContext());
       }
@@ -1174,7 +1175,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     // For expressions, make sure we propagate the
     // interesting symbols correctly.
     if (const Expr *Ex = PS->getStmtAs<Expr>())
-      reversePropagateIntererstingSymbols(*getBugReport(), IE,
+      reversePropagateInterestingSymbols(*getBugReport(), IE,
           N->getState().get(), Ex,
           N->getLocationContext());
 
