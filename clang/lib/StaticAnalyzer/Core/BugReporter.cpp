@@ -372,6 +372,7 @@ using VisitorsDiagnosticsTy =
 using InterestingExprs = llvm::DenseSet<const Expr *>;
 
 class PathDiagnosticBuilder : public BugReporterContext {
+  std::unique_ptr<ExplodedGraph> BugPath;
   BugReport *R;
   const ExplodedNode *ErrorNode;
   std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics;
@@ -401,7 +402,9 @@ public:
   /// edges.
   /// Otherwise, more detailed diagnostics is emitted for block edges,
   /// explaining the transitions in words.
-  PathDiagnosticBuilder(BugReporterContext BRC, BugReport *r,
+  PathDiagnosticBuilder(BugReporterContext BRC,
+                        std::unique_ptr<ExplodedGraph> BugPath,
+                        BugReport *r,
                         const ExplodedNode *ErrorNode,
                         std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics);
 
@@ -1937,9 +1940,11 @@ static void updateExecutedLinesWithDiagnosticPieces(PathDiagnostic &PD) {
 }
 
 PathDiagnosticBuilder::PathDiagnosticBuilder(
-    BugReporterContext BRC, BugReport *r, const ExplodedNode *ErrorNode,
+    BugReporterContext BRC, std::unique_ptr<ExplodedGraph> BugPath,
+    BugReport *r, const ExplodedNode *ErrorNode,
     std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics)
-      : BugReporterContext(BRC), R(r), ErrorNode(ErrorNode),
+      : BugReporterContext(BRC), BugPath(std::move(BugPath)), R(r),
+        ErrorNode(ErrorNode),
         VisitorsDiagnostics(std::move(VisitorsDiagnostics)),
         LC(r->getErrorNode()->getLocationContext()) {}
 
@@ -2276,7 +2281,7 @@ namespace {
 class BugPathInfo {
 public:
   InterExplodedGraphMap MapToOriginNodes;
-  std::unique_ptr<ExplodedGraph> Path;
+  std::unique_ptr<ExplodedGraph> BugPath;
   BugReport *Report;
   const ExplodedNode *ErrorNode;
 };
@@ -2450,7 +2455,7 @@ BugPathInfo *BugPathGetter::getNextBugPath() {
                               PriorityCompare<false>(PriorityMap));
   }
 
-  CurrentBugPath.Path = std::move(GNew);
+  CurrentBugPath.BugPath = std::move(GNew);
 
   return &CurrentBugPath;
 }
@@ -2647,8 +2652,9 @@ Optional<PathDiagnosticBuilder> PathDiagnosticBuilder::findValidReport(
 
       // Check if the bug is still valid
       if (R->isValid())
-        return PathDiagnosticBuilder(std::move(BRC), BugPath->Report, BugPath->ErrorNode,
-                std::move(visitorNotes));
+        return PathDiagnosticBuilder(
+            std::move(BRC), std::move(BugPath->BugPath), BugPath->Report,
+            BugPath->ErrorNode, std::move(visitorNotes));
     }
   }
 
