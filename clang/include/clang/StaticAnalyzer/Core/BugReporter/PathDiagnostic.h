@@ -130,9 +130,7 @@ public:
     return getGenerationScheme() != None;
   }
 
-  bool shouldAddPathEdges() const {
-    return getGenerationScheme() == Extensive;
-  }
+  bool shouldAddPathEdges() const { return getGenerationScheme() == Extensive; }
 
   virtual bool supportsLogicalOpControlFlow() const { return false; }
 

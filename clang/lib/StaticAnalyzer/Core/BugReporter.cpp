@@ -391,14 +391,13 @@ public:
   /// Find a non-invalidated report for a given equivalence class,  and returns
   /// a PathDiagnosticBuilder able to construct bug reports for different
   /// consumers. Returns None if no valid report is found.
-  static Optional<PathDiagnosticBuilder> findValidReport(
-      ArrayRef<BugReport *> &bugReports, GRBugReporter &Reporter);
+  static Optional<PathDiagnosticBuilder>
+  findValidReport(ArrayRef<BugReport *> &bugReports, GRBugReporter &Reporter);
 
-  PathDiagnosticBuilder(BugReporterContext BRC,
-                        std::unique_ptr<ExplodedGraph> BugPath,
-                        BugReport *r,
-                        const ExplodedNode *ErrorNode,
-                        std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics);
+  PathDiagnosticBuilder(
+      BugReporterContext BRC, std::unique_ptr<ExplodedGraph> BugPath,
+      BugReport *r, const ExplodedNode *ErrorNode,
+      std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics);
 
   /// This function is responsible for generating diagnostic pieces that are
   /// *not* provided by bug report visitors.
@@ -421,17 +420,19 @@ private:
                                        const PathDiagnosticConsumer *PDC,
                                        BlockEdge BE);
 
-  PathDiagnosticPieceRef generateDiagForGotoOP(
-      const PathDiagnosticConsumer *PDC, const Stmt *S,
-      PathDiagnosticLocation &Start);
+  PathDiagnosticPieceRef
+  generateDiagForGotoOP(const PathDiagnosticConsumer *PDC, const Stmt *S,
+                        PathDiagnosticLocation &Start);
 
-  PathDiagnosticPieceRef generateDiagForSwitchOP(
-      const PathDiagnosticConsumer *PDC, const ExplodedNode *N,
-      const CFGBlock *Dst, PathDiagnosticLocation &Start);
+  PathDiagnosticPieceRef
+  generateDiagForSwitchOP(const PathDiagnosticConsumer *PDC,
+                          const ExplodedNode *N, const CFGBlock *Dst,
+                          PathDiagnosticLocation &Start);
 
-  PathDiagnosticPieceRef generateDiagForBinaryOP(
-      const ExplodedNode *N, const PathDiagnosticConsumer *PDC, const Stmt *T,
-      const CFGBlock *Src, const CFGBlock *DstC);
+  PathDiagnosticPieceRef
+  generateDiagForBinaryOP(const ExplodedNode *N,
+                          const PathDiagnosticConsumer *PDC, const Stmt *T,
+                          const CFGBlock *Src, const CFGBlock *DstC);
 
   PathDiagnosticLocation ExecutionContinues(const ExplodedNode *N) const;
 
@@ -624,7 +625,6 @@ static void updateStackPiecesWithMessage(PathDiagnosticPiece &P,
 static void CompactMacroExpandedPieces(PathPieces &path,
                                        const SourceManager& SM);
 
-
 PathDiagnosticPieceRef PathDiagnosticBuilder::generateDiagForSwitchOP(
     const PathDiagnosticConsumer *PDC, const ExplodedNode *N,
     const CFGBlock *Dst, PathDiagnosticLocation &Start) {
@@ -683,17 +683,15 @@ PathDiagnosticPieceRef PathDiagnosticBuilder::generateDiagForSwitchOP(
                                                        os.str());
 }
 
-
-PathDiagnosticPieceRef PathDiagnosticBuilder::generateDiagForGotoOP(
-    const PathDiagnosticConsumer *PDC, const Stmt *S,
-    PathDiagnosticLocation &Start) {
-    std::string sbuf;
-    llvm::raw_string_ostream os(sbuf);
-    const PathDiagnosticLocation &End = getEnclosingStmtLocation(S);
-    os << "Control jumps to line " << End.asLocation().getExpansionLineNumber();
-    return std::make_shared<PathDiagnosticControlFlowPiece>(
-        Start, End, os.str());
-
+PathDiagnosticPieceRef
+PathDiagnosticBuilder::generateDiagForGotoOP(const PathDiagnosticConsumer *PDC,
+                                             const Stmt *S,
+                                             PathDiagnosticLocation &Start) {
+  std::string sbuf;
+  llvm::raw_string_ostream os(sbuf);
+  const PathDiagnosticLocation &End = getEnclosingStmtLocation(S);
+  os << "Control jumps to line " << End.asLocation().getExpansionLineNumber();
+  return std::make_shared<PathDiagnosticControlFlowPiece>(Start, End, os.str());
 }
 
 PathDiagnosticPieceRef PathDiagnosticBuilder::generateDiagForBinaryOP(
@@ -1083,7 +1081,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     const ExplodedNode *N, const PathDiagnosticConsumer *PDC,
     PathDiagnosticLocation &PrevLoc) {
   ProgramPoint P = N->getLocation();
-  const SourceManager& SM = getSourceManager();
+  const SourceManager &SM = getSourceManager();
 
   // Have we encountered an entrance to a call?  It may be
   // the case that we have not encountered a matching
@@ -1103,7 +1101,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
       // not from declaration.
       if (D->hasBody())
         addEdgeToPath(PD->getActivePath(), PrevLoc,
-            PathDiagnosticLocation::createBegin(D, SM));
+                      PathDiagnosticLocation::createBegin(D, SM));
     }
 
     // Did we visit an entire call?
@@ -1121,7 +1119,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
         // Since we just transferred the path over to the call piece,
         // reset the mapping from active to location context.
         assert(PD->getActivePath().size() == 1 &&
-            PD->getActivePath().front().get() == C);
+               PD->getActivePath().front().get() == C);
         LCM[&PD->getActivePath()] = nullptr;
       }
 
@@ -1151,7 +1149,6 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     return;
   }
 
-
   if (PDC->shouldAddPathEdges()) {
     // Query the location context here and the previous location
     // as processing CallEnter may change the active path.
@@ -1177,8 +1174,8 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
       // Propagate the interesting symbols accordingly.
       if (const auto *Ex = dyn_cast_or_null<Expr>(S)) {
         reversePropagateIntererstingSymbols(*getBugReport(), IE,
-            N->getState().get(), Ex,
-            N->getLocationContext());
+                                            N->getState().get(), Ex,
+                                            N->getLocationContext());
       }
       // Add the edge to the return site.
       addEdgeToPath(PD->getActivePath(), PrevLoc, C->callReturn);
@@ -1202,15 +1199,14 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     // interesting symbols correctly.
     if (const Expr *Ex = PS->getStmtAs<Expr>())
       reversePropagateIntererstingSymbols(*getBugReport(), IE,
-          N->getState().get(), Ex,
-          N->getLocationContext());
+                                          N->getState().get(), Ex,
+                                          N->getLocationContext());
 
     // Add an edge.  If this is an ObjCForCollectionStmt do
     // not add an edge here as it appears in the CFG both
     // as a terminator and as a terminator condition.
     if (!isa<ObjCForCollectionStmt>(PS->getStmt())) {
-      PathDiagnosticLocation L =
-        PathDiagnosticLocation(PS->getStmt(), SM, LC);
+      PathDiagnosticLocation L = PathDiagnosticLocation(PS->getStmt(), SM, LC);
       addEdgeToPath(PD->getActivePath(), PrevLoc, L);
     }
 
@@ -1228,7 +1224,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
       const LocationContext *CalleeCtx = LC;
       if (CallerCtx != CalleeCtx && PDC->shouldAddPathEdges()) {
         reversePropagateInterestingSymbols(*getBugReport(), IE,
-            N->getState().get(), CalleeCtx);
+                                           N->getState().get(), CalleeCtx);
       }
     }
 
@@ -1258,7 +1254,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
 
       if (const auto *CS = dyn_cast_or_null<CompoundStmt>(Body)) {
         addEdgeToPath(PD->getActivePath(), PrevLoc,
-            PathDiagnosticLocation::createEndBrace(CS, SM));
+                      PathDiagnosticLocation::createEndBrace(CS, SM));
       }
     }
 
@@ -1293,8 +1289,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
           PathDiagnosticLocation L(TermCond ? TermCond : Term, SM, LC);
           auto PE = std::make_shared<PathDiagnosticEventPiece>(L, str);
           PE->setPrunable(true);
-          addEdgeToPath(PD->getActivePath(), PrevLoc,
-              PE->getLocation());
+          addEdgeToPath(PD->getActivePath(), PrevLoc, PE->getLocation());
           PD->getActivePath().push_front(std::move(PE));
         }
       } else if (isa<BreakStmt>(Term) || isa<ContinueStmt>(Term) ||
@@ -1954,13 +1949,12 @@ PathDiagnosticBuilder::PathDiagnosticBuilder(
     BugReporterContext BRC, std::unique_ptr<ExplodedGraph> BugPath,
     BugReport *r, const ExplodedNode *ErrorNode,
     std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics)
-      : BugReporterContext(BRC), BugPath(std::move(BugPath)), R(r),
-        ErrorNode(ErrorNode),
-        VisitorsDiagnostics(std::move(VisitorsDiagnostics)),
-        LC(r->getErrorNode()->getLocationContext()) {}
+    : BugReporterContext(BRC), BugPath(std::move(BugPath)), R(r),
+      ErrorNode(ErrorNode), VisitorsDiagnostics(std::move(VisitorsDiagnostics)),
+      LC(r->getErrorNode()->getLocationContext()) {}
 
-std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate(
-    const PathDiagnosticConsumer *PDC) {
+std::unique_ptr<PathDiagnostic>
+PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) {
 
   assert(!PD);
   PD = generateEmptyDiagnosticForReport(R, getSourceManager());
@@ -2622,8 +2616,9 @@ generateVisitorsDiagnostics(BugReport *R, const ExplodedNode *ErrorNode,
   return Notes;
 }
 
-Optional<PathDiagnosticBuilder> PathDiagnosticBuilder::findValidReport(
-    ArrayRef<BugReport *> &bugReports, GRBugReporter &Reporter) {
+Optional<PathDiagnosticBuilder>
+PathDiagnosticBuilder::findValidReport(ArrayRef<BugReport *> &bugReports,
+                                       GRBugReporter &Reporter) {
 
   BugPathGetter BugGraph(&Reporter.getGraph(), bugReports);
 
