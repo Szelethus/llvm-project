@@ -355,32 +355,36 @@ using StackDiagPair =
     std::pair<PathDiagnosticCallPiece *, const ExplodedNode *>;
 using StackDiagVector = SmallVector<StackDiagPair, 6>;
 
+/// Map from each node to the diagnostic pieces visitors emit for them.
 using VisitorsDiagnosticsTy =
     llvm::DenseMap<const ExplodedNode *, std::vector<PathDiagnosticPieceRef>>;
 
-// Cone-of-influence: support the reverse propagation of "interesting" symbols
-// and values by tracing interesting calculations backwards through evaluated
-// expressions along a path.  This is probably overly complicated, but the idea
-// is that if an expression computed an "interesting" value, the child
-// expressions are also likely to be "interesting" as well (which then
-// propagates to the values they in turn compute).  This reverse propagation
-// is needed to track interesting correlations across function call boundaries,
-// where formal arguments bind to actual arguments, etc.  This is also needed
-// because the constraint solver sometimes simplifies certain symbolic values
-// into constants when appropriate, and this complicates reasoning about
-// interesting values.
 using InterestingExprs = llvm::DenseSet<const Expr *>;
 
 class PathDiagnosticBuilder : public BugReporterContext {
+  /// A linear path from the error node to the root.
   std::unique_ptr<ExplodedGraph> BugPath;
   BugReport *R;
+  /// The leaf of the bug path. This isn't the same as the bug reports error
+  /// node, which refers to the *original* graph, not the bug path.
   const ExplodedNode *ErrorNode;
+  /// The diagnostic pieces visitors emitted, which is expected to be collected
+  /// by the time this builder is constructed.
   std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics;
+
+  /// We keep stack of calls to functions as we're ascending the bug path.
+  /// TODO: PathDiagnostic has a stack doing the same thing, shouldn't we use
+  /// that instead?
   StackDiagVector CallStack;
   InterestingExprs IE;
+  /// A mapping from parts of the bug path (for example, a function call, which
+  /// would span backwards from a CallExit to a CallEnter with the nodes in
+  /// between them) with the location contexts it is associated with.
   LocationContextMap LCM;
-
+  /// The bug report we're constructing.
   std::unique_ptr<PathDiagnostic> PD;
+  /// FIXME: Get rid of this. This is some sort of caching, and is always equal
+  /// to LCM[&PD->getActivaPath()], but causes more complexity then added value.
   const LocationContext *LC;
 
 public:
@@ -390,30 +394,25 @@ public:
   static Optional<PathDiagnosticBuilder> findValidReport(
       ArrayRef<BugReport *> &bugReports, GRBugReporter &Reporter);
 
-  /// This function is responsible for generating diagnostic pieces that are
-  /// *not* provided by bug report visitors.
-  /// These diagnostics may differ depending on the consumer's settings,
-  /// and are therefore constructed separately for each consumer.
-  ///
-  /// There are two path diagnostics generation modes: with adding edges (used
-  /// for plists) and without  (used for HTML and text).
-  /// When edges are added (\p ActiveScheme is Extensive),
-  /// the path is modified to insert artificially generated
-  /// edges.
-  /// Otherwise, more detailed diagnostics is emitted for block edges,
-  /// explaining the transitions in words.
   PathDiagnosticBuilder(BugReporterContext BRC,
                         std::unique_ptr<ExplodedGraph> BugPath,
                         BugReport *r,
                         const ExplodedNode *ErrorNode,
                         std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics);
 
+  /// This function is responsible for generating diagnostic pieces that are
+  /// *not* provided by bug report visitors.
+  /// These diagnostics may differ depending on the consumer's settings,
+  /// and are therefore constructed separately for each consumer.
+  ///
+  /// There are two path diagnostics generation modes: with adding edges (used
+  /// for plists) and without  (used for HTML and text). When edges are added,
+  /// the path is modified to insert artificially generated edges.
+  /// Otherwise, more detailed diagnostics is emitted for block edges,
+  /// explaining the transitions in words.
   std::unique_ptr<PathDiagnostic> generate(const PathDiagnosticConsumer *PDC);
 
-  /// Generate diagnostics for the node \p N,
-  /// and write it into \p PD.
-  /// \p AddPathEdges Whether diagnostic consumer can generate path arrows
-  /// showing both row and column.
+private:
   void generatePathDiagnosticsForNode(const ExplodedNode *N,
                                       const PathDiagnosticConsumer *PDC,
                                       PathDiagnosticLocation &PrevLoc);
@@ -883,6 +882,18 @@ void PathDiagnosticBuilder::generateMinimalDiagForBlockEdge(
   }
   }
 }
+
+// Cone-of-influence: support the reverse propagation of "interesting" symbols
+// and values by tracing interesting calculations backwards through evaluated
+// expressions along a path.  This is probably overly complicated, but the idea
+// is that if an expression computed an "interesting" value, the child
+// expressions are also likely to be "interesting" as well (which then
+// propagates to the values they in turn compute).  This reverse propagation
+// is needed to track interesting correlations across function call boundaries,
+// where formal arguments bind to actual arguments, etc.  This is also needed
+// because the constraint solver sometimes simplifies certain symbolic values
+// into constants when appropriate, and this complicates reasoning about
+// interesting values.
 
 static void reversePropagateIntererstingSymbols(BugReport &R,
                                                 InterestingExprs &IE,
