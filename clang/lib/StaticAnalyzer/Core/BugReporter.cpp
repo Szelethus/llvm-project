@@ -384,12 +384,6 @@ class PathDiagnosticBuilder : public BugReporterContext {
   const LocationContext *LC;
 
 public:
-
-  PathDiagnosticBuilder(const BugReporterContext &BRC, BugReport *r,
-                        const PathDiagnosticConsumer *pdc,
-                        const ExplodedNode *ErrorNode,
-                        const VisitorsDiagnosticsTy &VisitorsDiagnostics);
-
   /// This function is responsible for generating diagnostic pieces that are
   /// *not* provided by bug report visitors.
   /// These diagnostics may differ depending on the consumer's settings,
@@ -402,6 +396,11 @@ public:
   /// edges.
   /// Otherwise, more detailed diagnostics is emitted for block edges,
   /// explaining the transitions in words.
+  PathDiagnosticBuilder(const BugReporterContext &BRC, BugReport *r,
+                        const PathDiagnosticConsumer *pdc,
+                        const ExplodedNode *ErrorNode,
+                        const VisitorsDiagnosticsTy &VisitorsDiagnostics);
+
   std::unique_ptr<PathDiagnostic> generate();
 
   /// Generate diagnostics for the node \p N,
@@ -587,10 +586,18 @@ PathDiagnosticBuilder::getEnclosingStmtLocation(const Stmt *S) const {
 // "Minimal" path diagnostic generation algorithm.
 //===----------------------------------------------------------------------===//
 
+/// If the piece contains a special message, add it to all the call pieces on
+/// the active stack. For exampler, my_malloc allocated memory, so MallocChecker
+/// will construct an event at the call to malloc(), and add a stack hint that
+/// an allocated memory was returned. We'll use this hint to construct a message
+/// when returning from the call to my_malloc
+///
+///   void *my_malloc() { return malloc(sizeof(int)); }
+///   void fishy() {
+///     void *ptr = my_malloc(); // returned allocated memory
+///   } // leak
 static void updateStackPiecesWithMessage(PathDiagnosticPiece &P,
                                          const StackDiagVector &CallStack) {
-  // If the piece contains a special message, add it to all the call
-  // pieces on the active stack.
   if (auto *ep = dyn_cast<PathDiagnosticEventPiece>(&P)) {
     if (ep->hasCallStackHint())
       for (const auto &I : CallStack) {
@@ -1938,34 +1945,35 @@ PathDiagnosticBuilder::PathDiagnosticBuilder(
         LC(r->getErrorNode()->getLocationContext()) {}
 
 std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
+  if (!shouldGenerateDiagnostics())
+    return std::move(PD);
 
   const SourceManager &SM = getSourceManager();
   const BugReport *R = getBugReport();
   const AnalyzerOptions &Opts = getBugReporter().getAnalyzerOptions();
 
-  if (shouldGenerateDiagnostics()) {
-    auto EndNotes = VisitorsDiagnostics.find(ErrorNode);
-    PathDiagnosticPieceRef LastPiece;
-    if (EndNotes != VisitorsDiagnostics.end()) {
-      assert(!EndNotes->second.empty());
-      LastPiece = EndNotes->second[0];
-    } else {
-      LastPiece = BugReporterVisitor::getDefaultEndPath(*this, ErrorNode,
-                                                        *getBugReport());
-    }
-    PD->setEndOfPath(LastPiece);
+  // Construct the final (warning) event for the bug report.
+  auto EndNotes = VisitorsDiagnostics.find(ErrorNode);
+  PathDiagnosticPieceRef LastPiece;
+  if (EndNotes != VisitorsDiagnostics.end()) {
+    assert(!EndNotes->second.empty());
+    LastPiece = EndNotes->second[0];
+  } else {
+    LastPiece = BugReporterVisitor::getDefaultEndPath(*this, ErrorNode,
+                                                      *getBugReport());
   }
+  PD->setEndOfPath(LastPiece);
 
   PathDiagnosticLocation PrevLoc = PD->getLocation();
   const ExplodedNode *NextNode = ErrorNode->getFirstPred();
+  // From the error node to the root, ascend the bug path and construct the bug
+  // report.
   while (NextNode) {
-    if (shouldGenerateDiagnostics())
-      generatePathDiagnosticsForNode(NextNode, PrevLoc);
+    generatePathDiagnosticsForNode(NextNode, PrevLoc);
 
     auto VisitorNotes = VisitorsDiagnostics.find(NextNode);
     NextNode = NextNode->getFirstPred();
-    if (!shouldGenerateDiagnostics() ||
-        VisitorNotes == VisitorsDiagnostics.end())
+    if (VisitorNotes == VisitorsDiagnostics.end())
       continue;
 
     // This is a workaround due to inability to put shared PathDiagnosticPiece
@@ -2033,7 +2041,7 @@ std::unique_ptr<PathDiagnostic> PathDiagnosticBuilder::generate() {
     removeEdgesToDefaultInitializers(PD->getMutablePieces());
   }
 
-  if (shouldGenerateDiagnostics() && Opts.ShouldDisplayMacroExpansions)
+  if (Opts.ShouldDisplayMacroExpansions)
     CompactMacroExpandedPieces(PD->getMutablePieces(), SM);
 
   return std::move(PD);
