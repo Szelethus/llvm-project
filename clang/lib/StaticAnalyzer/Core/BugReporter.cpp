@@ -1978,11 +1978,10 @@ PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) {
   PathDiagnosticLocation PrevLoc = Construct.PD->getLocation();
   // From the error node to the root, ascend the bug path and construct the bug
   // report.
-  while (Construct.N) {
+  while ((Construct.N = Construct.N->getFirstPred())) {
     generatePathDiagnosticsForNode(Construct, PrevLoc);
 
     auto VisitorNotes = VisitorsDiagnostics->find(Construct.N);
-    Construct.N= Construct.N->getFirstPred();
     if (VisitorNotes == VisitorsDiagnostics->end())
       continue;
 
