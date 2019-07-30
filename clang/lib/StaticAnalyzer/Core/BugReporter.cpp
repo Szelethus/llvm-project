@@ -525,8 +525,8 @@ PathDiagnosticBuilder::ExecutionContinues(const BugReportConstruct &C) const {
     return PathDiagnosticLocation(S, getSourceManager(),
                                   C.getCurrLocationContext());
 
-  return PathDiagnosticLocation::createDeclEnd(
-      C.getCurrLocationContext(), getSourceManager());
+  return PathDiagnosticLocation::createDeclEnd(C.getCurrLocationContext(),
+                                               getSourceManager());
 }
 
 PathDiagnosticLocation
@@ -1201,8 +1201,9 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     return;
   }
 
-  assert(C.getCurrLocationContext() ==
-         C.getCurrLocationContext());
+  assert(C.getCurrLocationContext() == C.getLocationContextForActivePath() &&
+         "The current position in the bug path is out of sync with the "
+         "location context associated with the active path!");
 
   // Have we encountered an exit from a function call?
   if (Optional<CallExitEnd> CE = P.getAs<CallExitEnd>()) {
@@ -2002,7 +2003,7 @@ BugReportConstruct::BugReportConstruct(const PathDiagnosticConsumer *PDC,
     : Consumer(PDC), CurrentNode(ErrorNode),
       SM(CurrentNode->getCodeDecl().getASTContext().getSourceManager()),
       PD(generateEmptyDiagnosticForReport(R, getSourceManager())) {
-  LCM[&PD->getActivePath()] = getCurrLocationContext();
+  LCM[&PD->getActivePath()] = ErrorNode->getLocationContext();
 }
 
 PathDiagnosticBuilder::PathDiagnosticBuilder(
