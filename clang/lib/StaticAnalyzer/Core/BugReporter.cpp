@@ -189,6 +189,10 @@ public:
   bool supportsLogicalOpControlFlow() const { return Consumer->supportsLogicalOpControlFlow(); }
 };
 
+/// Contains every contextual information needed for constructing a
+/// PathDiagnostic object for a given bug report. This class (and aside from
+/// some caching BugReport does in the background) and its fields are immutable,
+/// and passes a BugReportConstruct object around during the construction.
 class PathDiagnosticBuilder : public BugReporterContext {
   /// A linear path from the error node to the root.
   std::unique_ptr<const ExplodedGraph> BugPath;
