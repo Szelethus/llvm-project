@@ -367,7 +367,7 @@ class PathDiagnosticBuilder : public BugReporterContext {
   BugReport *R;
   /// The leaf of the bug path. This isn't the same as the bug reports error
   /// node, which refers to the *original* graph, not the bug path.
-  const ExplodedNode *ErrorNode;
+  const ExplodedNode *const ErrorNode;
   /// The diagnostic pieces visitors emitted, which is expected to be collected
   /// by the time this builder is constructed.
   std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics;
@@ -1976,14 +1976,13 @@ PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) {
   Construct.PD->setEndOfPath(LastPiece);
 
   PathDiagnosticLocation PrevLoc = Construct.PD->getLocation();
-  const ExplodedNode *NextNode = ErrorNode->getFirstPred();
   // From the error node to the root, ascend the bug path and construct the bug
   // report.
-  while (NextNode) {
+  while (Construct.N) {
     generatePathDiagnosticsForNode(Construct, PrevLoc);
 
-    auto VisitorNotes = VisitorsDiagnostics->find(NextNode);
-    NextNode = NextNode->getFirstPred();
+    auto VisitorNotes = VisitorsDiagnostics->find(Construct.N);
+    Construct.N= Construct.N->getFirstPred();
     if (VisitorNotes == VisitorsDiagnostics->end())
       continue;
 
