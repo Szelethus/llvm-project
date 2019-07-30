@@ -191,14 +191,14 @@ public:
 
 class PathDiagnosticBuilder : public BugReporterContext {
   /// A linear path from the error node to the root.
-  std::unique_ptr<ExplodedGraph> BugPath;
+  std::unique_ptr<const ExplodedGraph> BugPath;
   BugReport *R;
   /// The leaf of the bug path. This isn't the same as the bug reports error
   /// node, which refers to the *original* graph, not the bug path.
   const ExplodedNode *const ErrorNode;
   /// The diagnostic pieces visitors emitted, which is expected to be collected
   /// by the time this builder is constructed.
-  std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics;
+  std::unique_ptr<const VisitorsDiagnosticsTy> VisitorsDiagnostics;
 
 public:
   /// Find a non-invalidated report for a given equivalence class,  and returns
@@ -222,33 +222,33 @@ public:
   /// the path is modified to insert artificially generated edges.
   /// Otherwise, more detailed diagnostics is emitted for block edges,
   /// explaining the transitions in words.
-  std::unique_ptr<PathDiagnostic> generate(const PathDiagnosticConsumer *PDC);
+  std::unique_ptr<PathDiagnostic> generate(const PathDiagnosticConsumer *PDC) const;
 
 private:
   void generatePathDiagnosticsForNode(BugReportConstruct &C,
-                                      PathDiagnosticLocation &PrevLoc);
+                                      PathDiagnosticLocation &PrevLoc) const;
 
   void generateMinimalDiagForBlockEdge(BugReportConstruct &C,
-                                       BlockEdge BE);
+                                       BlockEdge BE) const;
 
   PathDiagnosticPieceRef
   generateDiagForGotoOP(const BugReportConstruct &C, const Stmt *S,
-                        PathDiagnosticLocation &Start);
+                        PathDiagnosticLocation &Start) const;
 
   PathDiagnosticPieceRef
   generateDiagForSwitchOP(const BugReportConstruct &C, const CFGBlock *Dst,
-                          PathDiagnosticLocation &Start);
+                          PathDiagnosticLocation &Start) const;
 
   PathDiagnosticPieceRef
   generateDiagForBinaryOP(const BugReportConstruct &C, const Stmt *T,
-                          const CFGBlock *Src, const CFGBlock *DstC);
+                          const CFGBlock *Src, const CFGBlock *DstC) const;
 
   PathDiagnosticLocation ExecutionContinues(const BugReportConstruct &C) const;
 
   PathDiagnosticLocation ExecutionContinues(llvm::raw_string_ostream &os,
                                             const BugReportConstruct &C) const;
 
-  BugReport *getBugReport() { return R; }
+  BugReport *getBugReport() const { return R; }
 };
 
 } // namespace
@@ -675,7 +675,7 @@ static void CompactMacroExpandedPieces(PathPieces &path,
 
 PathDiagnosticPieceRef PathDiagnosticBuilder::generateDiagForSwitchOP(
     const BugReportConstruct &C, const CFGBlock *Dst,
-    PathDiagnosticLocation &Start) {
+    PathDiagnosticLocation &Start) const {
 
   const SourceManager &SM = getSourceManager();
   // Figure out what case arm we took.
@@ -734,7 +734,7 @@ PathDiagnosticPieceRef PathDiagnosticBuilder::generateDiagForSwitchOP(
 PathDiagnosticPieceRef
 PathDiagnosticBuilder::generateDiagForGotoOP(const BugReportConstruct &C,
                                              const Stmt *S,
-                                             PathDiagnosticLocation &Start) {
+                                             PathDiagnosticLocation &Start) const {
   std::string sbuf;
   llvm::raw_string_ostream os(sbuf);
   const PathDiagnosticLocation &End = getEnclosingStmtLocation(S, C.getCurrLocationContext());
@@ -744,7 +744,7 @@ PathDiagnosticBuilder::generateDiagForGotoOP(const BugReportConstruct &C,
 
 PathDiagnosticPieceRef PathDiagnosticBuilder::generateDiagForBinaryOP(
     const BugReportConstruct &C, const Stmt *T, const CFGBlock *Src,
-    const CFGBlock *Dst) {
+    const CFGBlock *Dst) const {
 
   const SourceManager &SM = getSourceManager();
 
@@ -789,7 +789,7 @@ PathDiagnosticPieceRef PathDiagnosticBuilder::generateDiagForBinaryOP(
 }
 
 void PathDiagnosticBuilder::generateMinimalDiagForBlockEdge(
-    BugReportConstruct &C, BlockEdge BE) {
+    BugReportConstruct &C, BlockEdge BE) const {
   const SourceManager &SM = getSourceManager();
   const LocationContext *LC = C.getCurrentNode()->getLocationContext();
   const CFGBlock *Src = BE.getSrc();
@@ -1121,7 +1121,7 @@ static std::unique_ptr<FilesToLineNumsMap>
 findExecutedLines(const SourceManager &SM, const ExplodedNode *N);
 
 void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
-    BugReportConstruct &C, PathDiagnosticLocation &PrevLoc) {
+    BugReportConstruct &C, PathDiagnosticLocation &PrevLoc) const {
   ProgramPoint P = C.getCurrentNode()->getLocation();
   const SourceManager &SM = getSourceManager();
 
@@ -1992,7 +1992,7 @@ PathDiagnosticBuilder::PathDiagnosticBuilder(
       ErrorNode(ErrorNode), VisitorsDiagnostics(std::move(VisitorsDiagnostics)) {}
 
 std::unique_ptr<PathDiagnostic>
-PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) {
+PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) const {
 
   if (!PDC->shouldGenerateDiagnostics())
     return generateEmptyDiagnosticForReport(R, getSourceManager());
@@ -2001,7 +2001,7 @@ PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) {
 
   const SourceManager &SM = getSourceManager();
   const BugReport *R = getBugReport();
-  const AnalyzerOptions &Opts = getBugReporter().getAnalyzerOptions();
+  const AnalyzerOptions &Opts = getAnalyzerOptions();
 
   // Construct the final (warning) event for the bug report.
   auto EndNotes = VisitorsDiagnostics->find(ErrorNode);
