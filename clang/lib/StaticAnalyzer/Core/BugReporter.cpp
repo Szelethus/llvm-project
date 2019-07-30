@@ -105,6 +105,9 @@ using InterestingExprs = llvm::DenseSet<const Expr *>;
 using LocationContextMap =
     llvm::DenseMap<const PathPieces *, const LocationContext *>;
 
+/// A helper class that contains everything needed to construct a
+/// PathDiagnostic object. It does no much more then providing convenient
+/// getters and some well placed asserts for extra security.
 class BugReportConstruct {
   /// The consumer we're constructing the bug report for.
   const PathDiagnosticConsumer *Consumer;
@@ -115,7 +118,6 @@ class BugReportConstruct {
   /// would span backwards from a CallExit to a CallEnter with the nodes in
   /// between them) with the location contexts it is associated with.
   LocationContextMap LCM;
-
   const SourceManager &SM;
 
 public:
@@ -124,23 +126,33 @@ public:
   /// that instead?
   StackDiagVector CallStack;
   InterestingExprs IE;
-  /// The bug report we're constructing.
+  /// The bug report we're constructing. For ease of use, this field is kept
+  /// public, though some "shortcut" getters are provided for commonly used
+  /// methods of PathDiagnostic.
   std::unique_ptr<PathDiagnostic> PD;
 
+public:
   BugReportConstruct(const PathDiagnosticConsumer *PDC,
                      const ExplodedNode *ErrorNode, const BugReport *R);
 
+  /// \returns the location context associated with the current position in the
+  /// bug path.
   const LocationContext *getCurrLocationContext() const {
     assert(CurrentNode && "Already reached the root!");
     return CurrentNode->getLocationContext();
   }
 
+  /// Same as getCurrLocationContext (they should always return the same
+  /// location context), but works after reaching the root of the bug path as
+  /// well.
   const LocationContext *getLocationContextForActivePath() const {
     return LCM.find(&PD->getActivePath())->getSecond();
   }
 
   const ExplodedNode *getCurrentNode() const { return CurrentNode; }
 
+  /// Steps the current node to its predecessor.
+  /// \returns whether we reached the root of the bug path.
   bool ascendToPrevNode() {
     CurrentNode = CurrentNode->getFirstPred();
     return static_cast<bool>(CurrentNode);
@@ -159,7 +171,6 @@ public:
   void updateLocCtxMap(const PathPieces *Path, const LocationContext *LC) {
     assert(Path && LC);
     LCM[Path] = LC;
-    assert(getLocationContextFor(Path) == LC);
   }
 
   const LocationContext *getLocationContextFor(const PathPieces *Path) const {
@@ -1110,8 +1121,8 @@ static std::unique_ptr<FilesToLineNumsMap>
 findExecutedLines(const SourceManager &SM, const ExplodedNode *N);
 
 void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
-    BugReportConstruct &Co, PathDiagnosticLocation &PrevLoc) {
-  ProgramPoint P = Co.getCurrentNode()->getLocation();
+    BugReportConstruct &C, PathDiagnosticLocation &PrevLoc) {
+  ProgramPoint P = C.getCurrentNode()->getLocation();
   const SourceManager &SM = getSourceManager();
 
   // Have we encountered an entrance to a call?  It may be
@@ -1120,7 +1131,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
   // terminated within the call itself.
   if (auto CE = P.getAs<CallEnter>()) {
 
-    if (Co.shouldAddPathEdges()) {
+    if (C.shouldAddPathEdges()) {
       // Add an edge to the start of the function.
       const StackFrameContext *CalleeLC = CE->getCalleeContext();
       const Decl *D = CalleeLC->getDecl();
@@ -1131,127 +1142,127 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
       // because the exit edge comes from a statement (i.e. return),
       // not from declaration.
       if (D->hasBody())
-        addEdgeToPath(Co.getActivePath(), PrevLoc,
+        addEdgeToPath(C.getActivePath(), PrevLoc,
                       PathDiagnosticLocation::createBegin(D, SM));
     }
 
     // Did we visit an entire call?
-    bool VisitedEntireCall = Co.PD->isWithinCall();
-    Co.PD->popActivePath();
+    bool VisitedEntireCall = C.PD->isWithinCall();
+    C.PD->popActivePath();
 
-    PathDiagnosticCallPiece *C;
+    PathDiagnosticCallPiece *Call;
     if (VisitedEntireCall) {
-      C = cast<PathDiagnosticCallPiece>(Co.getActivePath().front().get());
+      Call = cast<PathDiagnosticCallPiece>(C.getActivePath().front().get());
     } else {
       // The path terminated within a nested location context, create a new
       // call piece to encapsulate the rest of the path pieces.
       const Decl *Caller = CE->getLocationContext()->getDecl();
-      C = PathDiagnosticCallPiece::construct(Co.getActivePath(), Caller);
-      assert(Co.getActivePath().size() == 1 &&
-             Co.getActivePath().front().get() == C);
+      Call = PathDiagnosticCallPiece::construct(C.getActivePath(), Caller);
+      assert(C.getActivePath().size() == 1 &&
+             C.getActivePath().front().get() == Call);
 
       // Since we just transferred the path over to the call piece, reset the 
       // mapping of the active path to the current location context.
-      assert(Co.isInLocCtxMap(&Co.getActivePath()) &&
+      assert(C.isInLocCtxMap(&C.getActivePath()) &&
              "When we ascend to a previously unvisited call, the active path's "
              "address shouldn't change, but rather should be compacted into "
              "a single CallEvent!");
-      Co.updateLocCtxMap(&Co.getActivePath(), Co.getCurrLocationContext());
+      C.updateLocCtxMap(&C.getActivePath(), C.getCurrLocationContext());
 
       // Record the location context mapping for the path within the call.
-      assert(!Co.isInLocCtxMap(&C->path) &&
+      assert(!C.isInLocCtxMap(&Call->path) &&
              "When we ascend to a previously unvisited call, this must be the "
              "first time we encounter the caller context!");
-      Co.updateLocCtxMap(&C->path, CE->getCalleeContext());
+      C.updateLocCtxMap(&Call->path, CE->getCalleeContext());
     }
-    C->setCallee(*CE, SM);
+    Call->setCallee(*CE, SM);
 
     // Update the previous location in the active path.
-    PrevLoc = C->getLocation();
+    PrevLoc = Call->getLocation();
 
-    if (!Co.CallStack.empty()) {
-      assert(Co.CallStack.back().first == C);
-      Co.CallStack.pop_back();
+    if (!C.CallStack.empty()) {
+      assert(C.CallStack.back().first == Call);
+      C.CallStack.pop_back();
     }
     return;
   }
 
-  assert(Co.getCurrLocationContext() == Co.getCurrentNode()->getLocationContext());
+  assert(C.getCurrLocationContext() == C.getCurrentNode()->getLocationContext());
 
   // Have we encountered an exit from a function call?
   if (Optional<CallExitEnd> CE = P.getAs<CallExitEnd>()) {
 
     // We are descending into a call (backwards).  Construct
     // a new call piece to contain the path pieces for that call.
-    auto C = PathDiagnosticCallPiece::construct(*CE, SM);
+    auto Call = PathDiagnosticCallPiece::construct(*CE, SM);
     // Record the mapping from call piece to LocationContext.
-    assert(!Co.isInLocCtxMap(&C->path) &&
+    assert(!C.isInLocCtxMap(&Call->path) &&
            "We just entered a call, this must've been the first time we "
            "encounter its context!");
-    Co.updateLocCtxMap(&C->path, CE->getCalleeContext());
+    C.updateLocCtxMap(&Call->path, CE->getCalleeContext());
 
-    if (Co.shouldAddPathEdges()) {
+    if (C.shouldAddPathEdges()) {
       const Stmt *S = CE->getCalleeContext()->getCallSite();
       // Propagate the interesting symbols accordingly.
       if (const auto *Ex = dyn_cast_or_null<Expr>(S)) {
-        reversePropagateIntererstingSymbols(*getBugReport(), Co.IE,
-                                            Co.getCurrentNode()->getState().get(), Ex,
-                                            Co.getCurrentNode()->getLocationContext());
+        reversePropagateIntererstingSymbols(*getBugReport(), C.IE,
+                                            C.getCurrentNode()->getState().get(), Ex,
+                                            C.getCurrLocationContext());
       }
       // Add the edge to the return site.
-      addEdgeToPath(Co.getActivePath(), PrevLoc, C->callReturn);
+      addEdgeToPath(C.getActivePath(), PrevLoc, Call->callReturn);
       PrevLoc.invalidate();
     }
 
-    auto *P = C.get();
-    Co.getActivePath().push_front(std::move(C));
+    auto *P = Call.get();
+    C.getActivePath().push_front(std::move(Call));
 
     // Make the contents of the call the active path for now.
-    Co.PD->pushActivePath(&P->path);
-    Co.CallStack.push_back(StackDiagPair(P, Co.getCurrentNode()));
+    C.PD->pushActivePath(&P->path);
+    C.CallStack.push_back(StackDiagPair(P, C.getCurrentNode()));
     return;
   }
 
   if (auto PS = P.getAs<PostStmt>()) {
-    if (!Co.shouldAddPathEdges())
+    if (!C.shouldAddPathEdges())
       return;
 
     // For expressions, make sure we propagate the
     // interesting symbols correctly.
     if (const Expr *Ex = PS->getStmtAs<Expr>())
-      reversePropagateIntererstingSymbols(*getBugReport(), Co.IE,
-                                          Co.getCurrentNode()->getState().get(), Ex,
-                                          Co.getCurrentNode()->getLocationContext());
+      reversePropagateIntererstingSymbols(*getBugReport(), C.IE,
+                                          C.getCurrentNode()->getState().get(), Ex,
+                                          C.getCurrLocationContext());
 
     // Add an edge.  If this is an ObjCForCollectionStmt do
     // not add an edge here as it appears in the CFG both
     // as a terminator and as a terminator condition.
     if (!isa<ObjCForCollectionStmt>(PS->getStmt())) {
-      PathDiagnosticLocation L = PathDiagnosticLocation(PS->getStmt(), SM, Co.getCurrLocationContext());
-      addEdgeToPath(Co.getActivePath(), PrevLoc, L);
+      PathDiagnosticLocation L = PathDiagnosticLocation(PS->getStmt(), SM, C.getCurrLocationContext());
+      addEdgeToPath(C.getActivePath(), PrevLoc, L);
     }
 
   } else if (auto BE = P.getAs<BlockEdge>()) {
 
-    if (!Co.shouldAddPathEdges()) {
-      generateMinimalDiagForBlockEdge(Co, *BE);
+    if (!C.shouldAddPathEdges()) {
+      generateMinimalDiagForBlockEdge(C, *BE);
       return;
     }
 
     // Does this represent entering a call?  If so, look at propagating
     // interesting symbols across call boundaries.
-    if (const ExplodedNode *NextNode = Co.getCurrentNode()->getFirstPred()) {
+    if (const ExplodedNode *NextNode = C.getCurrentNode()->getFirstPred()) {
       const LocationContext *CallerCtx = NextNode->getLocationContext();
-      const LocationContext *CalleeCtx = Co.getCurrLocationContext();
-      if (CallerCtx != CalleeCtx && Co.shouldAddPathEdges()) {
-        reversePropagateInterestingSymbols(*getBugReport(), Co.IE,
-                                           Co.getCurrentNode()->getState().get(), CalleeCtx);
+      const LocationContext *CalleeCtx = C.getCurrLocationContext();
+      if (CallerCtx != CalleeCtx && C.shouldAddPathEdges()) {
+        reversePropagateInterestingSymbols(*getBugReport(), C.IE,
+                                           C.getCurrentNode()->getState().get(), CalleeCtx);
       }
     }
 
     // Are we jumping to the head of a loop?  Add a special diagnostic.
     if (const Stmt *Loop = BE->getSrc()->getLoopTarget()) {
-      PathDiagnosticLocation L(Loop, SM, Co.getCurrLocationContext());
+      PathDiagnosticLocation L(Loop, SM, C.getCurrLocationContext());
       const Stmt *Body = nullptr;
 
       if (const auto *FS = dyn_cast<ForStmt>(Loop))
@@ -1270,17 +1281,17 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
           "of the loop");
       p->setPrunable(true);
 
-      addEdgeToPath(Co.getActivePath(), PrevLoc, p->getLocation());
-      Co.getActivePath().push_front(std::move(p));
+      addEdgeToPath(C.getActivePath(), PrevLoc, p->getLocation());
+      C.getActivePath().push_front(std::move(p));
 
       if (const auto *CS = dyn_cast_or_null<CompoundStmt>(Body)) {
-        addEdgeToPath(Co.getActivePath(), PrevLoc,
+        addEdgeToPath(C.getActivePath(), PrevLoc,
                       PathDiagnosticLocation::createEndBrace(CS, SM));
       }
     }
 
     const CFGBlock *BSrc = BE->getSrc();
-    const ParentMap &PM = Co.getParentMap();
+    const ParentMap &PM = C.getParentMap();
 
     if (const Stmt *Term = BSrc->getTerminatorStmt()) {
       // Are we jumping past the loop body without ever executing the
@@ -1288,7 +1299,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
       if (isLoop(Term)) {
         const Stmt *TermCond = getTerminatorCondition(BSrc);
         bool IsInLoopBody =
-          isInLoopBody(PM, getStmtBeforeCond(PM, TermCond, Co.getCurrentNode()), Term);
+          isInLoopBody(PM, getStmtBeforeCond(PM, TermCond, C.getCurrentNode()), Term);
 
         StringRef str;
 
@@ -1307,16 +1318,16 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
         }
 
         if (!str.empty()) {
-          PathDiagnosticLocation L(TermCond ? TermCond : Term, SM, Co.getCurrLocationContext());
+          PathDiagnosticLocation L(TermCond ? TermCond : Term, SM, C.getCurrLocationContext());
           auto PE = std::make_shared<PathDiagnosticEventPiece>(L, str);
           PE->setPrunable(true);
-          addEdgeToPath(Co.getActivePath(), PrevLoc, PE->getLocation());
-          Co.getActivePath().push_front(std::move(PE));
+          addEdgeToPath(C.getActivePath(), PrevLoc, PE->getLocation());
+          C.getActivePath().push_front(std::move(PE));
         }
       } else if (isa<BreakStmt>(Term) || isa<ContinueStmt>(Term) ||
           isa<GotoStmt>(Term)) {
-        PathDiagnosticLocation L(Term, SM, Co.getCurrLocationContext());
-        addEdgeToPath(Co.getActivePath(), PrevLoc, L);
+        PathDiagnosticLocation L(Term, SM, C.getCurrLocationContext());
+        addEdgeToPath(C.getActivePath(), PrevLoc, L);
       }
     }
   }
