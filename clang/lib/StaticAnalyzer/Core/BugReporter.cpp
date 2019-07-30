@@ -85,6 +85,164 @@ BugReporterVisitor::~BugReporterVisitor() = default;
 void BugReporterContext::anchor() {}
 
 //===----------------------------------------------------------------------===//
+// PathDiagnosticBuilder and its associated routines and helper objects.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+using StackDiagPair =
+    std::pair<PathDiagnosticCallPiece *, const ExplodedNode *>;
+using StackDiagVector = SmallVector<StackDiagPair, 6>;
+
+/// Map from each node to the diagnostic pieces visitors emit for them.
+using VisitorsDiagnosticsTy =
+    llvm::DenseMap<const ExplodedNode *, std::vector<PathDiagnosticPieceRef>>;
+
+using InterestingExprs = llvm::DenseSet<const Expr *>;
+
+/// A map from PathDiagnosticPiece to the LocationContext of the inlined
+/// function call it represents.
+using LocationContextMap =
+    llvm::DenseMap<const PathPieces *, const LocationContext *>;
+
+class BugReportConstruct {
+  /// The consumer we're constructing the bug report for.
+  const PathDiagnosticConsumer *Consumer;
+  /// Our current position in the bug path, which is owned by
+  /// PathDiagnosticBuilder.
+  const ExplodedNode *CurrentNode;
+  /// A mapping from parts of the bug path (for example, a function call, which
+  /// would span backwards from a CallExit to a CallEnter with the nodes in
+  /// between them) with the location contexts it is associated with.
+  LocationContextMap LCM;
+
+  const SourceManager &SM;
+
+public:
+  /// We keep stack of calls to functions as we're ascending the bug path.
+  /// TODO: PathDiagnostic has a stack doing the same thing, shouldn't we use
+  /// that instead?
+  StackDiagVector CallStack;
+  InterestingExprs IE;
+  /// The bug report we're constructing.
+  std::unique_ptr<PathDiagnostic> PD;
+
+  BugReportConstruct(const PathDiagnosticConsumer *PDC,
+                     const ExplodedNode *ErrorNode, const BugReport *R);
+
+  const LocationContext *getCurrLocationContext() const {
+    assert(CurrentNode && "Already reached the root!");
+    return CurrentNode->getLocationContext();
+  }
+
+  const LocationContext *getLocationContextForActivePath() const {
+    return LCM.find(&PD->getActivePath())->getSecond();
+  }
+
+  const ExplodedNode *getCurrentNode() const { return CurrentNode; }
+
+  bool ascendToPrevNode() {
+    CurrentNode = CurrentNode->getFirstPred();
+    return static_cast<bool>(CurrentNode);
+  }
+
+  const ParentMap& getParentMap() const { return getCurrLocationContext()->getParentMap(); }
+
+  const SourceManager &getSourceManager() const {
+    return SM;
+  }
+
+  const Stmt *getParent(const Stmt *S) const {
+    return getParentMap().getParent(S);
+  }
+
+  void updateLocCtxMap(const PathPieces *Path, const LocationContext *LC) {
+    assert(Path && LC);
+    LCM[Path] = LC;
+    assert(getLocationContextFor(Path) == LC);
+  }
+
+  const LocationContext *getLocationContextFor(const PathPieces *Path) const {
+    assert(LCM.count(Path) &&
+           "Failed to find the context associated with these pieces!");
+    return LCM.find(Path)->getSecond();
+  }
+
+  bool isInLocCtxMap(const PathPieces *Path) const { return LCM.count(Path); }
+
+  PathPieces &getActivePath() { return PD->getActivePath(); }
+  PathPieces &getMutablePieces() { return PD->getMutablePieces(); }
+
+  bool shouldAddPathEdges() const { return Consumer->shouldAddPathEdges(); }
+  bool shouldGenerateDiagnostics() const { return Consumer->shouldGenerateDiagnostics(); }
+  bool supportsLogicalOpControlFlow() const { return Consumer->supportsLogicalOpControlFlow(); }
+};
+
+class PathDiagnosticBuilder : public BugReporterContext {
+  /// A linear path from the error node to the root.
+  std::unique_ptr<ExplodedGraph> BugPath;
+  BugReport *R;
+  /// The leaf of the bug path. This isn't the same as the bug reports error
+  /// node, which refers to the *original* graph, not the bug path.
+  const ExplodedNode *const ErrorNode;
+  /// The diagnostic pieces visitors emitted, which is expected to be collected
+  /// by the time this builder is constructed.
+  std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics;
+
+public:
+  /// Find a non-invalidated report for a given equivalence class,  and returns
+  /// a PathDiagnosticBuilder able to construct bug reports for different
+  /// consumers. Returns None if no valid report is found.
+  static Optional<PathDiagnosticBuilder>
+  findValidReport(ArrayRef<BugReport *> &bugReports, GRBugReporter &Reporter);
+
+  PathDiagnosticBuilder(
+      BugReporterContext BRC, std::unique_ptr<ExplodedGraph> BugPath,
+      BugReport *r, const ExplodedNode *ErrorNode,
+      std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics);
+
+  /// This function is responsible for generating diagnostic pieces that are
+  /// *not* provided by bug report visitors.
+  /// These diagnostics may differ depending on the consumer's settings,
+  /// and are therefore constructed separately for each consumer.
+  ///
+  /// There are two path diagnostics generation modes: with adding edges (used
+  /// for plists) and without  (used for HTML and text). When edges are added,
+  /// the path is modified to insert artificially generated edges.
+  /// Otherwise, more detailed diagnostics is emitted for block edges,
+  /// explaining the transitions in words.
+  std::unique_ptr<PathDiagnostic> generate(const PathDiagnosticConsumer *PDC);
+
+private:
+  void generatePathDiagnosticsForNode(BugReportConstruct &C,
+                                      PathDiagnosticLocation &PrevLoc);
+
+  void generateMinimalDiagForBlockEdge(BugReportConstruct &C,
+                                       BlockEdge BE);
+
+  PathDiagnosticPieceRef
+  generateDiagForGotoOP(const BugReportConstruct &C, const Stmt *S,
+                        PathDiagnosticLocation &Start);
+
+  PathDiagnosticPieceRef
+  generateDiagForSwitchOP(const BugReportConstruct &C, const CFGBlock *Dst,
+                          PathDiagnosticLocation &Start);
+
+  PathDiagnosticPieceRef
+  generateDiagForBinaryOP(const BugReportConstruct &C, const Stmt *T,
+                          const CFGBlock *Src, const CFGBlock *DstC);
+
+  PathDiagnosticLocation ExecutionContinues(const BugReportConstruct &C) const;
+
+  PathDiagnosticLocation ExecutionContinues(llvm::raw_string_ostream &os,
+                                            const BugReportConstruct &C) const;
+
+  BugReport *getBugReport() { return R; }
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Helper routines for walking the ExplodedGraph and fetching statements.
 //===----------------------------------------------------------------------===//
 
@@ -182,16 +340,11 @@ static void removeRedundantMsgs(PathPieces &path) {
   }
 }
 
-/// A map from PathDiagnosticPiece to the LocationContext of the inlined
-/// function call it represents.
-using LocationContextMap =
-    llvm::DenseMap<const PathPieces *, const LocationContext *>;
-
 /// Recursively scan through a path and prune out calls and macros pieces
 /// that aren't needed.  Return true if afterwards the path contains
 /// "interesting stuff" which means it shouldn't be pruned from the parent path.
-static bool removeUnneededCalls(PathPieces &pieces, const BugReport *R,
-                                const LocationContextMap &LCM,
+static bool removeUnneededCalls(const BugReportConstruct &C, PathPieces &pieces,
+                                const BugReport *R,
                                 bool IsInteresting = false) {
   bool containsSomethingInteresting = IsInteresting;
   const unsigned N = pieces.size();
@@ -206,9 +359,8 @@ static bool removeUnneededCalls(PathPieces &pieces, const BugReport *R,
       case PathDiagnosticPiece::Call: {
         auto &call = cast<PathDiagnosticCallPiece>(*piece);
         // Check if the location context is interesting.
-        assert(LCM.count(&call.path));
-        if (!removeUnneededCalls(call.path, R, LCM,
-                                 R->isInteresting(LCM.lookup(&call.path))))
+        if (!removeUnneededCalls(C, call.path, R,
+                                 R->isInteresting(C.getLocationContextFor(&call.path))))
           continue;
 
         containsSomethingInteresting = true;
@@ -216,7 +368,7 @@ static bool removeUnneededCalls(PathPieces &pieces, const BugReport *R,
       }
       case PathDiagnosticPiece::Macro: {
         auto &macro = cast<PathDiagnosticMacroPiece>(*piece);
-        if (!removeUnneededCalls(macro.subPieces, R, LCM, IsInteresting))
+        if (!removeUnneededCalls(C, macro.subPieces, R, IsInteresting))
           continue;
         containsSomethingInteresting = true;
         break;
@@ -344,134 +496,6 @@ static void removePiecesWithInvalidLocations(PathPieces &Pieces) {
     I++;
   }
 }
-
-//===----------------------------------------------------------------------===//
-// PathDiagnosticBuilder and its associated routines and helper objects.
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-using StackDiagPair =
-    std::pair<PathDiagnosticCallPiece *, const ExplodedNode *>;
-using StackDiagVector = SmallVector<StackDiagPair, 6>;
-
-/// Map from each node to the diagnostic pieces visitors emit for them.
-using VisitorsDiagnosticsTy =
-    llvm::DenseMap<const ExplodedNode *, std::vector<PathDiagnosticPieceRef>>;
-
-using InterestingExprs = llvm::DenseSet<const Expr *>;
-
-class PathDiagnosticBuilder : public BugReporterContext {
-  /// A linear path from the error node to the root.
-  std::unique_ptr<ExplodedGraph> BugPath;
-  BugReport *R;
-  /// The leaf of the bug path. This isn't the same as the bug reports error
-  /// node, which refers to the *original* graph, not the bug path.
-  const ExplodedNode *const ErrorNode;
-  /// The diagnostic pieces visitors emitted, which is expected to be collected
-  /// by the time this builder is constructed.
-  std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics;
-
-  class BugReportConstruct {
-    const PathDiagnosticConsumer *PDC;
-  public:
-    const ExplodedNode *CurrentNode;
-    /// We keep stack of calls to functions as we're ascending the bug path.
-    /// TODO: PathDiagnostic has a stack doing the same thing, shouldn't we use
-    /// that instead?
-    StackDiagVector CallStack;
-    InterestingExprs IE;
-    /// A mapping from parts of the bug path (for example, a function call, which
-    /// would span backwards from a CallExit to a CallEnter with the nodes in
-    /// between them) with the location contexts it is associated with.
-    LocationContextMap LCM;
-    /// The bug report we're constructing.
-    std::unique_ptr<PathDiagnostic> PD;
-
-    BugReportConstruct(const PathDiagnosticConsumer *PDC,
-                       const ExplodedNode *ErrorNode, const BugReport *R);
-
-    const LocationContext *getCurrLocationContext() const {
-      return LCM.find(&PD->getActivePath())->getSecond();
-    }
-
-    const ExplodedNode *getCurrentNode() const { return CurrentNode; }
-
-    bool ascendToPrevNode() {
-      CurrentNode = CurrentNode->getFirstPred();
-      return static_cast<bool>(CurrentNode);
-    }
-
-    const ParentMap& getParentMap() const { return getCurrLocationContext()->getParentMap(); }
-
-    const SourceManager &getSourceManager() {
-      return getCurrentNode()->getCodeDecl().getASTContext().getSourceManager();
-    }
-
-    const Stmt *getParent(const Stmt *S) const {
-      return getParentMap().getParent(S);
-    }
-
-    PathPieces &getActivePath() { return PD->getActivePath(); }
-    PathPieces &getMutablePieces() { return PD->getMutablePieces(); }
-
-    bool shouldAddPathEdges() const { return PDC->shouldAddPathEdges(); }
-    bool shouldGenerateDiagnostics() const { return PDC->shouldGenerateDiagnostics(); }
-    bool supportsLogicalOpControlFlow() const { return PDC->supportsLogicalOpControlFlow(); }
-  };
-
-public:
-  /// Find a non-invalidated report for a given equivalence class,  and returns
-  /// a PathDiagnosticBuilder able to construct bug reports for different
-  /// consumers. Returns None if no valid report is found.
-  static Optional<PathDiagnosticBuilder>
-  findValidReport(ArrayRef<BugReport *> &bugReports, GRBugReporter &Reporter);
-
-  PathDiagnosticBuilder(
-      BugReporterContext BRC, std::unique_ptr<ExplodedGraph> BugPath,
-      BugReport *r, const ExplodedNode *ErrorNode,
-      std::unique_ptr<VisitorsDiagnosticsTy> VisitorsDiagnostics);
-
-  /// This function is responsible for generating diagnostic pieces that are
-  /// *not* provided by bug report visitors.
-  /// These diagnostics may differ depending on the consumer's settings,
-  /// and are therefore constructed separately for each consumer.
-  ///
-  /// There are two path diagnostics generation modes: with adding edges (used
-  /// for plists) and without  (used for HTML and text). When edges are added,
-  /// the path is modified to insert artificially generated edges.
-  /// Otherwise, more detailed diagnostics is emitted for block edges,
-  /// explaining the transitions in words.
-  std::unique_ptr<PathDiagnostic> generate(const PathDiagnosticConsumer *PDC);
-
-private:
-  void generatePathDiagnosticsForNode(BugReportConstruct &C,
-                                      PathDiagnosticLocation &PrevLoc);
-
-  void generateMinimalDiagForBlockEdge(BugReportConstruct &C,
-                                       BlockEdge BE);
-
-  PathDiagnosticPieceRef
-  generateDiagForGotoOP(const BugReportConstruct &C, const Stmt *S,
-                        PathDiagnosticLocation &Start);
-
-  PathDiagnosticPieceRef
-  generateDiagForSwitchOP(const BugReportConstruct &C, const CFGBlock *Dst,
-                          PathDiagnosticLocation &Start);
-
-  PathDiagnosticPieceRef
-  generateDiagForBinaryOP(const BugReportConstruct &C, const Stmt *T,
-                          const CFGBlock *Src, const CFGBlock *DstC);
-
-  PathDiagnosticLocation ExecutionContinues(const BugReportConstruct &C) const;
-
-  PathDiagnosticLocation ExecutionContinues(llvm::raw_string_ostream &os,
-                                            const BugReportConstruct &C) const;
-
-  BugReport *getBugReport() { return R; }
-};
-
-} // namespace
 
 PathDiagnosticLocation
 PathDiagnosticBuilder::ExecutionContinues(const BugReportConstruct &C) const {
@@ -1128,17 +1152,17 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
 
       // Since we just transferred the path over to the call piece, reset the 
       // mapping of the active path to the current location context.
-      assert(Co.LCM.count(&Co.getActivePath()) &&
+      assert(Co.isInLocCtxMap(&Co.getActivePath()) &&
              "When we ascend to a previously unvisited call, the active path's "
              "address shouldn't change, but rather should be compacted into "
              "a single CallEvent!");
-      Co.LCM[&Co.getActivePath()] = Co.getCurrentNode()->getLocationContext();
+      Co.updateLocCtxMap(&Co.getActivePath(), Co.getCurrLocationContext());
 
       // Record the location context mapping for the path within the call.
-      assert(!Co.LCM.count(&C->path) &&
+      assert(!Co.isInLocCtxMap(&C->path) &&
              "When we ascend to a previously unvisited call, this must be the "
              "first time we encounter the caller context!");
-      Co.LCM[&C->path] = CE->getCalleeContext();
+      Co.updateLocCtxMap(&C->path, CE->getCalleeContext());
     }
     C->setCallee(*CE, SM);
 
@@ -1161,10 +1185,10 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
     // a new call piece to contain the path pieces for that call.
     auto C = PathDiagnosticCallPiece::construct(*CE, SM);
     // Record the mapping from call piece to LocationContext.
-    assert(!Co.LCM.count(&C->path) &&
+    assert(!Co.isInLocCtxMap(&C->path) &&
            "We just entered a call, this must've been the first time we "
            "encounter its context!");
-    Co.LCM[&C->path] = CE->getCalleeContext();
+    Co.updateLocCtxMap(&C->path, CE->getCalleeContext());
 
     if (Co.shouldAddPathEdges()) {
       const Stmt *S = CE->getCalleeContext()->getCallSite();
@@ -1730,13 +1754,13 @@ static void removeIdenticalEvents(PathPieces &path) {
   }
 }
 
-static bool optimizeEdges(PathPieces &path, const SourceManager &SM,
-                          OptimizedCallsSet &OCS,
-                          const LocationContextMap &LCM) {
+static bool optimizeEdges(const BugReportConstruct &C, PathPieces &path,
+                          OptimizedCallsSet &OCS) {
   bool hasChanges = false;
-  const LocationContext *LC = LCM.lookup(&path);
+  const LocationContext *LC = C.getLocationContextFor(&path);
   assert(LC);
   const ParentMap &PM = LC->getParentMap();
+  const SourceManager &SM = C.getSourceManager();
 
   for (PathPieces::iterator I = path.begin(), E = path.end(); I != E; ) {
     // Optimize subpaths.
@@ -1744,7 +1768,7 @@ static bool optimizeEdges(PathPieces &path, const SourceManager &SM,
       // Record the fact that a call has been optimized so we only do the
       // effort once.
       if (!OCS.count(CallI)) {
-        while (optimizeEdges(CallI->path, SM, OCS, LCM)) {}
+        while (optimizeEdges(C, CallI->path, OCS)) {}
         OCS.insert(CallI);
       }
       ++I;
@@ -1911,16 +1935,14 @@ static bool optimizeEdges(PathPieces &path, const SourceManager &SM,
 /// statement had an invalid source location), this function does nothing.
 // FIXME: We should just generate invalid edges anyway and have the optimizer
 // deal with them.
-static void dropFunctionEntryEdge(PathPieces &Path,
-                                  const LocationContextMap &LCM,
-                                  const SourceManager &SM) {
+static void dropFunctionEntryEdge(const BugReportConstruct &C, PathPieces &Path) {
   const auto *FirstEdge =
       dyn_cast<PathDiagnosticControlFlowPiece>(Path.front().get());
   if (!FirstEdge)
     return;
 
-  const Decl *D = LCM.lookup(&Path)->getDecl();
-  PathDiagnosticLocation EntryLoc = PathDiagnosticLocation::createBegin(D, SM);
+  const Decl *D = C.getLocationContextFor(&Path)->getDecl();
+  PathDiagnosticLocation EntryLoc = PathDiagnosticLocation::createBegin(D, C.getSourceManager());
   if (FirstEdge->getStartLocation() != EntryLoc)
     return;
 
@@ -1942,12 +1964,13 @@ static void updateExecutedLinesWithDiagnosticPieces(PathDiagnostic &PD) {
   }
 }
 
-PathDiagnosticBuilder::BugReportConstruct::BugReportConstruct(
+BugReportConstruct::BugReportConstruct(
     const PathDiagnosticConsumer *PDC, const ExplodedNode *ErrorNode,
     const BugReport *R)
-    : PDC(PDC), CurrentNode(ErrorNode),
+    : Consumer(PDC), CurrentNode(ErrorNode),
+      SM(CurrentNode->getCodeDecl().getASTContext().getSourceManager()),
       PD(generateEmptyDiagnosticForReport(R, getSourceManager())) {
-  LCM[&PD->getActivePath()] = getCurrentNode()->getLocationContext();      
+  LCM[&PD->getActivePath()] = getCurrentNode()->getLocationContext();
 }
 
 PathDiagnosticBuilder::PathDiagnosticBuilder(
@@ -2012,7 +2035,7 @@ PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) {
   if (PDC->shouldAddPathEdges()) {
     // Add an edge to the start of the function.
     // We'll prune it out later, but it helps make diagnostics more uniform.
-    const StackFrameContext *CalleeLC = Construct.getCurrLocationContext()->getStackFrame();
+    const StackFrameContext *CalleeLC = Construct.getLocationContextForActivePath()->getStackFrame();
     const Decl *D = CalleeLC->getDecl();
     addEdgeToPath(Construct.getActivePath(), PrevLoc,
                   PathDiagnosticLocation::createBegin(D, SM));
@@ -2023,7 +2046,7 @@ PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) {
   if (!Construct.PD->path.empty()) {
     if (R->shouldPrunePath() && Opts.ShouldPrunePaths) {
       bool stillHasNotes =
-          removeUnneededCalls(Construct.getMutablePieces(), R, Construct.LCM);
+          removeUnneededCalls(Construct, Construct.getMutablePieces(), R);
       assert(stillHasNotes);
       (void)stillHasNotes;
     }
@@ -2042,11 +2065,11 @@ PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) {
       // to an aesthetically pleasing subset that conveys the
       // necessary information.
       OptimizedCallsSet OCS;
-      while (optimizeEdges(Construct.getMutablePieces(), SM, OCS, Construct.LCM)) {}
+      while (optimizeEdges(Construct, Construct.getMutablePieces(), OCS)) {}
 
       // Drop the very first function-entry edge. It's not really necessary
       // for top-level functions.
-      dropFunctionEntryEdge(Construct.getMutablePieces(), Construct.LCM, SM);
+      dropFunctionEntryEdge(Construct, Construct.getMutablePieces());
     }
 
     // Remove messages that are basically the same, and edges that may not
