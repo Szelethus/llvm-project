@@ -526,7 +526,7 @@ PathDiagnosticBuilder::ExecutionContinues(const BugReportConstruct &C) const {
                                   C.getCurrLocationContext());
 
   return PathDiagnosticLocation::createDeclEnd(
-      C.getCurrentNode()->getLocationContext(), getSourceManager());
+      C.getCurrLocationContext(), getSourceManager());
 }
 
 PathDiagnosticLocation
@@ -544,7 +544,7 @@ PathDiagnosticBuilder::ExecutionContinues(llvm::raw_string_ostream &os,
        << '.';
   else {
     os << "Execution jumps to the end of the ";
-    const Decl *D = C.getCurrentNode()->getLocationContext()->getDecl();
+    const Decl *D = C.getCurrLocationContext()->getDecl();
     if (isa<ObjCMethodDecl>(D))
       os << "method";
     else if (isa<FunctionDecl>(D))
@@ -805,7 +805,7 @@ PathDiagnosticPieceRef PathDiagnosticBuilder::generateDiagForBinaryOP(
 void PathDiagnosticBuilder::generateMinimalDiagForBlockEdge(
     BugReportConstruct &C, BlockEdge BE) const {
   const SourceManager &SM = getSourceManager();
-  const LocationContext *LC = C.getCurrentNode()->getLocationContext();
+  const LocationContext *LC = C.getCurrLocationContext();
   const CFGBlock *Src = BE.getSrc();
   const CFGBlock *Dst = BE.getDst();
   const Stmt *T = Src->getTerminatorStmt();
@@ -1202,7 +1202,7 @@ void PathDiagnosticBuilder::generatePathDiagnosticsForNode(
   }
 
   assert(C.getCurrLocationContext() ==
-         C.getCurrentNode()->getLocationContext());
+         C.getCurrLocationContext());
 
   // Have we encountered an exit from a function call?
   if (Optional<CallExitEnd> CE = P.getAs<CallExitEnd>()) {
@@ -2002,7 +2002,7 @@ BugReportConstruct::BugReportConstruct(const PathDiagnosticConsumer *PDC,
     : Consumer(PDC), CurrentNode(ErrorNode),
       SM(CurrentNode->getCodeDecl().getASTContext().getSourceManager()),
       PD(generateEmptyDiagnosticForReport(R, getSourceManager())) {
-  LCM[&PD->getActivePath()] = getCurrentNode()->getLocationContext();
+  LCM[&PD->getActivePath()] = getCurrLocationContext();
 }
 
 PathDiagnosticBuilder::PathDiagnosticBuilder(
