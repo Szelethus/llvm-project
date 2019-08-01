@@ -407,12 +407,37 @@ void f() {
 }
 } // end of namespace condition_written_in_nested_stackframe_before_assignment
 
+namespace collapse_point_not_in_condition_bool {
+
+[[noreturn]] void halt();
+
+void assert(int b) {
+  if (!b) // tracking-note{{Assuming 'b' is not equal to 0, which will be (a part of a) condition}}
+          // tracking-note@-1{{Taking false branch}}
+    halt();
+}
+
+void f(int flag) {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+
+  assert(flag); // tracking-note{{Calling 'assert'}}
+                // tracking-note@-1{{Returning from 'assert'}}
+
+  if (flag) // expected-note{{'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
+            // debug-note@-2{{Tracking condition 'flag'}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+
+} // end of namespace collapse_point_not_in_condition_bool
+
 namespace collapse_point_not_in_condition {
 
 [[noreturn]] void halt();
 
 void assert(int b) {
-  if (!b) // tracking-note{{Assuming 'b' is not equal to 0}}
+  if (!b) // tracking-note{{Assuming 'b' is not equal to 0, which will be (a part of a) condition}}
           // tracking-note@-1{{Taking false branch}}
     halt();
 }
@@ -437,7 +462,7 @@ namespace unimportant_write_before_collapse_point {
 [[noreturn]] void halt();
 
 void assert(int b) {
-  if (!b) // tracking-note{{Assuming 'b' is not equal to 0}}
+  if (!b) // tracking-note{{Assuming 'b' is not equal to 0, which will be (a part of a) condition}}
           // tracking-note@-1{{Taking false branch}}
     halt();
 }
@@ -459,6 +484,31 @@ void f(int flag) {
 
 } // end of namespace unimportant_write_before_collapse_point
 
+namespace collapse_point_not_in_condition_binary_op {
+
+[[noreturn]] void halt();
+
+void check(int b) {
+  if (b == 1) // tracking-note{{Assuming 'b' is not equal to 1, which will be (a part of a) condition}}
+              // tracking-note@-1{{Taking false branch}}
+    halt();
+}
+
+void f(int flag) {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+
+  check(flag); // tracking-note{{Calling 'check'}}
+               // tracking-note@-1{{Returning from 'check'}}
+
+  if (flag) // expected-note{{'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
+            // debug-note@-2{{Tracking condition 'flag'}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+
+} // end of namespace collapse_point_not_in_condition_binary_op
+
 namespace collapse_point_not_in_condition_as_field {
 
 [[noreturn]] void halt();
@@ -467,7 +517,7 @@ struct IntWrapper {
   IntWrapper();
 
   void check() {
-    if (!b) // tracking-note{{Assuming field 'b' is not equal to 0}}
+    if (!b) // tracking-note{{Assuming field 'b' is not equal to 0, which will be (a part of a) condition}}
             // tracking-note@-1{{Taking false branch}}
       halt();
     return;
@@ -487,6 +537,65 @@ void f(IntWrapper i) {
 }
 
 } // end of namespace collapse_point_not_in_condition_as_field
+
+namespace assignemnt_in_condition_in_nested_stackframe {
+int flag;
+
+bool coin();
+
+[[noreturn]] void halt();
+
+void foo() {
+  if ((flag = coin()))
+    // tracking-note@-1{{Value assigned to 'flag', which will be (a part of a) condition}}
+    // tracking-note@-2{{Assuming 'flag' is not equal to 0, which will be (a part of a) condition}}
+    // tracking-note@-3{{Taking true branch}}
+    return;
+  halt();
+  return;
+}
+
+void f() {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+
+  foo();    // tracking-note{{Calling 'foo'}}
+            // tracking-note@-1{{Returning from 'foo'}}
+  if (flag) // expected-note{{'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
+            // debug-note@-2{{Tracking condition 'flag'}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+} // end of namespace assignemnt_in_condition_in_nested_stackframe
+
+namespace condition_variable_less {
+int flag;
+
+bool coin();
+
+[[noreturn]] void halt();
+
+void foo() {
+  if (flag > 0)
+    // tracking-note@-1{{Assuming 'flag' is > 0, which will be (a part of a) condition}}
+    // tracking-note@-2{{Taking true branch}}
+    return;
+  halt();
+  return;
+}
+
+void f() {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+
+  foo();    // tracking-note{{Calling 'foo'}}
+            // tracking-note@-1{{Returning from 'foo'}}
+  if (flag) // expected-note{{'flag' is not equal to 0}}
+            // expected-note@-1{{Taking true branch}}
+            // debug-note@-2{{Tracking condition 'flag'}}
+    *x = 5; // expected-warning{{Dereference of null pointer}}
+            // expected-note@-1{{Dereference of null pointer}}
+}
+} // end of namespace condition_variable_less
 
 namespace dont_track_assertlike_conditions {
 
