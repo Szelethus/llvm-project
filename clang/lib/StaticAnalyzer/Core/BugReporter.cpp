@@ -2265,8 +2265,8 @@ class BugPathGetter {
   /// Assign each node with its distance from the root.
   PriorityMapTy PriorityMap;
 
-  // Since the error node the BugReport is in to the original ExplodedGraph,
-  // we need to map it the one found in the trimmed graph.
+  /// Since the getErrorNode() or BugReport refers to the original ExplodedGraph,
+  /// we need to pair it to the error node of the constructed trimmed graph.
   using ReportNewNodePair = std::pair<BugReport *, const ExplodedNode *>;
   SmallVector<ReportNewNodePair, 32> ReportNodes;
 
@@ -2302,7 +2302,7 @@ class BugPathGetter {
 
 public:
   BugPathGetter(const ExplodedGraph *OriginalGraph,
-           ArrayRef<BugReport *> &bugReports);
+                ArrayRef<BugReport *> &bugReports);
 
   BugPathInfo *getNextBugPath();
 };
@@ -2310,7 +2310,7 @@ public:
 } // namespace
 
 BugPathGetter::BugPathGetter(const ExplodedGraph *OriginalGraph,
-                   ArrayRef<BugReport *> &bugReports) {
+                             ArrayRef<BugReport *> &bugReports) {
   SmallVector<const ExplodedNode *, 32> Nodes;
   for (const auto I : bugReports) {
     assert(I->isValid() &&
@@ -2539,7 +2539,7 @@ generateVisitorsDiagnostics(BugReport *R, const ExplodedNode *ErrorNode,
     // a visitor isn't added multiple times for the same node, but it's fine
     // to add the a visitor with Profile() for different nodes (e.g. tracking
     // a region at different points of the symbolic execution).
-    for (std::unique_ptr<BugReporterVisitor> &Visitor :  R->visitors())
+    for (std::unique_ptr<BugReporterVisitor> &Visitor : R->visitors())
       visitors.push_back(std::move(Visitor));
 
     R->clearVisitors();
@@ -2583,7 +2583,7 @@ class ReportInfo {
 
 public:
   ReportInfo(BugPathInfo &&BugPath, std::unique_ptr<VisitorsDiagnosticsTy> V)
-    : BugPath(std::move(BugPath)), VisitorDiagnostics(std::move(V)) {}
+      : BugPath(std::move(BugPath)), VisitorDiagnostics(std::move(V)) {}
 
   ReportInfo() = default;
 
@@ -2604,9 +2604,8 @@ public:
 /// Find a non-invalidated report for a given equivalence class,  and returns
 /// the bug path associated with it together with a cache of visitors notes.
 /// If none found, returns an isInvalid() object.
-static
-ReportInfo findValidReport(ArrayRef<BugReport *> &bugReports,
-                           GRBugReporter &Reporter) {
+static ReportInfo findValidReport(ArrayRef<BugReport *> &bugReports,
+                                  GRBugReporter &Reporter) {
   BugPathGetter BugGraph(&Reporter.getGraph(), bugReports);
 
   while (BugPathInfo *BugPath = BugGraph.getNextBugPath()) {
@@ -2664,8 +2663,8 @@ GRBugReporter::generatePathDiagnostics(
 
   if (Info.isValid()) {
     for (PathDiagnosticConsumer *PC : consumers) {
-      PathDiagnosticBuilder PDB(
-          *this, Info.getBugReport(), Info.getMapToOriginNodes(), PC);
+      PathDiagnosticBuilder PDB(*this, Info.getBugReport(),
+                                Info.getMapToOriginNodes(), PC);
       std::unique_ptr<PathDiagnostic> PD = generatePathDiagnosticForConsumer(
           PC->getGenerationScheme(), PDB, Info.getErrorNode(),
           Info.getVisitorsDiagnostics());
