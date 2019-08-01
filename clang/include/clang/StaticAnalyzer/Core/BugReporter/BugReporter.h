@@ -525,7 +525,7 @@ public:
   ///  engine.
   ProgramStateManager &getStateManager();
 
-  const ProgramStateManager &getStateManager() const;
+  ProgramStateManager &getStateManager() const;
 
   /// \p bugReports A set of bug reports within a *single* equivalence class
   ///
@@ -570,13 +570,11 @@ public:
 
   const ExplodedGraph &getGraph() const { return BR.getGraph(); }
 
-  ProgramStateManager& getStateManager() { return BR.getStateManager(); }
-
-  const ProgramStateManager& getStateManager() const {
+  ProgramStateManager& getStateManager() const {
     return BR.getStateManager();
   }
 
-  const SValBuilder &getSValBuilder() const {
+  SValBuilder &getSValBuilder() const {
     return getStateManager().getSValBuilder();
   }
 

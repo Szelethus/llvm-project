@@ -2206,7 +2206,7 @@ const ExplodedGraph &GRBugReporter::getGraph() const { return Eng.getGraph(); }
 ProgramStateManager&
 GRBugReporter::getStateManager() { return Eng.getStateManager(); }
 
-const ProgramStateManager&
+ProgramStateManager&
 GRBugReporter::getStateManager() const { return Eng.getStateManager(); }
 
 BugReporter::~BugReporter() {
