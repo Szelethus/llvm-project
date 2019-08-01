@@ -213,6 +213,22 @@ getConcreteIntegerValue(const Expr *CondVarExpr, const ExplodedNode *N) {
   return None;
 }
 
+static bool isVarAnInterestingCondition(const Expr *CondVarExpr,
+                                        const ExplodedNode *N,
+                                        const BugReport *B) {
+  // Even if this condition is marked as interesting, it isn't *that*
+  // interesting if it didn't happen in a nested stackframe, the user could just
+  // follow the arrows.
+  if (!B->getErrorNode()->getStackFrame()->isParentOf(N->getStackFrame()))
+    return false;
+
+  if (Optional<SVal> V = getSValForVar(CondVarExpr, N))
+    if (Optional<bugreporter::TrackingKind> K = B->getInterestingnessKind(*V))
+      return *K == bugreporter::TrackingKind::Condition;
+
+  return false;
+}
+
 static bool isInterestingExpr(const Expr *E, const ExplodedNode *N,
                               const BugReport *B) {
   if (Optional<SVal> V = getSValForVar(E, N))
@@ -2490,6 +2506,10 @@ PathDiagnosticPieceRef ConditionBRVisitor::VisitTrueTest(
   const LocationContext *LCtx = N->getLocationContext();
   const SourceManager &SM = BRC.getSourceManager();
 
+  if (isVarAnInterestingCondition(BExpr->getLHS(), N, &R) ||
+      isVarAnInterestingCondition(BExpr->getRHS(), N, &R))
+    Out << WillBeUsedForACondition;
+
   // Convert 'field ...' to 'Field ...' if it is a MemberExpr.
   std::string Message = Out.str();
   Message[0] = toupper(Message[0]);
@@ -2535,6 +2555,9 @@ PathDiagnosticPieceRef ConditionBRVisitor::VisitConditionVariable(
   const LocationContext *LCtx = N->getLocationContext();
   PathDiagnosticLocation Loc(CondVarExpr, BRC.getSourceManager(), LCtx);
 
+  if (isVarAnInterestingCondition(CondVarExpr, N, &report))
+    Out << WillBeUsedForACondition;
+
   auto event = std::make_shared<PathDiagnosticEventPiece>(Loc, Out.str());
 
   if (isInterestingExpr(CondVarExpr, N, &report))
@@ -2559,6 +2582,9 @@ PathDiagnosticPieceRef ConditionBRVisitor::VisitTrueTest(
     return nullptr;
 
   const LocationContext *LCtx = N->getLocationContext();
+
+  if (isVarAnInterestingCondition(DRE, N, &report))
+    Out << WillBeUsedForACondition;
 
   // If we know the value create a pop-up note to the 'DRE'.
   if (!IsAssuming) {
@@ -2599,6 +2625,10 @@ PathDiagnosticPieceRef ConditionBRVisitor::VisitTrueTest(
   if (!Loc.isValid() || !Loc.asLocation().isValid())
     return nullptr;
 
+  if (isVarAnInterestingCondition(ME, N, &report))
+    Out << WillBeUsedForACondition;
+
+  // If we know the value create a pop-up note.
   if (!IsAssuming)
     return std::make_shared<PathDiagnosticPopUpPiece>(Loc, Out.str());
 
