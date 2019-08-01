@@ -191,13 +191,13 @@ public:
 };
 
 /// Contains every contextual information needed for constructing a
-/// PathDiagnostic object for a given bug report. This class (and aside from
-/// some caching BugReport does in the background) and its fields are immutable,
-/// and passes a BugReportConstruct object around during the construction.
+/// PathDiagnostic object for a given bug report. This class and its fields are
+/// immutable, and passes a BugReportConstruct object around during the
+/// construction.
 class PathDiagnosticBuilder : public BugReporterContext {
   /// A linear path from the error node to the root.
   std::unique_ptr<const ExplodedGraph> BugPath;
-  BugReport *R;
+  const BugReport *R;
   /// The leaf of the bug path. This isn't the same as the bug reports error
   /// node, which refers to the *original* graph, not the bug path.
   const ExplodedNode *const ErrorNode;
@@ -255,7 +255,7 @@ private:
   PathDiagnosticLocation ExecutionContinues(llvm::raw_string_ostream &os,
                                             const BugReportConstruct &C) const;
 
-  BugReport *getBugReport() const { return R; }
+  const BugReport *getBugReport() const { return R; }
 };
 
 } // namespace
@@ -2171,14 +2171,13 @@ const Stmt *BugReport::getStmt() const {
   return S;
 }
 
-llvm::iterator_range<BugReport::ranges_iterator> BugReport::getRanges() {
+llvm::iterator_range<BugReport::ranges_iterator> BugReport::getRanges() const {
   // If no custom ranges, add the range of the statement corresponding to
   // the error node.
   if (Ranges.empty()) {
     if (const auto *E = dyn_cast_or_null<Expr>(getStmt()))
-      addRange(E->getSourceRange());
-    else
-      return llvm::make_range(ranges_iterator(), ranges_iterator());
+      return llvm::make_range(&ErrorNodeRange, &ErrorNodeRange + 1);
+    return llvm::make_range(ranges_iterator(), ranges_iterator());
   }
 
   // User-specified absence of range info.
