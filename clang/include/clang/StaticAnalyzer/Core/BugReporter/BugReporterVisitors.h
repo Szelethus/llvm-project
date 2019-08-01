@@ -241,8 +241,8 @@ public:
 
   PathDiagnosticPieceRef VisitTerminator(const Stmt *Term,
                                          const ExplodedNode *N,
-                                         const CFGBlock *srcBlk,
-                                         const CFGBlock *dstBlk, BugReport &R,
+                                         const CFGBlock *SrcBlk,
+                                         const CFGBlock *DstBlk, BugReport &R,
                                          BugReporterContext &BRC);
 
   PathDiagnosticPieceRef VisitTrueTest(const Expr *Cond,
