@@ -280,6 +280,36 @@ void i(int *ptr) {
 }
 } // end of namespace important_returning_value_note
 
+namespace important_returning_value_note_in_linear_function {
+bool coin();
+
+struct super_complicated_template_hackery {
+  static constexpr bool value = false;
+};
+
+bool flipCoin() {
+  if (super_complicated_template_hackery::value)
+    // tracking-note@-1{{'value' is false}}
+    // tracking-note@-2{{Taking false branch}}
+    return true;
+  return coin(); // tracking-note{{Returning value}}
+}
+
+void i(int *ptr) {
+  if (ptr) // expected-note{{Assuming 'ptr' is null}}
+           // expected-note@-1{{Taking false branch}}
+    ;
+  if (!flipCoin())
+    // tracking-note@-1{{Calling 'flipCoin'}}
+    // tracking-note@-2{{Returning from 'flipCoin'}}
+    // debug-note@-3{{Tracking condition '!flipCoin()'}}
+    // expected-note@-4{{Assuming the condition is true}}
+    // expected-note@-5{{Taking true branch}}
+    *ptr = 5; // expected-warning{{Dereference of null pointer}}
+              // expected-note@-1{{Dereference of null pointer}}
+}
+} // end of namespace important_returning_value_note_in_linear_function
+
 namespace tracked_condition_is_only_initialized {
 int getInt();
 

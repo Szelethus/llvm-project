@@ -1034,8 +1034,10 @@ public:
       } else {
         // There is nothing interesting about returning a value, when it is
         // plain value without any constraints, and the function is guaranteed
-        // to return that every time.
-        if (N->getCFG().isLinear())
+        // to return that every time. We could use CFG::isLinear() here, but
+        // constexpr branches are obvious to the compiler, not necesserily to
+        // the programmer.
+        if (N->getCFG().size() == 3)
           WouldEventBeMeaningless = true;
 
         if (V.getAs<Loc>())
