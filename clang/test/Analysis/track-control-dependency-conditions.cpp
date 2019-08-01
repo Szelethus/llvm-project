@@ -459,6 +459,35 @@ void f(int flag) {
 
 } // end of namespace unimportant_write_before_collapse_point
 
+namespace collapse_point_not_in_condition_as_field {
+
+[[noreturn]] void halt();
+struct IntWrapper {
+  int b;
+  IntWrapper();
+
+  void check() {
+    if (!b) // tracking-note{{Assuming field 'b' is not equal to 0}}
+            // tracking-note@-1{{Taking false branch}}
+      halt();
+    return;
+  }
+};
+
+void f(IntWrapper i) {
+  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+
+  i.check(); // tracking-note{{Calling 'IntWrapper::check'}}
+             // tracking-note@-1{{Returning from 'IntWrapper::check'}}
+  if (i.b)   // expected-note{{Field 'b' is not equal to 0}}
+             // expected-note@-1{{Taking true branch}}
+             // debug-note@-2{{Tracking condition 'i.b'}}
+    *x = 5;  // expected-warning{{Dereference of null pointer}}
+             // expected-note@-1{{Dereference of null pointer}}
+}
+
+} // end of namespace collapse_point_not_in_condition_as_field
+
 namespace dont_track_assertlike_conditions {
 
 extern void __assert_fail (__const char *__assertion, __const char *__file,

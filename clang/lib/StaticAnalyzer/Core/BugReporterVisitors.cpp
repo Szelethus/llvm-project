@@ -180,21 +180,41 @@ static bool hasVisibleUpdate(const ExplodedNode *LeftNode, SVal LeftVal,
     RLCV->getStore() == RightNode->getState()->getStore();
 }
 
-static Optional<const llvm::APSInt *>
-getConcreteIntegerValue(const Expr *CondVarExpr, const ExplodedNode *N) {
+static Optional<SVal> getSValForVar(const Expr *CondVarExpr,
+                                    const ExplodedNode *N) {
   ProgramStateRef State = N->getState();
   const LocationContext *LCtx = N->getLocationContext();
 
-  // The declaration of the value may rely on a pointer so take its l-value.
-  if (const auto *DRE = dyn_cast_or_null<DeclRefExpr>(CondVarExpr)) {
-    if (const auto *VD = dyn_cast_or_null<VarDecl>(DRE->getDecl())) {
-      SVal DeclSVal = State->getSVal(State->getLValue(VD, LCtx));
-      if (auto DeclCI = DeclSVal.getAs<nonloc::ConcreteInt>())
-        return &DeclCI->getValue();
-    }
-  }
+  assert(CondVarExpr);
+  CondVarExpr = CondVarExpr->IgnoreImpCasts();
 
-  return {};
+  // The declaration of the value may rely on a pointer so take its l-value.
+  if (const auto *DRE = dyn_cast<DeclRefExpr>(CondVarExpr))
+    if (const auto *VD = dyn_cast<VarDecl>(DRE->getDecl()))
+      return State->getSVal(State->getLValue(VD, LCtx));
+
+  if (const auto *ME = dyn_cast<MemberExpr>(CondVarExpr))
+    if (const auto *FD = dyn_cast<FieldDecl>(ME->getMemberDecl()))
+      if (auto FieldL = State->getSVal(ME, LCtx).getAs<Loc>())
+        return State->getRawSVal(*FieldL, FD->getType());
+
+  return None;
+}
+
+static Optional<const llvm::APSInt *>
+getConcreteIntegerValue(const Expr *CondVarExpr, const ExplodedNode *N) {
+
+  if (Optional<SVal> V = getSValForVar(CondVarExpr, N))
+    if (auto DeclCI = V->getAs<nonloc::ConcreteInt>())
+      return &DeclCI->getValue();
+  return None;
+}
+
+static bool isInterestingExpr(const Expr *E, const ExplodedNode *N,
+                              const BugReport *B) {
+  if (Optional<SVal> V = getSValForVar(E, N))
+    return B->getInterestingnessKind(*V).hasValue();
+  return false;
 }
 
 /// \return name of the macro inside the location \p Loc.
@@ -2494,17 +2514,11 @@ PathDiagnosticPieceRef ConditionBRVisitor::VisitConditionVariable(
 
   const LocationContext *LCtx = N->getLocationContext();
   PathDiagnosticLocation Loc(CondVarExpr, BRC.getSourceManager(), LCtx);
+
   auto event = std::make_shared<PathDiagnosticEventPiece>(Loc, Out.str());
 
-  if (const auto *DR = dyn_cast<DeclRefExpr>(CondVarExpr)) {
-    if (const auto *VD = dyn_cast<VarDecl>(DR->getDecl())) {
-      const ProgramState *state = N->getState().get();
-      if (const MemRegion *R = state->getLValue(VD, LCtx).getAsRegion()) {
-        if (report.isInteresting(R))
-          event->setPrunable(false);
-      }
-    }
-  }
+  if (isInterestingExpr(CondVarExpr, N, &report))
+    event->setPrunable(false);
 
   return event;
 }
@@ -2532,16 +2546,10 @@ PathDiagnosticPieceRef ConditionBRVisitor::VisitTrueTest(
     return std::make_shared<PathDiagnosticPopUpPiece>(Loc, Out.str());
 
   auto event = std::make_shared<PathDiagnosticEventPiece>(Loc, Out.str());
-  const ProgramState *state = N->getState().get();
-  if (const MemRegion *R = state->getLValue(VD, LCtx).getAsRegion()) {
-    if (report.isInteresting(R))
-      event->setPrunable(false);
-    else {
-      SVal V = state->getSVal(R);
-      if (report.isInteresting(V))
-        event->setPrunable(false);
-    }
-  }
+
+  if (isInterestingExpr(DRE, N, &report))
+    event->setPrunable(false);
+
   return std::move(event);
 }
 
@@ -2566,7 +2574,10 @@ PathDiagnosticPieceRef ConditionBRVisitor::VisitTrueTest(
   if (!IsAssuming)
     return std::make_shared<PathDiagnosticPopUpPiece>(Loc, Out.str());
 
-  return std::make_shared<PathDiagnosticEventPiece>(Loc, Out.str());
+  auto event = std::make_shared<PathDiagnosticEventPiece>(Loc, Out.str());
+  if (isInterestingExpr(ME, N, &report))
+    event->setPrunable(false);
+  return event;
 }
 
 bool ConditionBRVisitor::printValue(const Expr *CondVarExpr, raw_ostream &Out,
@@ -2606,9 +2617,9 @@ bool ConditionBRVisitor::printValue(const Expr *CondVarExpr, raw_ostream &Out,
   return true;
 }
 
-const char *const ConditionBRVisitor::GenericTrueMessage =
+llvm::StringLiteral ConditionBRVisitor::GenericTrueMessage =
     "Assuming the condition is true";
-const char *const ConditionBRVisitor::GenericFalseMessage =
+llvm::StringLiteral ConditionBRVisitor::GenericFalseMessage =
     "Assuming the condition is false";
 
 bool ConditionBRVisitor::isPieceMessageGeneric(
