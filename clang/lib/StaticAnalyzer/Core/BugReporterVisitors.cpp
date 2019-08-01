@@ -1742,12 +1742,13 @@ static bool isAssertlikeBlock(const CFGBlock *B, ASTContext &Context) {
   if (!Then || !Else)
     return false;
 
-  if (Then->isInevitablySinking() || Else->isInevitablySinking())
+  if (Then->isInevitablySinking() != Else->isInevitablySinking())
     return true;
 
   // For the following condition the following CFG would be built:
   //
-  //
+  //                          ------------->
+  //                         /              \
   //                       [B1] -> [B2] -> [B3] -> [sink]
   // assert(A && B || C);    \       \       \
   //                          -------------------> [go on with the execution]
@@ -1755,17 +1756,9 @@ static bool isAssertlikeBlock(const CFGBlock *B, ASTContext &Context) {
   // It so happens that CFGBlock::getTerminatorCondition returns 'A' for block
   // B1, 'A && B' for B2, and 'A && B || C' for B3. Let's check whether we
   // reached the end of the condition!
-  if (const Stmt *ElseCond = Else->getTerminatorCondition()) {
-    const Stmt *OuterCond = B->getTerminatorCondition();
-    assert(OuterCond);
-
-    using namespace ast_matchers;
-    auto IsSubStmtOfCondition =
-        stmt(forEachDescendant(equalsNode(OuterCond))).bind("s");
-
-    if (selectFirst<Stmt>("s", match(IsSubStmtOfCondition, *ElseCond, Context)))
+  if (const Stmt *ElseCond = Else->getTerminatorCondition())
+    if (isa<BinaryOperator>(ElseCond))
       return isAssertlikeBlock(Else, Context);
-  }
 
   return false;
 }
