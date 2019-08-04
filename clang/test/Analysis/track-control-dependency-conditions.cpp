@@ -411,19 +411,19 @@ namespace collapse_point_not_in_condition_bool {
 
 [[noreturn]] void halt();
 
-void assert(int b) {
-  if (!b) // tracking-note{{Assuming 'b' is not equal to 0, which will be (a part of a) condition}}
+void check(bool b) {
+  if (!b) // tracking-note{{Assuming 'b' is true, which will be (a part of a) condition}}
           // tracking-note@-1{{Taking false branch}}
     halt();
 }
 
-void f(int flag) {
+void f(bool flag) {
   int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
 
-  assert(flag); // tracking-note{{Calling 'assert'}}
-                // tracking-note@-1{{Returning from 'assert'}}
+  check(flag); // tracking-note{{Calling 'check'}}
+                // tracking-note@-1{{Returning from 'check'}}
 
-  if (flag) // expected-note{{'flag' is not equal to 0}}
+  if (flag) // expected-note{{'flag' is true}}
             // expected-note@-1{{Taking true branch}}
             // debug-note@-2{{Tracking condition 'flag'}}
     *x = 5; // expected-warning{{Dereference of null pointer}}
