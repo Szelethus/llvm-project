@@ -29,7 +29,7 @@ int flag;
 bool coin();
 
 void foo() {
-  flag = coin(); // tracking-note{{Value assigned to 'flag'}}
+  flag = coin(); // tracking-note{{Value assigned to 'flag', which will be (a part of a) condition}}
 }
 
 void test() {
@@ -58,7 +58,7 @@ int flag;
 bool coin();
 
 void foo() {
-  flag = coin(); // tracking-note{{Value assigned to 'flag'}}
+  flag = coin(); // tracking-note{{Value assigned to 'flag', which will be (a part of a) condition}}
 }
 
 void test() {
@@ -90,8 +90,8 @@ bool coin();
 
 void foo() {
   // coin() could write bar, do it's invalidated.
-  flag = coin(); // tracking-note{{Value assigned to 'flag'}}
-                 // tracking-note@-1{{Value assigned to 'bar'}}
+  flag = coin(); // tracking-note{{Value assigned to 'flag', which will be (a part of a) condition}}
+                 // tracking-note@-1{{Value assigned to 'bar', which will be (a part of a) condition}}
 }
 
 int bar;
@@ -184,14 +184,14 @@ bool coin();
 int *getIntPtr();
 
 void storeValue(int **i) {
-  *i = getIntPtr(); // tracking-note{{Value assigned to 'i'}}
+  *i = getIntPtr(); // tracking-note{{Value assigned to 'i', which will be (a part of a) condition}}
 }
 
 int *conjurePointer() {
   int *i;
   storeValue(&i); // tracking-note{{Calling 'storeValue'}}
                   // tracking-note@-1{{Returning from 'storeValue'}}
-  return i;       // tracking-note{{Returning pointer (loaded from 'i')}}
+  return i; // tracking-note{{Returning pointer (loaded from 'i'), which will be (a part of a) condition}}
 }
 
 void f(int *ptr) {
@@ -280,7 +280,7 @@ bool flipCoin() {
               // tracking-note@-1{{Taking false branch}}
               // debug-note@-2{{Tracking condition 'coin()'}}
     return true;
-  return coin(); // tracking-note{{Returning value}}
+  return coin(); // tracking-note{{Returning value, which will be (a part of a) condition}}
 }
 
 void i(int *ptr) {
@@ -366,7 +366,7 @@ int getInt();
 void foo() {
   int y;
   y = 1;
-  flag = y; // tracking-note{{The value 1 is assigned to 'flag'}}
+  flag = y; // tracking-note{{The value 1 is assigned to 'flag', which will be (a part of a) condition}}
 }
 
 void f(int y) {
@@ -388,7 +388,7 @@ int flag = 0;
 int getInt();
 
 void foo() {
-  flag = getInt(); // tracking-note{{Value assigned to 'flag'}}
+  flag = getInt(); // tracking-note{{Value assigned to 'flag', which will be (a part of a) condition}}
 }
 
 void f() {
@@ -704,7 +704,7 @@ namespace only_track_the_evaluated_condition {
 bool coin();
 
 void bar(int &flag) {
-  flag = coin(); // tracking-note{{Value assigned to 'flag'}}
+  flag = coin(); // tracking-note{{Value assigned to 'flag', which will be (a part of a) condition}}
 }
 
 void bar2(int &flag2) {
