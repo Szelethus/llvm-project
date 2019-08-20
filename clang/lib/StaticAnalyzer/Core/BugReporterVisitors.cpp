@@ -189,6 +189,9 @@ static Optional<SVal> getSValForVar(const Expr *CondVarExpr,
   CondVarExpr = CondVarExpr->IgnoreImpCasts();
 
   // The declaration of the value may rely on a pointer so take its l-value.
+  // FIXME: As seen in VisitCommonDeclRefExpr, sometimes DeclRefExpr may
+  // evaluate to a FieldRegion when it refers to a declaration of a lambda
+  // capture variable. We most likely need to duplicate that logic here.
   if (const auto *DRE = dyn_cast<DeclRefExpr>(CondVarExpr))
     if (const auto *VD = dyn_cast<VarDecl>(DRE->getDecl()))
       return State->getSVal(State->getLValue(VD, LCtx));
