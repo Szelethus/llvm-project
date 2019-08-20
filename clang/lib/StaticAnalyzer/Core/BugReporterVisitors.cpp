@@ -614,7 +614,7 @@ void NoStoreFuncVisitor::findModifyingFrames(const ExplodedNode *N) {
 }
 
 static llvm::StringLiteral WillBeUsedForACondition =
-    ", which will be (a part of a) condition";
+    ", which participates in a condition later";
 
 PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
     BugReport &R, const CallEvent &Call, const ExplodedNode *N,
