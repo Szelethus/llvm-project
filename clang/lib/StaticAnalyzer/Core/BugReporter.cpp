@@ -2102,19 +2102,27 @@ static void insertToInterestingnessMap(
     bugreporter::TrackingKind TKind) {
   auto Result = InterestingnessMap.insert({Val, TKind});
 
-  static_assert(
-      static_cast<unsigned>(bugreporter::TrackingKind::NumTrackingKinds) == 2,
-      "BugReport::markInteresting currently can only handle 2 different "
-      "tracking kinds! Please define what tracking kind should this entitiy"
-      "have, if it was already marked as interesting with a different kind!");
+  if (Result.second)
+    return;
+
   // Even if this symbol/region was already marked as interesting as a
   // condition, if we later mark it as interesting again but with
   // thorough tracking, overwrite it. Entities marked with thorough
   // interestiness are the most important (or most interesting, if you will),
   // and we wouldn't like to downplay their importance.
-  if (!Result.second)
-    if (TKind == bugreporter::TrackingKind::Thorough)
+
+  switch (TKind) {
+    case bugreporter::TrackingKind::Thorough:
       Result.first->getSecond() = bugreporter::TrackingKind::Thorough;
+      return;
+    case bugreporter::TrackingKind::Condition:
+      return;
+  }
+
+  llvm_unreachable(
+      "BugReport::markInteresting currently can only handle 2 different "
+      "tracking kinds! Please define what tracking kind should this entitiy"
+      "have, if it was already marked as interesting with a different kind!");
 }
 
 void BugReport::markInteresting(SymbolRef sym,
@@ -2155,18 +2163,25 @@ Optional<bugreporter::TrackingKind>
 BugReport::getInterestingnessKind(SVal V) const {
   auto RKind = getInterestingnessKind(V.getAsRegion());
   auto SKind = getInterestingnessKind(V.getAsSymbol());
-  static_assert(
-      static_cast<unsigned>(bugreporter::TrackingKind::NumTrackingKinds) == 2,
-      "BugReport::getInterestingnessKind currently can only handle 2 different "
-      "tracking kinds! Please define what tracking kind should we return here "
-      "when the kind of getAsRegion() and getAsSymbol() is different!");
   if (!RKind)
     return SKind;
   if (!SKind)
     return RKind;
+
   // If either is marked with throrough tracking, return that, we wouldn't like
   // to downplay a note's importance by 'only' mentioning it as a condition.
-  return *RKind != *SKind ? bugreporter::TrackingKind::Thorough : RKind;
+  switch(*RKind) {
+    case bugreporter::TrackingKind::Thorough:
+      return RKind;
+    case bugreporter::TrackingKind::Condition:
+      return SKind;
+  }
+
+  llvm_unreachable(
+      "BugReport::getInterestingnessKind currently can only handle 2 different "
+      "tracking kinds! Please define what tracking kind should we return here "
+      "when the kind of getAsRegion() and getAsSymbol() is different!");
+  return None;
 }
 
 Optional<bugreporter::TrackingKind>

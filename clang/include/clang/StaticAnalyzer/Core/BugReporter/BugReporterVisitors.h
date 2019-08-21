@@ -91,14 +91,12 @@ namespace bugreporter {
 enum class TrackingKind {
   /// Default tracking kind -- specifies that as much information should be
   /// gathered about the tracked expression value as possible.
-  Thorough = 0,
+  Thorough,
   /// Specifies that a more moderate tracking should be used for the expression
   /// value. This will essentially make sure that functions relevant to the it
   /// aren't pruned, but otherwise relies on the user reading the code or
   /// following the arrows.
-  Condition = 1,
-  /// Number of different tracking kinds for sanity checks.
-  NumTrackingKinds = 2
+  Condition
 };
 
 /// Attempts to add visitors to track expression value back to its point of
