@@ -425,16 +425,16 @@ struct Container {
 
 void f(Container Cont) {
   int flag = 0;
-  int *x = 0; // expected-note{{'x' initialized to a null pointer value}}
+  int *x = 0; // expected-note-re{{{{^}}'x' initialized to a null pointer value{{$}}}}
   for (int i : Cont)
-    if (i) // expected-note   {{Assuming 'i' is not equal to 0}}
-           // expected-note@-1{{Taking true branch}}
-           // debug-note@-2{{Tracking condition 'i'}}
+    if (i) // expected-note-re   {{{{^}}Assuming 'i' is not equal to 0{{$}}}}
+           // expected-note-re@-1{{{{^}}Taking true branch{{$}}}}
+           // debug-note-re@-2{{{{^}}Tracking condition 'i'{{$}}}}
       flag = i;
 
-  if (flag) // expected-note{{'flag' is not equal to 0}}
-            // expected-note@-1{{Taking true branch}}
-            // debug-note@-2{{Tracking condition 'flag'}}
+  if (flag) // expected-note-re{{{{^}}'flag' is not equal to 0{{$}}}}
+            // expected-note-re@-1{{{{^}}Taking true branch{{$}}}}
+            // debug-note-re@-2{{{{^}}Tracking condition 'flag'{{$}}}}
     *x = 5; // expected-warning{{Dereference of null pointer}}
             // expected-note@-1{{Dereference of null pointer}}
 }
