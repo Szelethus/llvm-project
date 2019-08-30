@@ -1473,14 +1473,6 @@ void RetainCountChecker::printState(raw_ostream &Out, ProgramStateRef State,
 // Checker registration.
 //===----------------------------------------------------------------------===//
 
-void ento::registerRetainCountBase(CheckerManager &Mgr) {
-  Mgr.registerChecker<RetainCountChecker>();
-}
-
-bool ento::shouldRegisterRetainCountBase(const LangOptions &LO) {
-  return true;
-}
-
 // FIXME: remove this, hack for backwards compatibility:
 // it should be possible to enable the NS/CF retain count checker as
 // osx.cocoa.RetainCount, and it should be possible to disable
@@ -1495,12 +1487,27 @@ static bool getOption(AnalyzerOptions &Options,
   return false;
 }
 
-void ento::registerRetainCountChecker(CheckerManager &Mgr) {
-  auto *Chk = Mgr.getChecker<RetainCountChecker>();
-  Chk->TrackObjCAndCFObjects = true;
+void ento::registerRetainCountBase(CheckerManager &Mgr) {
+  auto *Chk = Mgr.registerChecker<RetainCountChecker>();
+
+  Chk->TrackObjCAndCFObjects =
+      Mgr.getAnalyzerOptions().getCheckerBooleanOption(Chk,
+                                         "TrackObjCAndCFObjects",
+                                         true);
   Chk->TrackNSCFStartParam = getOption(Mgr.getAnalyzerOptions(),
                                        "TrackNSCFStartParam",
                                        "true");
+  Chk->TrackOSObjects = getOption(Mgr.getAnalyzerOptions(),
+                                       "CheckOSObject",
+                                       "false");
+}
+
+bool ento::shouldRegisterRetainCountBase(const LangOptions &LO) {
+  return true;
+}
+
+void ento::registerRetainCountChecker(CheckerManager &Mgr) {
+  Mgr.getChecker<RetainCountChecker>()->TrackObjCAndCFObjects = true;
 }
 
 bool ento::shouldRegisterRetainCountChecker(const LangOptions &LO) {
@@ -1508,11 +1515,7 @@ bool ento::shouldRegisterRetainCountChecker(const LangOptions &LO) {
 }
 
 void ento::registerOSObjectRetainCountChecker(CheckerManager &Mgr) {
-  auto *Chk = Mgr.getChecker<RetainCountChecker>();
-  if (!getOption(Mgr.getAnalyzerOptions(),
-                 "CheckOSObject",
-                 "false"))
-    Chk->TrackOSObjects = true;
+  Mgr.getChecker<RetainCountChecker>()->TrackOSObjects = true;
 }
 
 bool ento::shouldRegisterOSObjectRetainCountChecker(const LangOptions &LO) {
