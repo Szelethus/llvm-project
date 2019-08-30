@@ -19,6 +19,7 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporterVisitors.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExplodedGraph.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
@@ -135,12 +136,22 @@ protected:
   SmallVector<FixItHint, 4> Fixits;
 
   BugReport(Kind kind, const BugType &bt, StringRef desc)
-      : K(kind), BT(bt), Description(desc) {}
+      : BugReport(kind, bt, "", desc) {}
 
   BugReport(Kind K, const BugType &BT, StringRef ShortDescription,
             StringRef Description)
       : K(K), BT(BT), ShortDescription(ShortDescription),
-        Description(Description) {}
+        Description(Description) {
+#define GET_CHECKER_DEPENDENCIES
+#define CHECKER_DEPENDENCY(FULLNAME, DEPENDENCY)                               \
+    assert(BT.getCheckName() != DEPENDENCY &&                              \
+           "Some checkers depend on this one! We don't allow such "        \
+           "checkers to emit bug reports, please consult the developer "   \
+           "manual!");
+#include "clang/StaticAnalyzer/Checkers/Checkers.inc"
+#undef CHECKER_DEPENDENCY
+#undef GET_CHECKER_DEPENDENCIES
+  }
 
 public:
   virtual ~BugReport() = default;
