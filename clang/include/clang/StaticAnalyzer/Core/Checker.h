@@ -490,12 +490,12 @@ public:
 } // end eval namespace
 
 class CheckerBase : public ProgramPointTag {
-  CheckName Name;
+  CheckerName Name;
   friend class ::clang::ento::CheckerManager;
 
 public:
   StringRef getTagDescription() const override;
-  CheckName getCheckName() const;
+  CheckerName getCheckerName() const;
 
   /// See CheckerManager::runCheckersForPrintState.
   virtual void printState(raw_ostream &Out, ProgramStateRef State,

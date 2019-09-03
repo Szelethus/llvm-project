@@ -1265,8 +1265,8 @@ static std::unique_ptr<PathDiagnostic>
 generateEmptyDiagnosticForReport(const BugReport *R, const SourceManager &SM) {
   const BugType &BT = R->getBugType();
   return std::make_unique<PathDiagnostic>(
-      R->getBugType().getCheckName(), R->getDeclWithIssue(),
-      R->getBugType().getName(), R->getDescription(),
+      R->getBugType().getCheckerName(), R->getDeclWithIssue(),
+      R->getBugType().getDescription(), R->getDescription(),
       R->getShortDescription(/*UseFallback=*/false), BT.getCategory(),
       R->getUniqueingLocation(), R->getUniqueingDecl(),
       findExecutedLines(SM, R->getErrorNode()));
@@ -3051,14 +3051,14 @@ void BugReporter::EmitBasicReport(const Decl *DeclWithIssue,
                                   StringRef Name, StringRef Category,
                                   StringRef Str, PathDiagnosticLocation Loc,
                                   ArrayRef<SourceRange> Ranges) {
-  EmitBasicReport(DeclWithIssue, Checker->getCheckName(), Name, Category, Str,
+  EmitBasicReport(DeclWithIssue, Checker->getCheckerName(), Name, Category, Str,
                   Loc, Ranges);
 }
 
 void BugReporter::EmitBasicReport(const Decl *DeclWithIssue,
-                                  CheckName CheckName,
-                                  StringRef name, StringRef category,
-                                  StringRef str, PathDiagnosticLocation Loc,
+                                  CheckerName CheckName, StringRef name,
+                                  StringRef category, StringRef str,
+                                  PathDiagnosticLocation Loc,
                                   ArrayRef<SourceRange> Ranges) {
   // 'BT' is owned by BugReporter.
   BugType *BT = getBugTypeForName(CheckName, name, category);
@@ -3070,7 +3070,7 @@ void BugReporter::EmitBasicReport(const Decl *DeclWithIssue,
   emitReport(std::move(R));
 }
 
-BugType *BugReporter::getBugTypeForName(CheckName CheckName, StringRef name,
+BugType *BugReporter::getBugTypeForName(CheckerName CheckName, StringRef name,
                                         StringRef category) {
   SmallString<136> fullDesc;
   llvm::raw_svector_ostream(fullDesc) << CheckName.getName() << ":" << name

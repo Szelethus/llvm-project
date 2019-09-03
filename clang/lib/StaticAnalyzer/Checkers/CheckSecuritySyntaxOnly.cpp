@@ -50,19 +50,19 @@ struct ChecksFilter {
   DefaultBool check_FloatLoopCounter;
   DefaultBool check_UncheckedReturn;
 
-  CheckName checkName_bcmp;
-  CheckName checkName_bcopy;
-  CheckName checkName_bzero;
-  CheckName checkName_gets;
-  CheckName checkName_getpw;
-  CheckName checkName_mktemp;
-  CheckName checkName_mkstemp;
-  CheckName checkName_strcpy;
-  CheckName checkName_DeprecatedOrUnsafeBufferHandling;
-  CheckName checkName_rand;
-  CheckName checkName_vfork;
-  CheckName checkName_FloatLoopCounter;
-  CheckName checkName_UncheckedReturn;
+  CheckerName checkName_bcmp;
+  CheckerName checkName_bcopy;
+  CheckerName checkName_bzero;
+  CheckerName checkName_gets;
+  CheckerName checkName_getpw;
+  CheckerName checkName_mktemp;
+  CheckerName checkName_mkstemp;
+  CheckerName checkName_strcpy;
+  CheckerName checkName_DeprecatedOrUnsafeBufferHandling;
+  CheckerName checkName_rand;
+  CheckerName checkName_vfork;
+  CheckerName checkName_FloatLoopCounter;
+  CheckerName checkName_UncheckedReturn;
 };
 
 class WalkAST : public StmtVisitor<WalkAST> {

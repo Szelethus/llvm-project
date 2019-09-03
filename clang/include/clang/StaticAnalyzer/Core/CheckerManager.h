@@ -94,15 +94,15 @@ enum PointerEscapeKind {
 // CheckerRegistry are used as check names. We want to make sure all check
 // name strings have a lifetime that keeps them alive at least until the path
 // diagnostics have been processed.
-class CheckName {
+class CheckerName {
   friend class ::clang::ento::CheckerRegistry;
 
   StringRef Name;
 
-  explicit CheckName(StringRef Name) : Name(Name) {}
+  explicit CheckerName(StringRef Name) : Name(Name) {}
 
 public:
-  CheckName() = default;
+  CheckerName() = default;
 
   StringRef getName() const { return Name; }
   operator StringRef() const { return Name; }
@@ -118,7 +118,7 @@ class CheckerManager {
   ASTContext &Context;
   const LangOptions LangOpts;
   AnalyzerOptions &AOptions;
-  CheckName CurrentCheckName;
+  CheckerName CurrentCheckName;
 
 public:
   CheckerManager(ASTContext &Context, AnalyzerOptions &AOptions)
@@ -126,8 +126,8 @@ public:
 
   ~CheckerManager();
 
-  void setCurrentCheckName(CheckName name) { CurrentCheckName = name; }
-  CheckName getCurrentCheckName() const { return CurrentCheckName; }
+  void setCurrentCheckName(CheckerName name) { CurrentCheckName = name; }
+  CheckerName getCurrentCheckName() const { return CurrentCheckName; }
 
   bool hasPathSensitiveCheckers() const;
 

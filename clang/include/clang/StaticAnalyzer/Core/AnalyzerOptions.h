@@ -247,9 +247,9 @@ public:
   /// The maximum number of times the analyzer visits a block.
   unsigned maxBlockVisitOnPath;
 
-  /// Disable all analyzer checks.
+  /// Disable all analyzer checkers.
   ///
-  /// This flag allows one to disable analyzer checks on the code processed by
+  /// This flag allows one to disable analyzer checkers on the code processed by
   /// the given analysis consumer. Note, the code will get parsed and the
   /// command-line options will get checked.
   unsigned DisableAllChecks : 1;

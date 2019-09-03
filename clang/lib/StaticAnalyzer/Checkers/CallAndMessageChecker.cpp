@@ -49,7 +49,7 @@ class CallAndMessageChecker
 
 public:
   DefaultBool Check_CallAndMessageUnInitRefArg;
-  CheckName CheckName_CallAndMessageUnInitRefArg;
+  CheckerName CheckName_CallAndMessageUnInitRefArg;
 
   void checkPreStmt(const CallExpr *CE, CheckerContext &C) const;
   void checkPreStmt(const CXXDeleteExpr *DE, CheckerContext &C) const;
@@ -95,7 +95,7 @@ void CallAndMessageChecker::emitBadCall(BugType *BT, CheckerContext &C,
   if (!N)
     return;
 
-  auto R = std::make_unique<BugReport>(*BT, BT->getName(), N);
+  auto R = std::make_unique<BugReport>(*BT, BT->getDescription(), N);
   if (BadE) {
     R->addRange(BadE->getSourceRange());
     if (BadE->isGLValue())
@@ -482,7 +482,7 @@ void CallAndMessageChecker::checkPreObjCMessage(const ObjCMethodCall &msg,
       }
       assert(BT && "Unknown message kind.");
 
-      auto R = std::make_unique<BugReport>(*BT, BT->getName(), N);
+      auto R = std::make_unique<BugReport>(*BT, BT->getDescription(), N);
       const ObjCMessageExpr *ME = msg.getOriginExpr();
       R->addRange(ME->getReceiverRange());
 

@@ -28,8 +28,8 @@ class ExprEngine;
 
 class BugType {
 private:
-  const CheckName Check;
-  const std::string Name;
+  const CheckerName Name;
+  const std::string Description;
   const std::string Category;
   const CheckerBase *Checker;
   bool SuppressOnSink;
@@ -37,26 +37,26 @@ private:
   virtual void anchor();
 
 public:
-  BugType(CheckName Check, StringRef Name, StringRef Cat,
-          bool SuppressOnSink=false)
-      : Check(Check), Name(Name), Category(Cat), Checker(nullptr),
+  BugType(CheckerName Check, StringRef Name, StringRef Cat,
+          bool SuppressOnSink = false)
+      : Name(Check), Description(Name), Category(Cat), Checker(nullptr),
         SuppressOnSink(SuppressOnSink) {}
   BugType(const CheckerBase *Checker, StringRef Name, StringRef Cat,
-          bool SuppressOnSink=false)
-      : Check(Checker->getCheckName()), Name(Name), Category(Cat),
+          bool SuppressOnSink = false)
+      : Name(Checker->getCheckerName()), Description(Name), Category(Cat),
         Checker(Checker), SuppressOnSink(SuppressOnSink) {}
   virtual ~BugType() = default;
 
-  StringRef getName() const { return Name; }
+  StringRef getDescription() const { return Description; }
   StringRef getCategory() const { return Category; }
-  StringRef getCheckName() const {
-    // FIXME: This is a workaround to ensure that the correct check name is used
-    // The check names are set after the constructors are run.
+  StringRef getCheckerName() const {
+    // FIXME: This is a workaround to ensure that the correct checerk name is
+    // used. The checker names are set after the constructors are run.
     // In case the BugType object is initialized in the checker's ctor
     // the Check field will be empty. To circumvent this problem we use
     // CheckerBase whenever it is possible.
     StringRef CheckName =
-        Checker ? Checker->getCheckName().getName() : Check.getName();
+        Checker ? Checker->getCheckerName().getName() : Name.getName();
     assert(!CheckName.empty() && "Check name is not set properly.");
     return CheckName;
   }
@@ -71,8 +71,9 @@ class BuiltinBug : public BugType {
   const std::string desc;
   void anchor() override;
 public:
-  BuiltinBug(class CheckName check, const char *name, const char *description)
-      : BugType(check, name, categories::LogicError), desc(description) {}
+  BuiltinBug(class CheckerName checker, const char *name,
+             const char *description)
+      : BugType(checker, name, categories::LogicError), desc(description) {}
 
   BuiltinBug(const CheckerBase *checker, const char *name,
              const char *description)
