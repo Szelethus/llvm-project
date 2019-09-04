@@ -39,12 +39,12 @@ private:
 public:
   BugType(CheckerNameRef CheckerName, StringRef Name, StringRef Cat,
           bool SuppressOnSink = false)
-      : CheckerName(CheckerName), Description(Name), Category(Cat), Checker(nullptr),
-        SuppressOnSink(SuppressOnSink) {}
+      : CheckerName(CheckerName), Description(Name), Category(Cat),
+        Checker(nullptr), SuppressOnSink(SuppressOnSink) {}
   BugType(const CheckerBase *Checker, StringRef Name, StringRef Cat,
           bool SuppressOnSink = false)
-      : CheckerName(Checker->getCheckerName()), Description(Name), Category(Cat),
-        Checker(Checker), SuppressOnSink(SuppressOnSink) {}
+      : CheckerName(Checker->getCheckerName()), Description(Name),
+        Category(Cat), Checker(Checker), SuppressOnSink(SuppressOnSink) {}
   virtual ~BugType() = default;
 
   StringRef getDescription() const { return Description; }
@@ -55,8 +55,7 @@ public:
     // In case the BugType object is initialized in the checker's ctor
     // the CheckerName field will be empty. To circumvent this problem we use
     // CheckerBase whenever it is possible.
-    StringRef Ret =
-        Checker ? Checker->getCheckerName() : CheckerName;
+    StringRef Ret = Checker ? Checker->getCheckerName() : CheckerName;
     assert(!Ret.empty() && "Checker name is not set properly.");
     return Ret;
   }

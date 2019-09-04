@@ -3070,8 +3070,8 @@ void BugReporter::EmitBasicReport(const Decl *DeclWithIssue,
   emitReport(std::move(R));
 }
 
-BugType *BugReporter::getBugTypeForName(CheckerNameRef CheckName, StringRef name,
-                                        StringRef category) {
+BugType *BugReporter::getBugTypeForName(CheckerNameRef CheckName,
+                                        StringRef name, StringRef category) {
   SmallString<136> fullDesc;
   llvm::raw_svector_ostream(fullDesc) << CheckName.getName() << ":" << name
                                       << ":" << category;
