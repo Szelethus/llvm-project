@@ -1201,7 +1201,7 @@ bool ento::shouldRegisterNullabilityBase(const LangOptions &LO) {
   void ento::register##name##Checker(CheckerManager &mgr) {                    \
     NullabilityChecker *checker = mgr.getChecker<NullabilityChecker>();        \
     checker->Filter.Check##name = true;                                        \
-    checker->Filter.CheckName##name = mgr.getCurrentCheckername();             \
+    checker->Filter.CheckName##name = mgr.getCurrentCheckerName();             \
     checker->NeedTracking = checker->NeedTracking || trackingRequired;         \
     checker->NoDiagnoseCallsToSystemHeaders =                                  \
         checker->NoDiagnoseCallsToSystemHeaders ||                             \

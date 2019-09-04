@@ -118,7 +118,7 @@ class CheckerManager {
   ASTContext &Context;
   const LangOptions LangOpts;
   AnalyzerOptions &AOptions;
-  CheckerName CurrentCheckName;
+  CheckerName CurrentCheckerName;
 
 public:
   CheckerManager(ASTContext &Context, AnalyzerOptions &AOptions)
@@ -126,8 +126,8 @@ public:
 
   ~CheckerManager();
 
-  void setCurrentCheckName(CheckerName name) { CurrentCheckName = name; }
-  CheckerName getCurrentCheckername() const { return CurrentCheckName; }
+  void setCurrentCheckerName(CheckerName name) { CurrentCheckerName = name; }
+  CheckerName getCurrentCheckerName() const { return CurrentCheckerName; }
 
   bool hasPathSensitiveCheckers() const;
 
@@ -163,7 +163,7 @@ public:
     assert(!ref && "Checker already registered, use getChecker!");
 
     CHECKER *checker = new CHECKER(std::forward<AT>(Args)...);
-    checker->Name = CurrentCheckName;
+    checker->Name = CurrentCheckerName;
     CheckerDtors.push_back(CheckerDtor(checker, destruct<CHECKER>));
     CHECKER::_register(checker, *this);
     ref = checker;

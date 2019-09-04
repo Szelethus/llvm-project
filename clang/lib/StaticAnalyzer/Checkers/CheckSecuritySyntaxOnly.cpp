@@ -1014,7 +1014,7 @@ bool ento::shouldRegisterSecuritySyntaxChecker(const LangOptions &LO) {
   void ento::register##name(CheckerManager &mgr) {                             \
     SecuritySyntaxChecker *checker = mgr.getChecker<SecuritySyntaxChecker>();  \
     checker->filter.check_##name = true;                                       \
-    checker->filter.checkName_##name = mgr.getCurrentCheckername();            \
+    checker->filter.checkName_##name = mgr.getCurrentCheckerName();            \
   }                                                                            \
                                                                                \
   bool ento::shouldRegister##name(const LangOptions &LO) { return true; }

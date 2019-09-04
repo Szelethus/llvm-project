@@ -168,7 +168,6 @@ public:
   static std::vector<StringRef>
   getRegisteredCheckers(bool IncludeExperimental = false);
 
-
   /// Retrieves the list of packages generated from Checkers.td. This doesn't
   /// contain statically linked but non-generated packages and plugin packages!
   static std::vector<StringRef>
@@ -414,7 +413,7 @@ inline UserModeKind AnalyzerOptions::getUserMode() const {
   return K.getValue();
 }
 
-std::vector<StringRef>
+inline std::vector<StringRef>
 AnalyzerOptions::getRegisteredCheckers(bool IncludeExperimental) {
   static const StringRef StaticAnalyzerCheckerNames[] = {
 #define GET_CHECKERS
@@ -432,7 +431,7 @@ AnalyzerOptions::getRegisteredCheckers(bool IncludeExperimental) {
   return Checkers;
 }
 
-std::vector<StringRef>
+inline std::vector<StringRef>
 AnalyzerOptions::getRegisteredPackages(bool IncludeExperimental) {
   static const StringRef StaticAnalyzerPackageNames[] = {
 #define GET_PACKAGES

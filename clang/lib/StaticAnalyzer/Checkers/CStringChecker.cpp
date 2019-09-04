@@ -2403,7 +2403,7 @@ bool ento::shouldRegisterCStringModeling(const LangOptions &LO) {
   void ento::register##name(CheckerManager &mgr) {                             \
     CStringChecker *checker = mgr.getChecker<CStringChecker>();                \
     checker->Filter.Check##name = true;                                        \
-    checker->Filter.CheckName##name = mgr.getCurrentCheckername();             \
+    checker->Filter.CheckName##name = mgr.getCurrentCheckerName();             \
   }                                                                            \
                                                                                \
   bool ento::shouldRegister##name(const LangOptions &LO) { return true; }

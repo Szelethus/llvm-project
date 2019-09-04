@@ -789,7 +789,7 @@ using FilesToLineNumsMap = std::map<FileID, std::set<unsigned>>;
 ///  diagnostic.  It represents an ordered-collection of PathDiagnosticPieces,
 ///  each which represent the pieces of the path.
 class PathDiagnostic : public llvm::FoldingSetNode {
-  std::string CheckName;
+  std::string CheckerName;
   const Decl *DeclWithIssue;
   std::string BugType;
   std::string VerboseDesc;
@@ -813,7 +813,7 @@ class PathDiagnostic : public llvm::FoldingSetNode {
 
 public:
   PathDiagnostic() = delete;
-  PathDiagnostic(StringRef CheckName, const Decl *DeclWithIssue,
+  PathDiagnostic(StringRef CheckerName, const Decl *DeclWithIssue,
                  StringRef bugtype, StringRef verboseDesc, StringRef shortDesc,
                  StringRef category, PathDiagnosticLocation LocationToUnique,
                  const Decl *DeclToUnique,
@@ -867,7 +867,7 @@ public:
     return ShortDesc.empty() ? VerboseDesc : ShortDesc;
   }
 
-  StringRef getCheckName() const { return CheckName; }
+  StringRef getCheckerName() const { return CheckerName; }
   StringRef getBugType() const { return BugType; }
   StringRef getCategory() const { return Category; }
 

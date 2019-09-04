@@ -412,7 +412,7 @@ bool ento::shouldRegisterValistBase(const LangOptions &LO) {
     ValistChecker *checker = mgr.getChecker<ValistChecker>();                  \
     checker->ChecksEnabled[ValistChecker::CK_##name] = true;                   \
     checker->CheckNames[ValistChecker::CK_##name] =                            \
-        mgr.getCurrentCheckername();                                           \
+        mgr.getCurrentCheckerName();                                           \
   }                                                                            \
                                                                                \
   bool ento::shouldRegister##name##Checker(const LangOptions &LO) {            \

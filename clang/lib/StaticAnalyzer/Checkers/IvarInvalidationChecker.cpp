@@ -748,7 +748,7 @@ bool ento::shouldRegisterIvarInvalidationModeling(const LangOptions &LO) {
     IvarInvalidationChecker *checker =                                         \
         mgr.getChecker<IvarInvalidationChecker>();                             \
     checker->Filter.check_##name = true;                                       \
-    checker->Filter.checkName_##name = mgr.getCurrentCheckername();            \
+    checker->Filter.checkName_##name = mgr.getCurrentCheckerName();            \
   }                                                                            \
                                                                                \
   bool ento::shouldRegister##name(const LangOptions &LO) { return true; }

@@ -55,10 +55,10 @@ public:
     // In case the BugType object is initialized in the checker's ctor
     // the Check field will be empty. To circumvent this problem we use
     // CheckerBase whenever it is possible.
-    StringRef CheckName =
+    StringRef CheckerName =
         Checker ? Checker->getCheckerName().getName() : Name.getName();
-    assert(!CheckName.empty() && "Check name is not set properly.");
-    return CheckName;
+    assert(!CheckerName.empty() && "Check name is not set properly.");
+    return CheckerName;
   }
 
   /// isSuppressOnSink - Returns true if bug reports associated with this bug
