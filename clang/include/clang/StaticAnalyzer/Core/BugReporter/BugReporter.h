@@ -475,7 +475,7 @@ public:
                        StringRef BugStr, PathDiagnosticLocation Loc,
                        ArrayRef<SourceRange> Ranges = None);
 
-  void EmitBasicReport(const Decl *DeclWithIssue, CheckerName CheckerName,
+  void EmitBasicReport(const Decl *DeclWithIssue, CheckerNameRef CheckerName,
                        StringRef BugName, StringRef BugCategory,
                        StringRef BugStr, PathDiagnosticLocation Loc,
                        ArrayRef<SourceRange> Ranges = None);
@@ -485,7 +485,7 @@ private:
 
   /// Returns a BugType that is associated with the given name and
   /// category.
-  BugType *getBugTypeForName(CheckerName CheckerName, StringRef name,
+  BugType *getBugTypeForName(CheckerNameRef CheckerName, StringRef name,
                              StringRef category);
 };
 

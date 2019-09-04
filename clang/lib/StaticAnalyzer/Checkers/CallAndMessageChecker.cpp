@@ -49,7 +49,7 @@ class CallAndMessageChecker
 
 public:
   DefaultBool Check_CallAndMessageUnInitRefArg;
-  CheckerName CheckName_CallAndMessageUnInitRefArg;
+  CheckerNameRef CheckName_CallAndMessageUnInitRefArg;
 
   void checkPreStmt(const CallExpr *CE, CheckerContext &C) const;
   void checkPreStmt(const CXXDeleteExpr *DE, CheckerContext &C) const;

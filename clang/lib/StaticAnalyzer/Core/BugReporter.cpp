@@ -3056,7 +3056,7 @@ void BugReporter::EmitBasicReport(const Decl *DeclWithIssue,
 }
 
 void BugReporter::EmitBasicReport(const Decl *DeclWithIssue,
-                                  CheckerName CheckName, StringRef name,
+                                  CheckerNameRef CheckName, StringRef name,
                                   StringRef category, StringRef str,
                                   PathDiagnosticLocation Loc,
                                   ArrayRef<SourceRange> Ranges) {
@@ -3070,7 +3070,7 @@ void BugReporter::EmitBasicReport(const Decl *DeclWithIssue,
   emitReport(std::move(R));
 }
 
-BugType *BugReporter::getBugTypeForName(CheckerName CheckName, StringRef name,
+BugType *BugReporter::getBugTypeForName(CheckerNameRef CheckName, StringRef name,
                                         StringRef category) {
   SmallString<136> fullDesc;
   llvm::raw_svector_ostream(fullDesc) << CheckName.getName() << ":" << name

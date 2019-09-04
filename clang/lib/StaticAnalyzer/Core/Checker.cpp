@@ -22,7 +22,7 @@ StringRef CheckerBase::getTagDescription() const {
   return getCheckerName().getName();
 }
 
-CheckerName CheckerBase::getCheckerName() const { return Name; }
+CheckerNameRef CheckerBase::getCheckerName() const { return Name; }
 
 CheckerProgramPointTag::CheckerProgramPointTag(StringRef CheckerName,
                                                StringRef Msg)

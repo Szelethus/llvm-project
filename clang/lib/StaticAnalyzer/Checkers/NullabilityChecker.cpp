@@ -112,11 +112,11 @@ public:
     DefaultBool CheckNullablePassedToNonnull;
     DefaultBool CheckNullableReturnedFromNonnull;
 
-    CheckerName CheckNameNullPassedToNonnull;
-    CheckerName CheckNameNullReturnedFromNonnull;
-    CheckerName CheckNameNullableDereferenced;
-    CheckerName CheckNameNullablePassedToNonnull;
-    CheckerName CheckNameNullableReturnedFromNonnull;
+    CheckerNameRef CheckNameNullPassedToNonnull;
+    CheckerNameRef CheckNameNullReturnedFromNonnull;
+    CheckerNameRef CheckNameNullableDereferenced;
+    CheckerNameRef CheckNameNullablePassedToNonnull;
+    CheckerNameRef CheckNameNullableReturnedFromNonnull;
   };
 
   NullabilityChecksFilter Filter;

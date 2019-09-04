@@ -48,8 +48,8 @@ struct ChecksFilter {
   /// Check that all ivars are invalidated.
   DefaultBool check_InstanceVariableInvalidation;
 
-  CheckerName checkName_MissingInvalidationMethod;
-  CheckerName checkName_InstanceVariableInvalidation;
+  CheckerNameRef checkName_MissingInvalidationMethod;
+  CheckerNameRef checkName_InstanceVariableInvalidation;
 };
 
 class IvarInvalidationCheckerImpl {
@@ -199,7 +199,7 @@ class IvarInvalidationCheckerImpl {
                         const ObjCIvarDecl *IvarDecl,
                         const IvarToPropMapTy &IvarToPopertyMap);
 
-  void reportNoInvalidationMethod(CheckerName CheckName,
+  void reportNoInvalidationMethod(CheckerNameRef CheckName,
                                   const ObjCIvarDecl *FirstIvarDecl,
                                   const IvarToPropMapTy &IvarToPopertyMap,
                                   const ObjCInterfaceDecl *InterfaceD,
@@ -526,7 +526,7 @@ visit(const ObjCImplementationDecl *ImplD) const {
 }
 
 void IvarInvalidationCheckerImpl::reportNoInvalidationMethod(
-    CheckerName CheckName, const ObjCIvarDecl *FirstIvarDecl,
+    CheckerNameRef CheckName, const ObjCIvarDecl *FirstIvarDecl,
     const IvarToPropMapTy &IvarToPopertyMap,
     const ObjCInterfaceDecl *InterfaceD, bool MissingDeclaration) const {
   SmallString<128> sbuf;

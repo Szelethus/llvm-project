@@ -48,10 +48,10 @@ public:
     DefaultBool CheckCStringBufferOverlap;
     DefaultBool CheckCStringNotNullTerm;
 
-    CheckerName CheckNameCStringNullArg;
-    CheckerName CheckNameCStringOutOfBounds;
-    CheckerName CheckNameCStringBufferOverlap;
-    CheckerName CheckNameCStringNotNullTerm;
+    CheckerNameRef CheckNameCStringNullArg;
+    CheckerNameRef CheckNameCStringOutOfBounds;
+    CheckerNameRef CheckNameCStringBufferOverlap;
+    CheckerNameRef CheckNameCStringNotNullTerm;
   };
 
   CStringChecksFilter Filter;

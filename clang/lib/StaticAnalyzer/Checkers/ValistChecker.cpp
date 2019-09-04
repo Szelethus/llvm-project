@@ -46,7 +46,7 @@ public:
   };
 
   DefaultBool ChecksEnabled[CK_NumCheckKinds];
-  CheckerName CheckNames[CK_NumCheckKinds];
+  CheckerNameRef CheckNames[CK_NumCheckKinds];
 
   void checkPreStmt(const VAArgExpr *VAA, CheckerContext &C) const;
   void checkPreCall(const CallEvent &Call, CheckerContext &C) const;
