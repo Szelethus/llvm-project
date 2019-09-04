@@ -494,12 +494,55 @@ class CheckerBase : public ProgramPointTag {
   friend class ::clang::ento::CheckerManager;
 
 public:
+  CheckerBase() = default;
+  CheckerBase(CheckerNameRef Name) : Name(Name) {}
   StringRef getTagDescription() const override;
   CheckerNameRef getCheckerName() const;
 
   /// See CheckerManager::runCheckersForPrintState.
   virtual void printState(raw_ostream &Out, ProgramStateRef State,
                           const char *NL, const char *Sep) const { }
+};
+
+
+template <typename SubCheckerEnumTy>
+class SuperCheckerBase : public CheckerBase {
+  static_assert(std::is_enum<SubCheckerEnumTy>::value,
+                "SuperCheckers are required to provide an enum to keep track "
+                "of their subcheckers!");
+
+  using SubCheckerPair = std::pair<SubCheckerEnumTy, const CheckerBase>;
+  using SubCheckerVector = typename llvm::SmallVector<SubCheckerPair, 4>;
+
+public:
+  using SubCheckerTy = SubCheckerEnumTy;
+
+private:
+  SubCheckerVector Subcheckers;
+
+  typename SubCheckerVector::const_iterator
+  getSubCheckerPos(SubCheckerEnumTy SubCheckerKind) const {
+    return llvm::find_if(Subcheckers, [SubCheckerKind](const auto &E) {
+      return E.first == SubCheckerKind;
+    });
+  }
+
+public:
+  template <SubCheckerEnumTy SubCheckerKind>
+  void addSubChecker(CheckerNameRef Name) {
+    assert(getSubCheckerPos(SubCheckerKind) == Subcheckers.end() &&
+           "This subchecker was already added to the superchecker!");
+    Subcheckers.emplace_back(SubCheckerKind, CheckerBase(Name));
+  }
+
+  template <SubCheckerEnumTy SubCheckerKind>
+  const CheckerBase *getSubChecker() const {
+    typename SubCheckerVector::const_iterator Pos =
+        getSubCheckerPos(SubCheckerKind);
+    if (Pos == Subcheckers.end())
+      return nullptr;
+    return &Pos->second;
+  }
 };
 
 /// Dump checker name to stream.
@@ -513,24 +556,35 @@ public:
   CheckerProgramPointTag(const CheckerBase *Checker, StringRef Msg);
 };
 
-template <typename CHECK1, typename... CHECKs>
-class Checker : public CHECK1, public CHECKs..., public CheckerBase {
+namespace checker_detail {
+template <typename BaseTy, typename CHECK1, typename... CHECKs>
+class CheckerImpl : public CHECK1, public CHECKs..., public BaseTy {
 public:
   template <typename CHECKER>
   static void _register(CHECKER *checker, CheckerManager &mgr) {
     CHECK1::_register(checker, mgr);
-    Checker<CHECKs...>::_register(checker, mgr);
+    CheckerImpl<BaseTy, CHECKs...>::_register(checker, mgr);
   }
 };
 
-template <typename CHECK1>
-class Checker<CHECK1> : public CHECK1, public CheckerBase {
+template <typename BaseTy, typename CHECK1>
+class CheckerImpl<BaseTy, CHECK1> : public CHECK1, public BaseTy {
 public:
   template <typename CHECKER>
   static void _register(CHECKER *checker, CheckerManager &mgr) {
     CHECK1::_register(checker, mgr);
   }
 };
+} // end of namespace checker_detail
+
+template <typename... CHECKs>
+using Checker =
+    typename checker_detail::CheckerImpl<CheckerBase, CHECKs...>;
+
+template <typename SubCheckerEnumTy, typename... CHECKs>
+using SuperChecker =
+    typename checker_detail::CheckerImpl<SuperCheckerBase<SubCheckerEnumTy>,
+                                         CHECKs...>;
 
 template <typename EVENT>
 class EventDispatcher {
@@ -575,8 +629,7 @@ struct DefaultBool {
   DefaultBool &operator=(bool b) { val = b; return *this; }
 };
 
-} // end ento namespace
-
-} // end clang namespace
+} // namespace ento
+} // namespace clang
 
 #endif

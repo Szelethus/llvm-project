@@ -180,6 +180,20 @@ public:
     return static_cast<CHECKER *>(CheckerTags[tag]);
   }
 
+  /// Used to register subcheckers. Subcheckers aren't traditional checkers in
+  /// the sense that they don't have checker callbacks, but there is checker
+  /// object associated with them, which is retrievable though the checker they
+  /// are possessed by.
+  ///
+  /// \returns a pointer to the super checker object.
+  template <typename SuperChecker,
+            typename SuperChecker::SubCheckerTy SubCheckerKind>
+  SuperChecker *registerSubChecker() {
+    SuperChecker *Super = getChecker<SuperChecker>();
+    Super->template addSubChecker<SubCheckerKind>(CurrentCheckerName);
+    return Super;
+  }
+
 //===----------------------------------------------------------------------===//
 // Functions for running checkers for AST traversing.
 //===----------------------------------------------------------------------===//
