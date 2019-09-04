@@ -3131,7 +3131,7 @@ void ento::registerInnerPointerCheckerAux(CheckerManager &mgr) {
   MallocChecker *checker = mgr.getChecker<MallocChecker>();
   checker->ChecksEnabled[MallocChecker::CK_InnerPointerChecker] = true;
   checker->CheckNames[MallocChecker::CK_InnerPointerChecker] =
-      mgr.getCurrentCheckName();
+      mgr.getCurrentCheckername();
 }
 
 void ento::registerDynamicMemoryModeling(CheckerManager &mgr) {
@@ -3148,12 +3148,11 @@ bool ento::shouldRegisterDynamicMemoryModeling(const LangOptions &LO) {
   void ento::register##name(CheckerManager &mgr) {                             \
     MallocChecker *checker = mgr.getChecker<MallocChecker>();                  \
     checker->ChecksEnabled[MallocChecker::CK_##name] = true;                   \
-    checker->CheckNames[MallocChecker::CK_##name] = mgr.getCurrentCheckName(); \
+    checker->CheckNames[MallocChecker::CK_##name] =                            \
+        mgr.getCurrentCheckername();                                           \
   }                                                                            \
                                                                                \
-  bool ento::shouldRegister##name(const LangOptions &LO) {                     \
-    return true;                                                               \
-  }
+  bool ento::shouldRegister##name(const LangOptions &LO) { return true; }
 
 REGISTER_CHECKER(MallocChecker)
 REGISTER_CHECKER(NewDeleteChecker)

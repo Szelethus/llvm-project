@@ -193,17 +193,17 @@ void ento::registerVirtualCallModeling(CheckerManager &Mgr) {
 
 void ento::registerPureVirtualCallChecker(CheckerManager &Mgr) {
   auto *Chk = Mgr.getChecker<VirtualCallChecker>();
-  Chk->BT_Pure = std::make_unique<BugType>(
-      Mgr.getCurrentCheckName(), "Pure virtual method call",
-      categories::CXXObjectLifecycle);
+  Chk->BT_Pure = std::make_unique<BugType>(Mgr.getCurrentCheckername(),
+                                           "Pure virtual method call",
+                                           categories::CXXObjectLifecycle);
 }
 
 void ento::registerVirtualCallChecker(CheckerManager &Mgr) {
   auto *Chk = Mgr.getChecker<VirtualCallChecker>();
   if (!Mgr.getAnalyzerOptions().getCheckerBooleanOption(
-          Mgr.getCurrentCheckName(), "PureOnly")) {
+          Mgr.getCurrentCheckername(), "PureOnly")) {
     Chk->BT_Impure = std::make_unique<BugType>(
-        Mgr.getCurrentCheckName(), "Unexpected loss of virtual dispatch",
+        Mgr.getCurrentCheckername(), "Unexpected loss of virtual dispatch",
         categories::CXXObjectLifecycle);
   }
 }

@@ -2377,12 +2377,10 @@ bool ento::shouldRegisterIteratorModeling(const LangOptions &LO) {
     auto *checker = Mgr.getChecker<IteratorChecker>();                         \
     checker->ChecksEnabled[IteratorChecker::CK_##name] = true;                 \
     checker->CheckNames[IteratorChecker::CK_##name] =                          \
-        Mgr.getCurrentCheckName();                                             \
+        Mgr.getCurrentCheckername();                                           \
   }                                                                            \
                                                                                \
-  bool ento::shouldRegister##name(const LangOptions &LO) {                     \
-    return true;                                                               \
-  }
+  bool ento::shouldRegister##name(const LangOptions &LO) { return true; }
 
 REGISTER_CHECKER(IteratorRangeChecker)
 REGISTER_CHECKER(MismatchedIteratorChecker)

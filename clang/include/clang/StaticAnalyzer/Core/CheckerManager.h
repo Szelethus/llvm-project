@@ -127,7 +127,7 @@ public:
   ~CheckerManager();
 
   void setCurrentCheckName(CheckerName name) { CurrentCheckName = name; }
-  CheckerName getCurrentCheckName() const { return CurrentCheckName; }
+  CheckerName getCurrentCheckername() const { return CurrentCheckName; }
 
   bool hasPathSensitiveCheckers() const;
 

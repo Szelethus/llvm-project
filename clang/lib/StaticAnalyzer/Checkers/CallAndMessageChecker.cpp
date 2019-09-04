@@ -611,7 +611,7 @@ bool ento::shouldRegisterCallAndMessageChecker(const LangOptions &LO) {
 void ento::registerCallAndMessageUnInitRefArg(CheckerManager &mgr) {
   CallAndMessageChecker *Checker = mgr.getChecker<CallAndMessageChecker>();
   Checker->Check_CallAndMessageUnInitRefArg = true;
-  Checker->CheckName_CallAndMessageUnInitRefArg = mgr.getCurrentCheckName();
+  Checker->CheckName_CallAndMessageUnInitRefArg = mgr.getCurrentCheckername();
 }
 
 bool ento::shouldRegisterCallAndMessageUnInitRefArg(const LangOptions &LO) {

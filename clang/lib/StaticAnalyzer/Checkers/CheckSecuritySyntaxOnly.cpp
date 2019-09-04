@@ -1012,14 +1012,12 @@ bool ento::shouldRegisterSecuritySyntaxChecker(const LangOptions &LO) {
 
 #define REGISTER_CHECKER(name)                                                 \
   void ento::register##name(CheckerManager &mgr) {                             \
-    SecuritySyntaxChecker *checker =  mgr.getChecker<SecuritySyntaxChecker>(); \
+    SecuritySyntaxChecker *checker = mgr.getChecker<SecuritySyntaxChecker>();  \
     checker->filter.check_##name = true;                                       \
-    checker->filter.checkName_##name = mgr.getCurrentCheckName();              \
+    checker->filter.checkName_##name = mgr.getCurrentCheckername();            \
   }                                                                            \
                                                                                \
-  bool ento::shouldRegister##name(const LangOptions &LO) {                     \
-    return true;                                                               \
-  }
+  bool ento::shouldRegister##name(const LangOptions &LO) { return true; }
 
 REGISTER_CHECKER(bcmp)
 REGISTER_CHECKER(bcopy)

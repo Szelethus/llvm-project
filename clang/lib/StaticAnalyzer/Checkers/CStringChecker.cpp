@@ -2403,14 +2403,12 @@ bool ento::shouldRegisterCStringModeling(const LangOptions &LO) {
   void ento::register##name(CheckerManager &mgr) {                             \
     CStringChecker *checker = mgr.getChecker<CStringChecker>();                \
     checker->Filter.Check##name = true;                                        \
-    checker->Filter.CheckName##name = mgr.getCurrentCheckName();               \
+    checker->Filter.CheckName##name = mgr.getCurrentCheckername();             \
   }                                                                            \
                                                                                \
-  bool ento::shouldRegister##name(const LangOptions &LO) {                     \
-    return true;                                                               \
-  }
+  bool ento::shouldRegister##name(const LangOptions &LO) { return true; }
 
-  REGISTER_CHECKER(CStringNullArg)
-  REGISTER_CHECKER(CStringOutOfBounds)
-  REGISTER_CHECKER(CStringBufferOverlap)
+REGISTER_CHECKER(CStringNullArg)
+REGISTER_CHECKER(CStringOutOfBounds)
+REGISTER_CHECKER(CStringBufferOverlap)
 REGISTER_CHECKER(CStringNotNullTerm)
