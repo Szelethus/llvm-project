@@ -144,10 +144,10 @@ protected:
         Description(Description) {
 #define GET_CHECKER_DEPENDENCIES
 #define CHECKER_DEPENDENCY(FULLNAME, DEPENDENCY)                               \
-    assert(BT.getCheckName() != DEPENDENCY &&                              \
-           "Some checkers depend on this one! We don't allow such "        \
-           "checkers to emit bug reports, please consult the developer "   \
-           "manual!");
+  assert(BT.getCheckerName() != DEPENDENCY &&                                  \
+         "Some checkers depend on this one! We don't allow such "              \
+         "checkers to emit bug reports, please consult the developer "         \
+         "manual!");
 #include "clang/StaticAnalyzer/Checkers/Checkers.inc"
 #undef CHECKER_DEPENDENCY
 #undef GET_CHECKER_DEPENDENCIES
