@@ -848,6 +848,29 @@ let ParentPackage = Cocoa in {
 
 def RetainCountBase : Checker<"RetainCountBase">,
   HelpText<"Common base of various retain count related checkers">,
+  CheckerOptions<[
+    CmdLineOption<Boolean,
+                  "CheckOSObject",
+                  "Find violations of retain-release rules applied to XNU "
+                  "OSObject instances. By default, the checker only checks "
+                  "retain-release rules for Objective-C NSObject instances "
+                  "and CoreFoundation objects.",
+                  "true",
+                  InAlpha,
+                  Hide,
+                  /*AliasOf*/ "osx.cocoa.RetainCount:CheckOSObject">,
+    CmdLineOption<Boolean,
+                  "TrackNSCFStartParam",
+                  "Check not only that the code follows retain-release rules "
+                  "with respect to objects it allocates or borrows from "
+                  "elsewhere, but also that it fulfills its own retain count "
+                  "specification with respect to objects that it receives as "
+                  "arguments.",
+                  "false",
+                  Released,
+                  DontHide,
+                  /*AliasOf*/ "osx.cocoa.RetainCount:TrackNSCFStartParam">
+  ]>,
   Documentation<NotDocumented>,
   Hidden;
 
@@ -963,26 +986,6 @@ def NSErrorChecker : Checker<"NSError">,
 
 def RetainCountChecker : Checker<"RetainCount">,
   HelpText<"Check for leaks and improper reference count management">,
-  CheckerOptions<[
-    CmdLineOption<Boolean,
-                  "CheckOSObject",
-                  "Find violations of retain-release rules applied to XNU "
-                  "OSObject instances. By default, the checker only checks "
-                  "retain-release rules for Objective-C NSObject instances "
-                  "and CoreFoundation objects.",
-                  "true",
-                  InAlpha,
-                  Hide>,
-    CmdLineOption<Boolean,
-                  "TrackNSCFStartParam",
-                  "Check not only that the code follows retain-release rules "
-                  "with respect to objects it allocates or borrows from "
-                  "elsewhere, but also that it fulfills its own retain count "
-                  "specification with respect to objects that it receives as "
-                  "arguments.",
-                  "false",
-                  Released>
-  ]>,
   Dependencies<[RetainCountBase]>,
   Documentation<HasDocumentation>;
 

@@ -19,6 +19,7 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/DynamicLibrary.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -180,12 +181,16 @@ CheckerRegistry::CheckerRegistry(
   addDependency(FULLNAME, DEPENDENCY);
 
 #define GET_CHECKER_OPTIONS
-#define CHECKER_OPTION(TYPE, FULLNAME, CMDFLAG, DESC, DEFAULT_VAL, DEVELOPMENT_STATUS, IS_HIDDEN)  \
-  addCheckerOption(TYPE, FULLNAME, CMDFLAG, DEFAULT_VAL, DESC, DEVELOPMENT_STATUS, IS_HIDDEN);
+#define CHECKER_OPTION(TYPE, FULLNAME, CMDFLAG, DESC, DEFAULT_VAL,             \
+                       DEVELOPMENT_STATUS, IS_HIDDEN, ALIAS_OF)                \
+  addCheckerOption(TYPE, FULLNAME, CMDFLAG, DEFAULT_VAL, DESC,                 \
+                   DEVELOPMENT_STATUS, IS_HIDDEN, ALIAS_OF);
 
 #define GET_PACKAGE_OPTIONS
-#define PACKAGE_OPTION(TYPE, FULLNAME, CMDFLAG, DESC, DEFAULT_VAL, DEVELOPMENT_STATUS, IS_HIDDEN)  \
-  addPackageOption(TYPE, FULLNAME, CMDFLAG, DEFAULT_VAL, DESC, DEVELOPMENT_STATUS, IS_HIDDEN);
+#define PACKAGE_OPTION(TYPE, FULLNAME, CMDFLAG, DESC, DEFAULT_VAL,             \
+                       DEVELOPMENT_STATUS, IS_HIDDEN, ALIAS_OF)                \
+  addPackageOption(TYPE, FULLNAME, CMDFLAG, DEFAULT_VAL, DESC,                 \
+                   DEVELOPMENT_STATUS, IS_HIDDEN, ALIAS_OF);
 
 #include "clang/StaticAnalyzer/Checkers/Checkers.inc"
 #undef CHECKER_DEPENDENCY
@@ -317,16 +322,29 @@ static void insertAndValidate(StringRef FullName,
   std::string FullOption = (FullName + ":" + Option.OptionName).str();
 
   auto It = AnOpts.Config.insert({FullOption, Option.DefaultValStr});
+  auto AliasOptionIt = AnOpts.Config.find(Option.AliasOf);
 
   // Insertation was successful -- CmdLineOption's constructor will validate
   // whether values received from plugins or TableGen files are correct.
-  if (It.second)
+  if (It.second) {
+    if (AliasOptionIt != AnOpts.Config.end()) {
+      It.first->getValue() = AliasOptionIt->getValue();
+      AnOpts.Config.erase(AliasOptionIt);
+    }
     return;
+  }
 
   // Insertion failed, the user supplied this package/checker option on the
   // command line. If the supplied value is invalid, we'll restore the option
   // to it's default value, and if we're in non-compatibility mode, we'll also
   // emit an error.
+
+  // First off, an option may have an alias for backward compatibility reasons.
+  // To be sure that the same option isn't specified twice with different names,
+  // ab absurdum different values, we check whether the aliased name is
+  // specified on the command like.
+  if (AliasOptionIt != AnOpts.Config.end())
+    llvm_unreachable("");
 
   StringRef SuppliedValue = It.first->getValue();
 
@@ -392,16 +410,14 @@ void CheckerRegistry::addPackage(StringRef FullName) {
   Packages.emplace_back(PackageInfo(FullName));
 }
 
-void CheckerRegistry::addPackageOption(StringRef OptionType,
-                                       StringRef PackageFullName,
-                                       StringRef OptionName,
-                                       StringRef DefaultValStr,
-                                       StringRef Description,
-                                       StringRef DevelopmentStatus,
-                                       bool IsHidden) {
+void CheckerRegistry::addPackageOption(
+    StringRef OptionType, StringRef PackageFullName, StringRef OptionName,
+    StringRef DefaultValStr, StringRef Description, StringRef DevelopmentStatus,
+    bool IsHidden, StringRef AliasOf) {
   PackageOptions.emplace_back(
-      PackageFullName, CmdLineOption{OptionType, OptionName, DefaultValStr,
-                                     Description, DevelopmentStatus, IsHidden});
+      PackageFullName,
+      CmdLineOption{OptionType, OptionName, DefaultValStr, Description,
+                    DevelopmentStatus, IsHidden, AliasOf});
 }
 
 void CheckerRegistry::addChecker(InitializationFunction Rfn,
@@ -419,16 +435,14 @@ void CheckerRegistry::addChecker(InitializationFunction Rfn,
   }
 }
 
-void CheckerRegistry::addCheckerOption(StringRef OptionType,
-                                       StringRef CheckerFullName,
-                                       StringRef OptionName,
-                                       StringRef DefaultValStr,
-                                       StringRef Description,
-                                       StringRef DevelopmentStatus,
-                                       bool IsHidden) {
+void CheckerRegistry::addCheckerOption(
+    StringRef OptionType, StringRef CheckerFullName, StringRef OptionName,
+    StringRef DefaultValStr, StringRef Description, StringRef DevelopmentStatus,
+    bool IsHidden, StringRef AliasOf) {
   CheckerOptions.emplace_back(
-      CheckerFullName, CmdLineOption{OptionType, OptionName, DefaultValStr,
-                                     Description, DevelopmentStatus, IsHidden});
+      CheckerFullName,
+      CmdLineOption{OptionType, OptionName, DefaultValStr, Description,
+                    DevelopmentStatus, IsHidden, AliasOf});
 }
 
 void CheckerRegistry::initializeManager(CheckerManager &CheckerMgr) const {

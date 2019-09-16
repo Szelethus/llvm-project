@@ -172,6 +172,8 @@ static void printOption(llvm::raw_ostream &OS, StringRef FullName,
     OS << "false";
   else
     OS << "true";
+
+  OS << ", \"" << getStringValue(R, "AliasOf") << '\"';
 }
 
 namespace clang {

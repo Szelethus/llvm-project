@@ -100,13 +100,15 @@ public:
     StringRef Description;
     StringRef DevelopmentStatus;
     bool IsHidden;
+    StringRef AliasOf;
 
     CmdLineOption(StringRef OptionType, StringRef OptionName,
                   StringRef DefaultValStr, StringRef Description,
-                  StringRef DevelopmentStatus, bool IsHidden)
+                  StringRef DevelopmentStatus, bool IsHidden, StringRef AliasOf)
         : OptionType(OptionType), OptionName(OptionName),
           DefaultValStr(DefaultValStr), Description(Description),
-          DevelopmentStatus(DevelopmentStatus), IsHidden(IsHidden) {
+          DevelopmentStatus(DevelopmentStatus), IsHidden(IsHidden),
+          AliasOf(AliasOf) {
 
       assert((OptionType == "bool" || OptionType == "string" ||
               OptionType == "int") &&
@@ -248,7 +250,7 @@ public:
   void addCheckerOption(StringRef OptionType, StringRef CheckerFullName,
                         StringRef OptionName, StringRef DefaultValStr,
                         StringRef Description, StringRef DevelopmentStatus,
-                        bool IsHidden = false);
+                        bool IsHidden = false, StringRef AliasOf = "");
 
   /// Adds a package to the registry.
   void addPackage(StringRef FullName);
@@ -265,7 +267,7 @@ public:
   void addPackageOption(StringRef OptionType, StringRef PackageFullName,
                         StringRef OptionName, StringRef DefaultValStr,
                         StringRef Description, StringRef DevelopmentStatus,
-                         bool IsHidden = false);
+                        bool IsHidden = false, StringRef AliasOf = "");
 
   // FIXME: This *really* should be added to the frontend flag descriptions.
   /// Initializes a CheckerManager by calling the initialization functions for

@@ -47,13 +47,14 @@ def Hide : HiddenEnum<1>;
 /// Describes an option for a checker or a package.
 class CmdLineOption<CmdLineOptionTypeEnum type, string cmdFlag, string desc,
                     string defaultVal, DevelopmentStageEnum stage,
-                    HiddenEnum isHidden = DontHide> {
+                    HiddenEnum isHidden = DontHide, string aliasOf = ""> {
   bits<2> Type = type.Type;
   string  CmdFlag = cmdFlag;
   string  Desc = desc;
   string  DefaultVal = defaultVal;
   bits<1> DevelopmentStage = stage.Val;
   bit     Hidden = isHidden.Val;
+  string  AliasOf = aliasOf;
 }
 
 /// Describes a list of package options.
