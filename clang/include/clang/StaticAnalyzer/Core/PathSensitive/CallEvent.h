@@ -258,6 +258,11 @@ public:
   /// calls.
   bool isCalled(const CallDescription &CD) const;
 
+  template <typename FirstCallDesc, typename... CallDescs>
+  bool isCalled(const FirstCallDesc &First, const CallDescs &... Rest) const {
+    return isCalled(First) || isCalled(Rest...);
+  }
+
   /// Returns a source range for the entire call, suitable for
   /// outputting in diagnostics.
   virtual SourceRange getSourceRange() const {
