@@ -61,6 +61,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicSize.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState_Fwd.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SymbolManager.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
@@ -91,8 +92,6 @@ enum AllocationFamily {
   AF_Alloca,
   AF_InnerBuffer
 };
-
-struct MemFunctionInfoTy;
 
 } // end of anonymous namespace
 
@@ -262,47 +261,6 @@ struct ReallocPair {
 
 REGISTER_MAP_WITH_PROGRAMSTATE(ReallocPairs, SymbolRef, ReallocPair)
 
-//===----------------------------------------------------------------------===//
-// Kinds of memory operations, information about resource managing functions.
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-struct MemFunctionInfoTy {
-  /// The value of the MallocChecker:Optimistic is stored in this variable.
-  ///
-  /// In pessimistic mode, the checker assumes that it does not know which
-  /// functions might free the memory.
-  /// In optimistic mode, the checker assumes that all user-defined functions
-  /// which might free a pointer are annotated.
-  DefaultBool ShouldIncludeOwnershipAnnotatedFunctions;
-
-  CallDescription CD_alloca{{"alloca"}, 1}, CD_win_alloca{{"_alloca"}, 1},
-      CD_malloc{{"malloc"}, 1}, CD_BSD_malloc{{"malloc"}, 3},
-      CD_free{{"free"}, 1}, CD_realloc{{"realloc"}, 2},
-      CD_calloc{{"calloc"}, 2}, CD_valloc{{"valloc"}, 1},
-      CD_reallocf{{"reallocf"}, 2}, CD_strndup{{"strndup"}, 2},
-      CD_strdup{{"strdup"}, 1}, CD_win_strdup{{"_strdup"}, 1},
-      CD_kmalloc{{"kmalloc"}, 2}, CD_if_nameindex{{"if_nameindex"}, 1},
-      CD_if_freenameindex{{"if_freenameindex"}, 1}, CD_wcsdup{{"wcsdup"}, 1},
-      CD_win_wcsdup{{"_wcsdup"}, 1}, CD_kfree{{"kfree"}, 2},
-      CD_g_malloc{{"g_malloc"}, 1}, CD_g_malloc0{{"g_malloc0"}, 1},
-      CD_g_realloc{{"g_realloc"}, 2}, CD_g_try_malloc{{"g_try_malloc"}, 1},
-      CD_g_try_malloc0{{"g_try_malloc0"}, 1},
-      CD_g_try_realloc{{"g_try_realloc"}, 2}, CD_g_free{{"g_free"}, 1},
-      CD_g_memdup{{"g_memdup"}, 2}, CD_g_malloc_n{{"g_malloc_n"}, 2},
-      CD_g_malloc0_n{{"g_malloc0_n"}, 2}, CD_g_realloc_n{{"g_realloc_n"}, 3},
-      CD_g_try_malloc_n{{"g_try_malloc_n"}, 2},
-      CD_g_try_malloc0_n{{"g_try_malloc0_n"}, 2},
-      CD_g_try_realloc_n{{"g_try_realloc_n"}, 3};
-
-  bool isMemFunction(const CallEvent &Call) const;
-  bool isCMemFunction(const CallEvent &Call) const;
-  bool isCMemFreeFunction(const CallEvent &Call) const;
-  bool isCMemAllocFunction(const CallEvent &Call) const;
-};
-} // end of anonymous namespace
-
 /// Tells if the callee is one of the builtin new/delete operators, including
 /// placement operators and other standard overloads.
 static bool isStandardNewDelete(const FunctionDecl *FD);
@@ -326,7 +284,11 @@ class MallocChecker
                      check::PreStmt<CXXDeleteExpr>, check::PostStmt<BlockExpr>,
                      check::PostObjCMessage, check::Location, eval::Assume> {
 public:
-  MemFunctionInfoTy MemFunctionInfo;
+  /// In pessimistic mode, the checker assumes that it does not know which
+  /// functions might free the memory.
+  /// In optimistic mode, the checker assumes that all user-defined functions
+  /// which might free a pointer are annotated.
+  DefaultBool ShouldIncludeOwnershipAnnotatedFunctions;
 
   /// Many checkers are essentially built into this one, so enabling them will
   /// make MallocChecker perform additional modeling and reporting.
@@ -385,6 +347,75 @@ private:
   mutable std::unique_ptr<BugType> BT_MismatchedDealloc;
   mutable std::unique_ptr<BugType> BT_OffsetFree[CK_NumCheckKinds];
   mutable std::unique_ptr<BugType> BT_UseZerroAllocated[CK_NumCheckKinds];
+
+#define CHECK_FN(NAME)                                                         \
+  void NAME(CheckerContext &C, const CallExpr *CE, ProgramStateRef State) const;
+
+  template <bool ShouldFreeOnFail>
+  void checkRealloc(CheckerContext &C, const CallExpr *CE,
+                    ProgramStateRef State) const;
+
+  CHECK_FN(checkBasicAlloc)
+  CHECK_FN(checkKernelMalloc)
+  CHECK_FN(checkMalloc)
+  CHECK_FN(checkCalloc)
+  CHECK_FN(checkFree)
+  CHECK_FN(checkAlloca)
+  CHECK_FN(checkStrdup)
+  CHECK_FN(checkIfNameIndex)
+  CHECK_FN(checkIfFreeNameIndex)
+  CHECK_FN(checkCXXNewOrCXXDelete)
+  CHECK_FN(checkGMalloc0)
+  CHECK_FN(checkGMemdup)
+  CHECK_FN(checkGMallocN)
+  CHECK_FN(checkGMallocN0)
+  CHECK_FN(checkReallocN)
+  CHECK_FN(checkOwnershipAttr)
+
+  using CheckFn = void (MallocChecker::*)(CheckerContext &C, const CallExpr *CE,
+                                          ProgramStateRef State) const;
+
+  CallDescriptionMap<CheckFn> FreeingMemFnMap{
+      {{"realloc", 2}, &MallocChecker::checkRealloc<false>},
+      {{"reallocf", 2}, &MallocChecker::checkRealloc<true>},
+      {{"g_realloc", 2}, &MallocChecker::checkRealloc<false>},
+      {{"g_try_realloc", 2}, &MallocChecker::checkRealloc<false>},
+      {{"g_realloc_n", 3}, &MallocChecker::checkReallocN},
+      {{"g_try_realloc_n", 3}, &MallocChecker::checkReallocN},
+      {{"free", 1}, &MallocChecker::checkFree},
+      {{"if_freenameindex", 1}, &MallocChecker::checkIfFreeNameIndex},
+      {{"kfree", 2}, &MallocChecker::checkFree},
+      {{"g_free", 1}, &MallocChecker::checkFree},
+  };
+
+  bool isFreeingCall(const CallEvent &Call) const;
+
+  CallDescriptionMap<CheckFn> NonFreeingMemFnMap{
+      {{"alloca", 1}, &MallocChecker::checkAlloca},
+      {{"_alloca", 1}, &MallocChecker::checkAlloca},
+      {{"malloc", 1}, &MallocChecker::checkMalloc},
+      {{"malloc", 3}, &MallocChecker::checkKernelMalloc},
+      {{"calloc", 2}, &MallocChecker::checkCalloc},
+      {{"valloc", 1}, &MallocChecker::checkBasicAlloc},
+      {{"strndup", 2}, &MallocChecker::checkStrdup},
+      {{"strdup", 1}, &MallocChecker::checkStrdup},
+      {{"_strdup", 1}, &MallocChecker::checkStrdup},
+      {{"kmalloc", 2}, &MallocChecker::checkKernelMalloc},
+      {{"if_nameindex", 1}, &MallocChecker::checkIfNameIndex},
+      {{"wcsdup", 1}, &MallocChecker::checkStrdup},
+      {{"_wcsdup", 1}, &MallocChecker::checkStrdup},
+      {{"g_malloc", 1}, &MallocChecker::checkMalloc},
+      {{"g_malloc0", 1}, &MallocChecker::checkGMalloc0},
+      {{"g_try_malloc", 1}, &MallocChecker::checkMalloc},
+      {{"g_try_malloc0", 1}, &MallocChecker::checkGMalloc0},
+      {{"g_memdup", 2}, &MallocChecker::checkGMemdup},
+      {{"g_malloc_n", 2}, &MallocChecker::checkGMallocN},
+      {{"g_malloc0_n", 2}, &MallocChecker::checkGMallocN0},
+      {{"g_try_malloc_n", 2}, &MallocChecker::checkGMallocN},
+      {{"g_try_malloc0_n", 2}, &MallocChecker::checkGMallocN0},
+  };
+
+  bool isMemCall(const CallEvent &Call) const;
 
   // TODO: Remove mutable by moving the initializtaion to the registry function.
   mutable Optional<uint64_t> KernelZeroFlagVal;
@@ -810,70 +841,6 @@ public:
 };
 } // end anonymous namespace
 
-//===----------------------------------------------------------------------===//
-// Methods of MemFunctionInfoTy.
-//===----------------------------------------------------------------------===//
-
-bool MemFunctionInfoTy::isMemFunction(const CallEvent &Call) const {
-  return isCMemFunction(Call) || isStandardNewDelete(Call);
-}
-
-bool MemFunctionInfoTy::isCMemFunction(const CallEvent &Call) const {
-  return isCMemFreeFunction(Call) || isCMemAllocFunction(Call);
-}
-
-bool MemFunctionInfoTy::isCMemFreeFunction(const CallEvent &Call) const {
-  if (Call.isCalled(CD_free, CD_realloc, CD_reallocf, CD_g_free, CD_kfree))
-    return true;
-
-  if (Call.isCalled(CD_if_freenameindex))
-    return true;
-
-  if (!ShouldIncludeOwnershipAnnotatedFunctions)
-    return false;
-
-  const auto *Func = dyn_cast<FunctionDecl>(Call.getDecl());
-  if (Func && Func->hasAttrs()) {
-    for (const auto *I : Func->specific_attrs<OwnershipAttr>()) {
-      OwnershipAttr::OwnershipKind OwnKind = I->getOwnKind();
-      if (OwnKind == OwnershipAttr::Takes || OwnKind == OwnershipAttr::Holds)
-        return true;
-    }
-  }
-  return false;
-}
-
-bool MemFunctionInfoTy::isCMemAllocFunction(const CallEvent &Call) const {
-  if (Call.isCalled(CD_malloc, CD_realloc, CD_reallocf, CD_calloc, CD_valloc,
-                    CD_strdup, CD_win_strdup, CD_strndup, CD_wcsdup,
-                    CD_win_wcsdup, CD_kmalloc, CD_g_malloc, CD_g_malloc0,
-                    CD_g_realloc, CD_g_try_malloc, CD_g_try_malloc0,
-                    CD_g_try_realloc, CD_g_memdup, CD_g_malloc_n,
-                    CD_g_malloc0_n, CD_g_realloc_n, CD_g_try_malloc_n,
-                    CD_g_try_malloc0_n, CD_g_try_realloc_n))
-    return true;
-
-  if (Call.isCalled(CD_if_nameindex))
-    return true;
-
-  if (Call.isCalled(CD_alloca, CD_win_alloca))
-    return true;
-
-  if (!ShouldIncludeOwnershipAnnotatedFunctions)
-    return false;
-
-  const auto *Func = dyn_cast<FunctionDecl>(Call.getDecl());
-  if (Func && Func->hasAttrs()) {
-    for (const auto *I : Func->specific_attrs<OwnershipAttr>()) {
-      OwnershipAttr::OwnershipKind OwnKind = I->getOwnKind();
-      if (OwnKind == OwnershipAttr::Returns)
-        return true;
-    }
-  }
-
-  return false;
-}
-
 static bool isStandardNewDelete(const FunctionDecl *FD) {
   if (!FD)
     return false;
@@ -894,6 +861,32 @@ static bool isStandardNewDelete(const FunctionDecl *FD) {
 //===----------------------------------------------------------------------===//
 // Methods of MallocChecker and MallocBugVisitor.
 //===----------------------------------------------------------------------===//
+
+bool MallocChecker::isFreeingCall(const CallEvent &Call) const {
+  if (FreeingMemFnMap.lookup(Call))
+    return true;
+
+  const auto *Func = dyn_cast<FunctionDecl>(Call.getDecl());
+  if (Func && Func->hasAttrs()) {
+    for (const auto *I : Func->specific_attrs<OwnershipAttr>()) {
+      OwnershipAttr::OwnershipKind OwnKind = I->getOwnKind();
+      if (OwnKind == OwnershipAttr::Takes || OwnKind == OwnershipAttr::Holds)
+        return true;
+    }
+  }
+  return false;
+}
+
+bool MallocChecker::isMemCall(const CallEvent &Call) const {
+  if (FreeingMemFnMap.lookup(Call) || NonFreeingMemFnMap.lookup(Call))
+    return true;
+
+  if (!ShouldIncludeOwnershipAnnotatedFunctions)
+    return false;
+
+  const auto *Func = dyn_cast<FunctionDecl>(Call.getDecl());
+  return Func && Func->hasAttr<OwnershipAttr>();
+}
 
 llvm::Optional<ProgramStateRef> MallocChecker::performKernelMalloc(
   const CallExpr *CE, CheckerContext &C, const ProgramStateRef &State) const {
@@ -984,173 +977,189 @@ SVal MallocChecker::evalMulForBufferSize(CheckerContext &C, const Expr *Blocks,
   return TotalSize;
 }
 
-void MallocChecker::checkPostCall(const CallEvent &Call,
-                                  CheckerContext &C) const {
-  if (C.wasInlined)
-    return;
+void MallocChecker::checkBasicAlloc(CheckerContext &C, const CallExpr *CE,
+                                    ProgramStateRef State) const {
+  State = MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_Malloc);
+  State = ProcessZeroAllocCheck(C, CE, 0, State);
+  C.addTransition(State);
+}
 
-  const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
-  if (!CE)
-    return;
+void MallocChecker::checkKernelMalloc(CheckerContext &C, const CallExpr *CE,
+                                      ProgramStateRef State) const {
+  llvm::Optional<ProgramStateRef> MaybeState =
+      performKernelMalloc(CE, C, State);
+  if (MaybeState.hasValue())
+    State = MaybeState.getValue();
+  else
+    State =
+        MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_Malloc);
+  C.addTransition(State);
+}
 
-  const FunctionDecl *FD = C.getCalleeDecl(CE);
-  if (!FD)
+void MallocChecker::checkMalloc(CheckerContext &C, const CallExpr *CE,
+                                ProgramStateRef State) const {
+  switch (CE->getNumArgs()) {
+  default:
     return;
+  case 1:
+    checkBasicAlloc(C, CE, State);
+    return;
+  case 2:
+    State =
+        MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_Malloc);
+    break;
+  case 3:
+    llvm_unreachable("");
+    checkKernelMalloc(C, CE, State);
+    return;
+  }
+  C.addTransition(State);
+}
 
-  ProgramStateRef State = C.getState();
+template <bool ShouldFreeOnFail>
+void MallocChecker::checkRealloc(CheckerContext &C, const CallExpr *CE,
+                                 ProgramStateRef State) const {
+  State = ReallocMemAux(C, CE, ShouldFreeOnFail, State, AF_Malloc);
+  State = ProcessZeroAllocCheck(C, CE, 1, State);
+  C.addTransition(State);
+}
+
+void MallocChecker::checkCalloc(CheckerContext &C, const CallExpr *CE,
+                                ProgramStateRef State) const {
+  State = CallocMem(C, CE, State);
+  State = ProcessZeroAllocCheck(C, CE, 0, State);
+  State = ProcessZeroAllocCheck(C, CE, 1, State);
+  C.addTransition(State);
+}
+
+void MallocChecker::checkFree(CheckerContext &C, const CallExpr *CE,
+                              ProgramStateRef State) const {
+  bool IsKnownToBeAllocatedMemory = false;
+  if (suppressDeallocationsInSuspiciousContexts(CE, C))
+    return;
+  State =
+      FreeMemAux(C, CE, State, 0, false, IsKnownToBeAllocatedMemory, AF_Malloc);
+  C.addTransition(State);
+}
+
+void MallocChecker::checkAlloca(CheckerContext &C, const CallExpr *CE,
+                                ProgramStateRef State) const {
+  State = MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_Alloca);
+  State = ProcessZeroAllocCheck(C, CE, 0, State);
+  C.addTransition(State);
+}
+
+void MallocChecker::checkStrdup(CheckerContext &C, const CallExpr *CE,
+                                ProgramStateRef State) const {
+  State = MallocUpdateRefState(C, CE, State, AF_Malloc);
+
+  C.addTransition(State);
+}
+
+void MallocChecker::checkIfNameIndex(CheckerContext &C, const CallExpr *CE,
+                                     ProgramStateRef State) const {
+  // Should we model this differently? We can allocate a fixed number of
+  // elements with zeros in the last one.
+  State =
+      MallocMemAux(C, CE, UnknownVal(), UnknownVal(), State, AF_IfNameIndex);
+
+  C.addTransition(State);
+}
+
+void MallocChecker::checkIfFreeNameIndex(CheckerContext &C, const CallExpr *CE,
+                                         ProgramStateRef State) const {
+  bool IsKnownToBeAllocatedMemory = false;
+  State = FreeMemAux(C, CE, State, 0, false, IsKnownToBeAllocatedMemory,
+                     AF_IfNameIndex);
+  C.addTransition(State);
+}
+
+void MallocChecker::checkCXXNewOrCXXDelete(CheckerContext &C,
+                                           const CallExpr *CE,
+                                           ProgramStateRef State) const {
   bool IsKnownToBeAllocatedMemory = false;
 
-  if (FD->getKind() == Decl::Function) {
-    if (Call.isCalled(MemFunctionInfo.CD_malloc, MemFunctionInfo.CD_BSD_malloc,
-                      MemFunctionInfo.CD_g_malloc,
-                      MemFunctionInfo.CD_g_try_malloc)) {
-      switch (CE->getNumArgs()) {
-      default:
-        return;
-      case 1:
-        State = MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State,
-                             AF_Malloc);
-        State = ProcessZeroAllocCheck(C, CE, 0, State);
-        break;
-      case 2:
-        llvm_unreachable("There shouldn't be a 2-argument malloc!");
-        break;
-      case 3:
-        llvm::Optional<ProgramStateRef> MaybeState =
-          performKernelMalloc(CE, C, State);
-        if (MaybeState.hasValue())
-          State = MaybeState.getValue();
-        else
-          State = MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State,
-                               AF_Malloc);
-        break;
-      }
-    } else if (Call.isCalled(MemFunctionInfo.CD_kmalloc)) {
-      if (CE->getNumArgs() < 1)
-        return;
-      llvm::Optional<ProgramStateRef> MaybeState =
-          performKernelMalloc(CE, C, State);
-      if (MaybeState.hasValue())
-        State = MaybeState.getValue();
-      else
-        State = MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State,
-                             AF_Malloc);
-    } else if (Call.isCalled(MemFunctionInfo.CD_valloc)) {
-      if (CE->getNumArgs() < 1)
-        return;
-      State =
-          MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_Malloc);
-      State = ProcessZeroAllocCheck(C, CE, 0, State);
-    } else if (Call.isCalled(MemFunctionInfo.CD_realloc,
-                             MemFunctionInfo.CD_g_realloc,
-                             MemFunctionInfo.CD_g_try_realloc)) {
-      State =
-          ReallocMemAux(C, CE, /*ShouldFreeOnFail*/ false, State, AF_Malloc);
-      State = ProcessZeroAllocCheck(C, CE, 1, State);
-    } else if (Call.isCalled(MemFunctionInfo.CD_reallocf)) {
-      State = ReallocMemAux(C, CE, /*ShouldFreeOnFail*/ true, State, AF_Malloc);
-      State = ProcessZeroAllocCheck(C, CE, 1, State);
-    } else if (Call.isCalled(MemFunctionInfo.CD_calloc)) {
-      State = CallocMem(C, CE, State);
-      State = ProcessZeroAllocCheck(C, CE, 0, State);
-      State = ProcessZeroAllocCheck(C, CE, 1, State);
-    } else if (Call.isCalled(MemFunctionInfo.CD_free, MemFunctionInfo.CD_g_free,
-                             MemFunctionInfo.CD_kfree)) {
-      if (suppressDeallocationsInSuspiciousContexts(CE, C))
-        return;
-
-      State = FreeMemAux(C, CE, State, 0, false, IsKnownToBeAllocatedMemory,
-                         AF_Malloc);
-    } else if (Call.isCalled(
-                   MemFunctionInfo.CD_strdup, MemFunctionInfo.CD_win_strdup,
-                   MemFunctionInfo.CD_wcsdup, MemFunctionInfo.CD_win_wcsdup)) {
-      State = MallocUpdateRefState(C, CE, State, AF_Malloc);
-    } else if (Call.isCalled(MemFunctionInfo.CD_strndup)) {
-      State = MallocUpdateRefState(C, CE, State, AF_Malloc);
-    } else if (Call.isCalled(MemFunctionInfo.CD_alloca,
-                             MemFunctionInfo.CD_win_alloca)) {
-      if (CE->getNumArgs() < 1)
-        return;
-      State =
-          MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_Alloca);
-      State = ProcessZeroAllocCheck(C, CE, 0, State);
-    } else if (isStandardNewDelete(FD)) {
-      // Process direct calls to operator new/new[]/delete/delete[] functions
-      // as distinct from new/new[]/delete/delete[] expressions that are
-      // processed by the checkPostStmt callbacks for CXXNewExpr and
-      // CXXDeleteExpr.
-      switch (FD->getOverloadedOperator()) {
-      case OO_New:
-        State = MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State,
-                             AF_CXXNew);
-        State = ProcessZeroAllocCheck(C, CE, 0, State);
-        break;
-      case OO_Array_New:
-        State = MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State,
-                             AF_CXXNewArray);
-        State = ProcessZeroAllocCheck(C, CE, 0, State);
-        break;
-      case OO_Delete:
-        State = FreeMemAux(C, CE, State, 0, false, IsKnownToBeAllocatedMemory,
-                           AF_CXXNew);
-        break;
-      case OO_Array_Delete:
-        State = FreeMemAux(C, CE, State, 0, false, IsKnownToBeAllocatedMemory,
-                           AF_CXXNewArray);
-        break;
-      default:
-        llvm_unreachable("not a new/delete operator");
-      }
-    } else if (Call.isCalled(MemFunctionInfo.CD_if_nameindex)) {
-      // Should we model this differently? We can allocate a fixed number of
-      // elements with zeros in the last one.
-      State = MallocMemAux(C, CE, UnknownVal(), UnknownVal(), State,
-                           AF_IfNameIndex);
-    } else if (Call.isCalled(MemFunctionInfo.CD_if_freenameindex)) {
-      State = FreeMemAux(C, CE, State, 0, false, IsKnownToBeAllocatedMemory,
-                         AF_IfNameIndex);
-    } else if (Call.isCalled(MemFunctionInfo.CD_g_malloc0,
-                             MemFunctionInfo.CD_g_try_malloc0)) {
-      if (CE->getNumArgs() < 1)
-        return;
-      SValBuilder &svalBuilder = C.getSValBuilder();
-      SVal zeroVal = svalBuilder.makeZeroVal(svalBuilder.getContext().CharTy);
-      State = MallocMemAux(C, CE, CE->getArg(0), zeroVal, State, AF_Malloc);
-      State = ProcessZeroAllocCheck(C, CE, 0, State);
-    } else if (Call.isCalled(MemFunctionInfo.CD_g_memdup)) {
-      if (CE->getNumArgs() < 2)
-        return;
-      State =
-          MallocMemAux(C, CE, CE->getArg(1), UndefinedVal(), State, AF_Malloc);
-      State = ProcessZeroAllocCheck(C, CE, 1, State);
-    } else if (Call.isCalled(MemFunctionInfo.CD_g_malloc_n,
-                             MemFunctionInfo.CD_g_try_malloc_n,
-                             MemFunctionInfo.CD_g_malloc0_n,
-                             MemFunctionInfo.CD_g_try_malloc0_n)) {
-      if (CE->getNumArgs() < 2)
-        return;
-      SVal Init = UndefinedVal();
-      if (Call.isCalled(MemFunctionInfo.CD_g_malloc0_n,
-                        MemFunctionInfo.CD_g_try_malloc0_n)) {
-        SValBuilder &SB = C.getSValBuilder();
-        Init = SB.makeZeroVal(SB.getContext().CharTy);
-      }
-      SVal TotalSize = evalMulForBufferSize(C, CE->getArg(0), CE->getArg(1));
-      State = MallocMemAux(C, CE, TotalSize, Init, State, AF_Malloc);
-      State = ProcessZeroAllocCheck(C, CE, 0, State);
-      State = ProcessZeroAllocCheck(C, CE, 1, State);
-    } else if (Call.isCalled(MemFunctionInfo.CD_g_realloc_n,
-                             MemFunctionInfo.CD_g_try_realloc_n)) {
-      if (CE->getNumArgs() < 3)
-        return;
-      State = ReallocMemAux(C, CE, /*ShouldFreeOnFail*/ false, State, AF_Malloc,
-                            /*SuffixWithN*/ true);
-      State = ProcessZeroAllocCheck(C, CE, 1, State);
-      State = ProcessZeroAllocCheck(C, CE, 2, State);
-    }
+  const FunctionDecl *FD = C.getCalleeDecl(CE);
+  // Process direct calls to operator new/new[]/delete/delete[] functions
+  // as distinct from new/new[]/delete/delete[] expressions that are
+  // processed by the checkPostStmt callbacks for CXXNewExpr and
+  // CXXDeleteExpr.
+  switch (FD->getOverloadedOperator()) {
+  case OO_New:
+    State =
+        MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_CXXNew);
+    State = ProcessZeroAllocCheck(C, CE, 0, State);
+    break;
+  case OO_Array_New:
+    State = MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State,
+                         AF_CXXNewArray);
+    State = ProcessZeroAllocCheck(C, CE, 0, State);
+    break;
+  case OO_Delete:
+    State = FreeMemAux(C, CE, State, 0, false, IsKnownToBeAllocatedMemory,
+                       AF_CXXNew);
+    break;
+  case OO_Array_Delete:
+    State = FreeMemAux(C, CE, State, 0, false, IsKnownToBeAllocatedMemory,
+                       AF_CXXNewArray);
+    break;
+  default:
+    llvm_unreachable("not a new/delete operator");
   }
 
-  if (MemFunctionInfo.ShouldIncludeOwnershipAnnotatedFunctions ||
+  C.addTransition(State);
+}
+
+void MallocChecker::checkGMalloc0(CheckerContext &C, const CallExpr *CE,
+                                  ProgramStateRef State) const {
+  SValBuilder &svalBuilder = C.getSValBuilder();
+  SVal zeroVal = svalBuilder.makeZeroVal(svalBuilder.getContext().CharTy);
+  State = MallocMemAux(C, CE, CE->getArg(0), zeroVal, State, AF_Malloc);
+  State = ProcessZeroAllocCheck(C, CE, 0, State);
+  C.addTransition(State);
+}
+
+void MallocChecker::checkGMemdup(CheckerContext &C, const CallExpr *CE,
+                                 ProgramStateRef State) const {
+  State = MallocMemAux(C, CE, CE->getArg(1), UndefinedVal(), State, AF_Malloc);
+  State = ProcessZeroAllocCheck(C, CE, 1, State);
+  C.addTransition(State);
+}
+
+void MallocChecker::checkGMallocN(CheckerContext &C, const CallExpr *CE,
+                                  ProgramStateRef State) const {
+  SVal Init = UndefinedVal();
+  SVal TotalSize = evalMulForBufferSize(C, CE->getArg(0), CE->getArg(1));
+  State = MallocMemAux(C, CE, TotalSize, Init, State, AF_Malloc);
+  State = ProcessZeroAllocCheck(C, CE, 0, State);
+  State = ProcessZeroAllocCheck(C, CE, 1, State);
+  C.addTransition(State);
+}
+
+void MallocChecker::checkGMallocN0(CheckerContext &C, const CallExpr *CE,
+                                   ProgramStateRef State) const {
+  SValBuilder &SB = C.getSValBuilder();
+  SVal Init = SB.makeZeroVal(SB.getContext().CharTy);
+  SVal TotalSize = evalMulForBufferSize(C, CE->getArg(0), CE->getArg(1));
+  State = MallocMemAux(C, CE, TotalSize, Init, State, AF_Malloc);
+  State = ProcessZeroAllocCheck(C, CE, 0, State);
+  State = ProcessZeroAllocCheck(C, CE, 1, State);
+  C.addTransition(State);
+}
+
+void MallocChecker::checkReallocN(CheckerContext &C, const CallExpr *CE,
+                                  ProgramStateRef State) const {
+  State = ReallocMemAux(C, CE, /*ShouldFreeOnFail=*/false, State, AF_Malloc,
+                        /*SuffixWithN=*/true);
+  State = ProcessZeroAllocCheck(C, CE, 1, State);
+  State = ProcessZeroAllocCheck(C, CE, 2, State);
+  C.addTransition(State);
+}
+
+void MallocChecker::checkOwnershipAttr(CheckerContext &C, const CallExpr *CE,
+                                       ProgramStateRef State) const {
+  const FunctionDecl *FD = C.getCalleeDecl(CE);
+  if (ShouldIncludeOwnershipAnnotatedFunctions ||
       ChecksEnabled[CK_MismatchedDeallocatorChecker]) {
     // Check all the attributes, if there are any.
     // There can be multiple of these attributes.
@@ -1168,6 +1177,33 @@ void MallocChecker::checkPostCall(const CallEvent &Call,
       }
   }
   C.addTransition(State);
+}
+
+void MallocChecker::checkPostCall(const CallEvent &Call,
+                                  CheckerContext &C) const {
+  if (C.wasInlined)
+    return;
+
+  const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
+  if (!CE)
+    return;
+
+  const FunctionDecl *FD = C.getCalleeDecl(CE);
+  if (!FD || FD->getKind() != Decl::Function)
+    return;
+
+  ProgramStateRef State = C.getState();
+
+  if (const CheckFn *Callback = FreeingMemFnMap.lookup(Call))
+    (this->**Callback)(C, CE, State);
+
+  if (const CheckFn *Callback = NonFreeingMemFnMap.lookup(Call))
+    (this->**Callback)(C, CE, State);
+
+  if (isStandardNewDelete(Call))
+    checkCXXNewOrCXXDelete(C, CE, State);
+
+  checkOwnershipAttr(C, CE, State);
 }
 
 // Performs a 0-sized allocations check.
@@ -1436,8 +1472,7 @@ MallocChecker::MallocMemReturnsAttr(CheckerContext &C, const CallExpr *CE,
   if (!State)
     return nullptr;
 
-  if (Att->getModule()->getName() !=
-      MemFunctionInfo.CD_malloc.getFunctionName())
+  if (Att->getModule()->getName() != "malloc")
     return nullptr;
 
   OwnershipAttr::args_iterator I = Att->args_begin(), E = Att->args_end();
@@ -1533,8 +1568,7 @@ ProgramStateRef MallocChecker::FreeMemAttr(CheckerContext &C,
   if (!State)
     return nullptr;
 
-  if (Att->getModule()->getName() !=
-      MemFunctionInfo.CD_malloc.getFunctionName())
+  if (Att->getModule()->getName() != "malloc")
     return nullptr;
 
   bool IsKnownToBeAllocated = false;
@@ -2579,8 +2613,7 @@ void MallocChecker::checkPreCall(const CallEvent &Call,
     if (!FD)
       return;
 
-    if (ChecksEnabled[CK_MallocChecker] &&
-        (MemFunctionInfo.isCMemFreeFunction(Call)))
+    if (ChecksEnabled[CK_MallocChecker] && isFreeingCall(Call))
       return;
   }
 
@@ -2879,7 +2912,7 @@ bool MallocChecker::mayFreeAnyEscapedMemoryOrIsModeledExplicitly(
 
   // If it's one of the allocation functions we can reason about, we model
   // its behavior explicitly.
-  if (MemFunctionInfo.isMemFunction(*Call))
+  if (isMemCall(*Call))
     return false;
 
   // If it's not a system call, assume it frees memory.
@@ -3285,7 +3318,7 @@ void ento::registerInnerPointerCheckerAux(CheckerManager &mgr) {
 
 void ento::registerDynamicMemoryModeling(CheckerManager &mgr) {
   auto *checker = mgr.registerChecker<MallocChecker>();
-  checker->MemFunctionInfo.ShouldIncludeOwnershipAnnotatedFunctions =
+  checker->ShouldIncludeOwnershipAnnotatedFunctions =
       mgr.getAnalyzerOptions().getCheckerBooleanOption(checker, "Optimistic");
 }
 
