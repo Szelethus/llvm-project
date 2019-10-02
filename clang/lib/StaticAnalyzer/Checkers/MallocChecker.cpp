@@ -357,7 +357,6 @@ private:
 
   CHECK_FN(checkBasicAlloc)
   CHECK_FN(checkKernelMalloc)
-  CHECK_FN(checkMalloc)
   CHECK_FN(checkCalloc)
   CHECK_FN(checkFree)
   CHECK_FN(checkAlloca)
@@ -393,7 +392,7 @@ private:
   CallDescriptionMap<CheckFn> NonFreeingMemFnMap{
       {{"alloca", 1}, &MallocChecker::checkAlloca},
       {{"_alloca", 1}, &MallocChecker::checkAlloca},
-      {{"malloc", 1}, &MallocChecker::checkMalloc},
+      {{"malloc", 1}, &MallocChecker::checkBasicAlloc},
       {{"malloc", 3}, &MallocChecker::checkKernelMalloc},
       {{"calloc", 2}, &MallocChecker::checkCalloc},
       {{"valloc", 1}, &MallocChecker::checkBasicAlloc},
@@ -404,9 +403,9 @@ private:
       {{"if_nameindex", 1}, &MallocChecker::checkIfNameIndex},
       {{"wcsdup", 1}, &MallocChecker::checkStrdup},
       {{"_wcsdup", 1}, &MallocChecker::checkStrdup},
-      {{"g_malloc", 1}, &MallocChecker::checkMalloc},
+      {{"g_malloc", 1}, &MallocChecker::checkBasicAlloc},
       {{"g_malloc0", 1}, &MallocChecker::checkGMalloc0},
-      {{"g_try_malloc", 1}, &MallocChecker::checkMalloc},
+      {{"g_try_malloc", 1}, &MallocChecker::checkBasicAlloc},
       {{"g_try_malloc0", 1}, &MallocChecker::checkGMalloc0},
       {{"g_memdup", 2}, &MallocChecker::checkGMemdup},
       {{"g_malloc_n", 2}, &MallocChecker::checkGMallocN},
@@ -993,26 +992,6 @@ void MallocChecker::checkKernelMalloc(CheckerContext &C, const CallExpr *CE,
   else
     State =
         MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_Malloc);
-  C.addTransition(State);
-}
-
-void MallocChecker::checkMalloc(CheckerContext &C, const CallExpr *CE,
-                                ProgramStateRef State) const {
-  switch (CE->getNumArgs()) {
-  default:
-    return;
-  case 1:
-    checkBasicAlloc(C, CE, State);
-    return;
-  case 2:
-    State =
-        MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_Malloc);
-    break;
-  case 3:
-    llvm_unreachable("");
-    checkKernelMalloc(C, CE, State);
-    return;
-  }
   C.addTransition(State);
 }
 
