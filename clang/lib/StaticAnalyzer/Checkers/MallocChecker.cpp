@@ -278,12 +278,12 @@ struct MemFunctionInfoTy {
   DefaultBool ShouldIncludeOwnershipAnnotatedFunctions;
 
   CallDescription CD_alloca{{"alloca"}, 1}, CD_win_alloca{{"_alloca"}, 1},
-      CD_malloc{{"malloc"}, 1}, CD_free{{"free"}, 1},
-      CD_realloc{{"realloc"}, 2}, CD_calloc{{"calloc"}, 2},
-      CD_valloc{{"valloc"}, 1}, CD_reallocf{{"reallocf"}, 2},
-      CD_strndup{{"strndup"}, 2}, CD_strdup{{"strdup"}, 1},
-      CD_win_strdup{{"_strdup"}, 1}, CD_kmalloc{{"kmalloc"}, 2},
-      CD_if_nameindex{{"if_nameindex"}, 1},
+      CD_malloc{{"malloc"}, 1}, CD_BSD_malloc{{"malloc"}, 3},
+      CD_free{{"free"}, 1}, CD_realloc{{"realloc"}, 2},
+      CD_calloc{{"calloc"}, 2}, CD_valloc{{"valloc"}, 1},
+      CD_reallocf{{"reallocf"}, 2}, CD_strndup{{"strndup"}, 2},
+      CD_strdup{{"strdup"}, 1}, CD_win_strdup{{"_strdup"}, 1},
+      CD_kmalloc{{"kmalloc"}, 2}, CD_if_nameindex{{"if_nameindex"}, 1},
       CD_if_freenameindex{{"if_freenameindex"}, 1}, CD_wcsdup{{"wcsdup"}, 1},
       CD_win_wcsdup{{"_wcsdup"}, 1}, CD_kfree{{"kfree"}, 2},
       CD_g_malloc{{"g_malloc"}, 1}, CD_g_malloc0{{"g_malloc0"}, 1},
@@ -1001,7 +1001,8 @@ void MallocChecker::checkPostCall(const CallEvent &Call,
   bool IsKnownToBeAllocatedMemory = false;
 
   if (FD->getKind() == Decl::Function) {
-    if (Call.isCalled(MemFunctionInfo.CD_malloc, MemFunctionInfo.CD_g_malloc,
+    if (Call.isCalled(MemFunctionInfo.CD_malloc, MemFunctionInfo.CD_BSD_malloc,
+                      MemFunctionInfo.CD_g_malloc,
                       MemFunctionInfo.CD_g_try_malloc)) {
       switch (CE->getNumArgs()) {
       default:
@@ -1012,8 +1013,7 @@ void MallocChecker::checkPostCall(const CallEvent &Call,
         State = ProcessZeroAllocCheck(C, CE, 0, State);
         break;
       case 2:
-        State = MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State,
-                             AF_Malloc);
+        llvm_unreachable("There shouldn't be a 2-argument malloc!");
         break;
       case 3:
         llvm::Optional<ProgramStateRef> MaybeState =
