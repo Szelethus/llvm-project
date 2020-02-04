@@ -402,10 +402,31 @@ libclang
 Static Analyzer
 ---------------
 
+- New checker: ``fuchsia.HandleChecker`` to detect leaks related to Fuchsia
+  handles.
+
+- New checker: ``alpha.plusplus.PlacementNew`` to detect whether the storage
+  provided for default placement new is sufficiently large.
+
 - The Clang analyzer checker ``DeadStores`` gets a new option called
   ``WarnForDeadNestedAssignments`` to detect nested dead assignments
   (enabled by default).
-- ...
+
+- Condition values that greatly affect the occurance of a bug are now far better
+  explained in bug reports (further reading on the related
+  `GSoC'19 summary page <https://szelethus.github.io/gsoc2019/>`_).
+
+- Despite still in being in alpha stage, checkers implementing taint analyses
+  and C++ iterator rules were improved greatly.
+
+- Analyses on LLVM's own source code are far more precise due to the modeling of
+  several LLVM specific techniques, like its custom RTTI, informing the analyzer
+  of the return values of core functions, and much more (further reading on the
+  related `GSoC'19 summary page <https://docs.google.com/document/d/1o9-xEWbzivUGKIOXp9jUNZYq0mkecd5KH5dBN5Hdlu8/edit>`_) .
+
+- ObjectiveC++ changes:
+
+- Numerous smaller false positive fixes.
 
 .. _release-notes-ubsan:
 
