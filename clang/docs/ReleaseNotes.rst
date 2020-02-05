@@ -402,31 +402,24 @@ libclang
 Static Analyzer
 ---------------
 
+- New checker: ``alpha.cplusplus.PlacementNew`` to detect whether the storage
+  provided for default placement new is sufficiently large.
+
 - New checker: ``fuchsia.HandleChecker`` to detect leaks related to Fuchsia
   handles.
 
-- New checker: ``alpha.plusplus.PlacementNew`` to detect whether the storage
-  provided for default placement new is sufficiently large.
+- New checker: ``security.insecureAPI.decodeValueOfObjCType`` warns about
+  potential buffer overflows when using ``[NSCoder decodeValueOfObjCType:at:]``
 
-- The Clang analyzer checker ``DeadStores`` gets a new option called
-  ``WarnForDeadNestedAssignments`` to detect nested dead assignments
-  (enabled by default).
+- ``deadcode.DeadStores`` now warns about nested dead stores.
 
-- Condition values that greatly affect the occurance of a bug are now far better
-  explained in bug reports (further reading on the related
-  `GSoC'19 summary page <https://szelethus.github.io/gsoc2019/>`_).
+- Condition values that are relevant to the occurance of a bug are far better
+  explained in bug reports.
 
-- Despite still in being in alpha stage, checkers implementing taint analyses
+- Despite still being at an alpha stage, checkers implementing taint analyses
   and C++ iterator rules were improved greatly.
 
-- Analyses on LLVM's own source code are far more precise due to the modeling of
-  several LLVM specific techniques, like its custom RTTI, informing the analyzer
-  of the return values of core functions, and much more (further reading on the
-  related `GSoC'19 summary page <https://docs.google.com/document/d/1o9-xEWbzivUGKIOXp9jUNZYq0mkecd5KH5dBN5Hdlu8/edit>`_) .
-
-- ObjectiveC++ changes:
-
-- Numerous smaller false positive fixes.
+- Numerous smaller fixes.
 
 .. _release-notes-ubsan:
 
