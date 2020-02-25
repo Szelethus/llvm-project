@@ -36,6 +36,7 @@ class TranslationUnitDecl;
 namespace ento {
 
 class AnalysisManager;
+class CXXAllocatorCall;
 class BugReporter;
 class CallEvent;
 class CheckerBase;
@@ -327,7 +328,7 @@ public:
                                      ExprEngine &Eng);
 
   /// Run checkers between C++ operator new and constructor calls.
-  void runCheckersForNewAllocator(const CXXNewExpr *NE, SVal Target,
+  void runCheckersForNewAllocator(const CXXAllocatorCall &Call, SVal Target,
                                   ExplodedNodeSet &Dst,
                                   ExplodedNode *Pred,
                                   ExprEngine &Eng,
@@ -472,7 +473,7 @@ public:
       CheckerFn<void (const Stmt *, CheckerContext &)>;
 
   using CheckNewAllocatorFunc =
-      CheckerFn<void (const CXXNewExpr *, SVal, CheckerContext &)>;
+      CheckerFn<void (const CXXAllocatorCall &Call, SVal, CheckerContext &)>;
 
   using CheckDeadSymbolsFunc =
       CheckerFn<void (SymbolReaper &, CheckerContext &)>;

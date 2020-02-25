@@ -331,7 +331,7 @@ void ExprEngine::processCallExit(ExplodedNode *CEBNode) {
                                                  /*wasInlined=*/true);
       for (auto I : DstPostPostCallCallback) {
         getCheckerManager().runCheckersForNewAllocator(
-            CNE,
+            cast<CXXAllocatorCall>(*UpdatedCall),
             *getObjectUnderConstruction(I->getState(), CNE,
                                         calleeCtx->getParent()),
             DstPostCall, I, *this,
