@@ -189,6 +189,12 @@ public:
     return addTransitionImpl(State ? State : getState(), true, Pred, Tag);
   }
 
+  /// Generates a sink node, and adds a new transition with it, essentially
+  /// halting the exploration on the current path.
+  ExplodedNode *addSink(const ProgramPointTag *Tag = nullptr) {
+    return addTransition(getState(),
+                         generateSink(getState(), getPredecessor()));
+  }
   /// Generate a transition to a node that will be used to report
   /// an error. This node will be a sink. That is, it will stop exploration of
   /// the given path.

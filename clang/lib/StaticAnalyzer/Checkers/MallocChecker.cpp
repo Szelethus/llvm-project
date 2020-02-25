@@ -2011,9 +2011,10 @@ void MallocChecker::ReportBadFree(CheckerContext &C, SVal ArgVal,
                                   SourceRange Range, const Expr *DeallocExpr,
                                   AllocationFamily Family) const {
 
-  if (!ChecksEnabled[CK_MallocChecker] &&
-      !ChecksEnabled[CK_NewDeleteChecker])
+  if (!ChecksEnabled[CK_MallocChecker] && !ChecksEnabled[CK_NewDeleteChecker]) {
+    C.addSink();
     return;
+  }
 
   Optional<MallocChecker::CheckKind> CheckKind = getCheckIfTracked(Family);
   if (!CheckKind.hasValue())
@@ -2062,8 +2063,10 @@ void MallocChecker::ReportFreeAlloca(CheckerContext &C, SVal ArgVal,
     CheckKind = CK_MallocChecker;
   else if (ChecksEnabled[CK_MismatchedDeallocatorChecker])
     CheckKind = CK_MismatchedDeallocatorChecker;
-  else
+  else {
+    C.addSink();
     return;
+  }
 
   if (ExplodedNode *N = C.generateErrorNode()) {
     if (!BT_FreeAlloca[*CheckKind])
@@ -2086,8 +2089,10 @@ void MallocChecker::ReportMismatchedDealloc(CheckerContext &C,
                                             SymbolRef Sym,
                                             bool OwnershipTransferred) const {
 
-  if (!ChecksEnabled[CK_MismatchedDeallocatorChecker])
+  if (!ChecksEnabled[CK_MismatchedDeallocatorChecker]) {
+    C.addSink();
     return;
+  }
 
   if (ExplodedNode *N = C.generateErrorNode()) {
     if (!BT_MismatchedDealloc)
@@ -2140,9 +2145,10 @@ void MallocChecker::ReportOffsetFree(CheckerContext &C, SVal ArgVal,
                                      AllocationFamily Family,
                                      const Expr *AllocExpr) const {
 
-  if (!ChecksEnabled[CK_MallocChecker] &&
-      !ChecksEnabled[CK_NewDeleteChecker])
+  if (!ChecksEnabled[CK_MallocChecker] && !ChecksEnabled[CK_NewDeleteChecker]) {
+    C.addSink();
     return;
+  }
 
   Optional<MallocChecker::CheckKind> CheckKind = getCheckIfTracked(Family);
   if (!CheckKind.hasValue())
@@ -2195,10 +2201,11 @@ void MallocChecker::ReportOffsetFree(CheckerContext &C, SVal ArgVal,
 void MallocChecker::ReportUseAfterFree(CheckerContext &C, SourceRange Range,
                                        SymbolRef Sym) const {
 
-  if (!ChecksEnabled[CK_MallocChecker] &&
-      !ChecksEnabled[CK_NewDeleteChecker] &&
-      !ChecksEnabled[CK_InnerPointerChecker])
+  if (!ChecksEnabled[CK_MallocChecker] && !ChecksEnabled[CK_NewDeleteChecker] &&
+      !ChecksEnabled[CK_InnerPointerChecker]) {
+    C.addSink();
     return;
+  }
 
   Optional<MallocChecker::CheckKind> CheckKind = getCheckIfTracked(C, Sym);
   if (!CheckKind.hasValue())
@@ -2234,9 +2241,10 @@ void MallocChecker::ReportDoubleFree(CheckerContext &C, SourceRange Range,
                                      bool Released, SymbolRef Sym,
                                      SymbolRef PrevSym) const {
 
-  if (!ChecksEnabled[CK_MallocChecker] &&
-      !ChecksEnabled[CK_NewDeleteChecker])
+  if (!ChecksEnabled[CK_MallocChecker] && !ChecksEnabled[CK_NewDeleteChecker]) {
+    C.addSink();
     return;
+  }
 
   Optional<MallocChecker::CheckKind> CheckKind = getCheckIfTracked(C, Sym);
   if (!CheckKind.hasValue())
@@ -2263,8 +2271,10 @@ void MallocChecker::ReportDoubleFree(CheckerContext &C, SourceRange Range,
 
 void MallocChecker::ReportDoubleDelete(CheckerContext &C, SymbolRef Sym) const {
 
-  if (!ChecksEnabled[CK_NewDeleteChecker])
+  if (!ChecksEnabled[CK_NewDeleteChecker]) {
+    C.addSink();
     return;
+  }
 
   Optional<MallocChecker::CheckKind> CheckKind = getCheckIfTracked(C, Sym);
   if (!CheckKind.hasValue())
@@ -2289,9 +2299,10 @@ void MallocChecker::ReportUseZeroAllocated(CheckerContext &C,
                                            SourceRange Range,
                                            SymbolRef Sym) const {
 
-  if (!ChecksEnabled[CK_MallocChecker] &&
-      !ChecksEnabled[CK_NewDeleteChecker])
+  if (!ChecksEnabled[CK_MallocChecker] && !ChecksEnabled[CK_NewDeleteChecker]) {
+    C.addSink();
     return;
+  }
 
   Optional<MallocChecker::CheckKind> CheckKind = getCheckIfTracked(C, Sym);
 
@@ -2320,8 +2331,10 @@ void MallocChecker::ReportFunctionPointerFree(CheckerContext &C, SVal ArgVal,
                                               SourceRange Range,
                                               const Expr *FreeExpr,
                                               AllocationFamily Family) const {
-  if (!ChecksEnabled[CK_MallocChecker])
+  if (!ChecksEnabled[CK_MallocChecker]) {
+    C.addSink();
     return;
+  }
 
   Optional<MallocChecker::CheckKind> CheckKind = getCheckIfTracked(Family);
   if (!CheckKind.hasValue())
