@@ -204,6 +204,11 @@ public:
   }
 
   /// The state in which the call is being evaluated.
+  SValBuilder &getSValBuilder() const {
+    return State->getStateManager().getSValBuilder();
+  }
+
+  /// The state in which the call is being evaluated.
   const ProgramStateRef &getState() const {
     return State;
   }

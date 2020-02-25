@@ -1236,8 +1236,8 @@ void MallocChecker::checkPostCall(const CallEvent &Call,
 
 // Performs a 0-sized allocations check.
 ProgramStateRef MallocChecker::ProcessZeroAllocCheck(
-    const CallEvent &Call, const unsigned IndexOfSizeArg,
-    ProgramStateRef State, Optional<SVal> RetVal) {
+    const CallEvent &Call, const unsigned IndexOfSizeArg, ProgramStateRef State,
+    Optional<SVal> RetVal) {
   if (!State)
     return nullptr;
 
@@ -1245,30 +1245,29 @@ ProgramStateRef MallocChecker::ProcessZeroAllocCheck(
     RetVal = Call.getReturnValue();
 
   const Expr *Arg = nullptr;
-  const Expr *E = Call.getOriginExpr();
 
-  if (const CallExpr *CE = dyn_cast<CallExpr>(E)) {
+  if (const CallExpr *CE = dyn_cast<CallExpr>(Call.getOriginExpr())) {
     Arg = CE->getArg(IndexOfSizeArg);
-  }
-  else if (const CXXNewExpr *NE = dyn_cast<CXXNewExpr>(E)) {
+  } else if (const CXXNewExpr *NE =
+                 dyn_cast<CXXNewExpr>(Call.getOriginExpr())) {
     if (NE->isArray())
       Arg = *NE->getArraySize();
     else
       return State;
-  }
-  else
+  } else
     llvm_unreachable("not a CallExpr or CXXNewExpr");
 
   assert(Arg);
 
-  Optional<DefinedSVal> DefArgVal = C.getSVal(Arg).getAs<DefinedSVal>();
+  Optional<DefinedSVal> DefArgVal =
+      Call.getArgSVal(IndexOfSizeArg).getAs<DefinedSVal>();
 
   if (!DefArgVal)
     return State;
 
   // Check if the allocation size is 0.
   ProgramStateRef TrueState, FalseState;
-  SValBuilder &SvalBuilder = C.getSValBuilder();
+  SValBuilder &SvalBuilder = Call.getSValBuilder();
   DefinedSVal Zero =
       SvalBuilder.makeZeroVal(Arg->getType()).castAs<DefinedSVal>();
 
@@ -1359,7 +1358,7 @@ ProgramStateRef MallocChecker::processNewAllocation(const CXXAllocatorCall &Call
   SVal Target = Call.getObjectUnderConstruction(State);
   State = MallocUpdateRefState(C, NE, State, Family, Target);
   State = addExtentSize(C, NE, State, Target);
-  State = ProcessZeroAllocCheck(C, NE, 0, State, Target);
+  State = ProcessZeroAllocCheck(Call, 0, State, Target);
   return State;
 }
 
