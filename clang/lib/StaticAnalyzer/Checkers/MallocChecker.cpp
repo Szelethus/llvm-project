@@ -48,6 +48,7 @@
 #include "InterCheckerAPI.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/ParentMap.h"
+#include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/Lexer.h"
@@ -265,9 +266,11 @@ REGISTER_MAP_WITH_PROGRAMSTATE(ReallocPairs, SymbolRef, ReallocPair)
 /// placement operators and other standard overloads.
 static bool isStandardNewDelete(const FunctionDecl *FD);
 static bool isStandardNewDelete(const CallEvent &Call) {
-  if (!Call.getDecl())
-    return false;
-  return isStandardNewDelete(cast<FunctionDecl>(Call.getDecl()));
+  if (isa<CXXAllocatorCall>(Call) || isa<CXXDeleteExpr>(Call.getOriginExpr()))
+    return true;
+  if (const auto *FD = dyn_cast_or_null<FunctionDecl>(Call.getDecl()))
+    return isStandardNewDelete(FD);
+  return false;
 }
 
 //===----------------------------------------------------------------------===//
@@ -418,7 +421,7 @@ private:
 
   /// Process C++ operator new()'s allocation, which is the part of C++
   /// new-expression that goes before the constructor.
-  void processNewAllocation(const CXXNewExpr *NE, CheckerContext &C,
+  State processNewAllocation(const CXXNewExpr *NE, CheckerContext &C,
                             SVal Target, AllocationFamily Family) const;
 
   /// Perform a zero-allocation check.
@@ -1085,6 +1088,8 @@ void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call, CheckerContext
     return;
   bool IsKnownToBeAllocatedMemory = false;
 
+  const CXXAllocatorCall &AC = dyn_cast<CXXAllocatorCall>(Call);
+
   const FunctionDecl *FD = C.getCalleeDecl(CE);
   // Process direct calls to operator new/new[]/delete/delete[] functions
   // as distinct from new/new[]/delete/delete[] expressions that are
@@ -1092,6 +1097,7 @@ void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call, CheckerContext
   // CXXDeleteExpr.
   switch (FD->getOverloadedOperator()) {
   case OO_New:
+    State = processNewAllocation(C, AC.getObjectUnderConstruction(C.getState())
     State =
         MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_CXXNew);
     State = ProcessZeroAllocCheck(C, CE, 0, State);
@@ -1207,13 +1213,7 @@ void MallocChecker::checkPostCall(const CallEvent &Call,
                                   CheckerContext &C) const {
   if (C.wasInlined)
     return;
-
-  const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
-  if (!CE)
-    return;
-
-  const FunctionDecl *FD = C.getCalleeDecl(CE);
-  if (!FD)
+  if (!Call.getOriginExpr())
     return;
 
   ProgramStateRef State = C.getState();
@@ -1334,8 +1334,8 @@ static bool hasNonTrivialConstructorCall(const CXXNewExpr *NE) {
   return false;
 }
 
-void MallocChecker::processNewAllocation(const CXXNewExpr *NE,
-                                         CheckerContext &C, SVal Target,
+ProgramStateRef MallocChecker::processNewAllocation(const CXXAllocatorCall &Call,
+                                      CheckerContext &C,
                                          AllocationFamily Family) const {
   if (!isStandardNewDelete(NE->getOperatorNew()))
     return;
@@ -1357,26 +1357,26 @@ void MallocChecker::processNewAllocation(const CXXNewExpr *NE,
   State = MallocUpdateRefState(C, NE, State, Family, Target);
   State = addExtentSize(C, NE, State, Target);
   State = ProcessZeroAllocCheck(C, NE, 0, State, Target);
-  C.addTransition(State);
+  return State;
 }
 
 void MallocChecker::checkPostStmt(const CXXNewExpr *NE,
                                   CheckerContext &C) const {
-  if (!C.getAnalysisManager().getAnalyzerOptions().MayInlineCXXAllocator) {
-    if (NE->isArray())
-      processNewAllocation(NE, C, C.getSVal(NE),
-                           (NE->isArray() ? AF_CXXNewArray : AF_CXXNew));
-  }
+  //if (!C.getAnalysisManager().getAnalyzerOptions().MayInlineCXXAllocator) {
+  //  if (NE->isArray())
+  //    processNewAllocation(NE, C, C.getSVal(NE),
+  //                         (NE->isArray() ? AF_CXXNewArray : AF_CXXNew));
+  //}
 }
 
 void MallocChecker::checkNewAllocator(const CXXAllocatorCall &Call,
                                       CheckerContext &C) const {
-  if (!C.wasInlined) {
-    assert(Call.getOriginExpr());
-    processNewAllocation(
-        Call.getOriginExpr(), C, Call.getObjectUnderConstruction(C.getState()),
-        (Call.getOriginExpr()->isArray() ? AF_CXXNewArray : AF_CXXNew));
-  }
+  //if (!C.wasInlined) {
+  //  assert(Call.getOriginExpr());
+  //  processNewAllocation(
+  //      Call.getOriginExpr(), C, Call.getObjectUnderConstruction(C.getState()),
+  //      (Call.getOriginExpr()->isArray() ? AF_CXXNewArray : AF_CXXNew));
+  //}
 }
 
 // Sets the extent value of the MemRegion allocated by
