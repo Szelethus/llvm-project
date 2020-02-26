@@ -243,7 +243,7 @@ void CheckerManager::runCheckersForObjCMessage(ObjCMessageVisitKind visitKind,
                                                const ObjCMethodCall &msg,
                                                ExprEngine &Eng,
                                                bool WasInlined) {
-  auto &checkers = getObjCMessageCheckers(visitKind);
+  const auto &checkers = getObjCMessageCheckers(visitKind);
   CheckObjCMessageContext C(visitKind, checkers, msg, Eng, WasInlined);
   expandGraphWithCheckers(C, Dst, Src);
 }
@@ -508,13 +508,11 @@ namespace {
 
     const CheckersTy &Checkers;
     const CXXAllocatorCall &Call;
-    SVal Target;
     bool WasInlined;
     ExprEngine &Eng;
 
-    CheckNewAllocatorContext(const CheckersTy &Checkers, const CXXAllocatorCall &Call,
-                             SVal Target, bool WasInlined, ExprEngine &Eng)
-        : Checkers(Checkers), Call(Call), Target(Target), WasInlined(WasInlined),
+    CheckNewAllocatorContext(const CheckersTy &Checkers, const CXXAllocatorCall &Call, bool WasInlined, ExprEngine &Eng)
+        : Checkers(Checkers), Call(Call), WasInlined(WasInlined),
           Eng(Eng) {}
 
     CheckersTy::const_iterator checkers_begin() { return Checkers.begin(); }
@@ -524,18 +522,18 @@ namespace {
                     NodeBuilder &Bldr, ExplodedNode *Pred) {
       ProgramPoint L = PostAllocatorCall(Call.getOriginExpr(), Pred->getLocationContext());
       CheckerContext C(Bldr, Eng, Pred, L, WasInlined);
-      checkFn(Call, Target, C);
+      checkFn(Call, C);
     }
   };
 
 } // namespace
 
 void CheckerManager::runCheckersForNewAllocator(
-    const CXXAllocatorCall &Call, SVal Target, ExplodedNodeSet &Dst, ExplodedNode *Pred,
+    const CXXAllocatorCall &Call, ExplodedNodeSet &Dst, ExplodedNode *Pred,
     ExprEngine &Eng, bool WasInlined) {
   ExplodedNodeSet Src;
   Src.insert(Pred);
-  CheckNewAllocatorContext C(NewAllocatorCheckers, Call, Target, WasInlined, Eng);
+  CheckNewAllocatorContext C(NewAllocatorCheckers, Call, WasInlined, Eng);
   expandGraphWithCheckers(C, Dst, Src);
 }
 
@@ -651,7 +649,7 @@ void CheckerManager::runCheckersForEvalCall(ExplodedNodeSet &Dst,
                                             const ExplodedNodeSet &Src,
                                             const CallEvent &Call,
                                             ExprEngine &Eng) {
-  for (const auto Pred : Src) {
+  for (auto *const Pred : Src) {
     bool anyEvaluated = false;
 
     ExplodedNodeSet checkDst;

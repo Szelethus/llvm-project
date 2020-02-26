@@ -728,9 +728,11 @@ void ExprEngine::VisitCXXNewAllocatorCall(const CXXNewExpr *CNE,
   getCheckerManager().runCheckersForPostCall(DstPostPostCallCallback,
                                              DstPostValue, *Call, *this);
   for (ExplodedNode *I : DstPostPostCallCallback) {
-    assert(CNE == Call->getOriginExpr());
+    //assert(CNE == Call->getOriginExpr());
+    //assert(I->getState() == Call->getState());
+    //assert(LCtx == Call->getLocationContext());
     getCheckerManager().runCheckersForNewAllocator(
-        *Call, *getObjectUnderConstruction(I->getState(), CNE, LCtx), Dst, I,
+        *Call, Dst, I,
         *this);
   }
 }

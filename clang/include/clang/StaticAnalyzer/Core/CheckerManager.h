@@ -328,7 +328,7 @@ public:
                                      ExprEngine &Eng);
 
   /// Run checkers between C++ operator new and constructor calls.
-  void runCheckersForNewAllocator(const CXXAllocatorCall &Call, SVal Target,
+  void runCheckersForNewAllocator(const CXXAllocatorCall &Call,
                                   ExplodedNodeSet &Dst,
                                   ExplodedNode *Pred,
                                   ExprEngine &Eng,
@@ -473,7 +473,7 @@ public:
       CheckerFn<void (const Stmt *, CheckerContext &)>;
 
   using CheckNewAllocatorFunc =
-      CheckerFn<void (const CXXAllocatorCall &Call, SVal, CheckerContext &)>;
+      CheckerFn<void (const CXXAllocatorCall &Call, CheckerContext &)>;
 
   using CheckDeadSymbolsFunc =
       CheckerFn<void (SymbolReaper &, CheckerContext &)>;

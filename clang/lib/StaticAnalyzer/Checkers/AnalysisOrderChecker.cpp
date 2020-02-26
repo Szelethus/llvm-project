@@ -140,8 +140,7 @@ public:
     }
   }
 
-  void checkNewAllocator(const CXXNewExpr *CNE, SVal Target,
-                         CheckerContext &C) const {
+  void checkNewAllocator(const CXXAllocatorCall &Call, CheckerContext &C) const {
     if (isCallbackEnabled(C, "NewAllocator"))
       llvm::errs() << "NewAllocator\n";
   }

@@ -744,7 +744,7 @@ void ExprEngine::removeDead(ExplodedNode *Pred, ExplodedNodeSet &Out,
   // environment, the store, and the constraints cleaned up but have the
   // user-supplied states as the predecessors.
   StmtNodeBuilder Bldr(CheckedSet, Out, *currBldrCtx);
-  for (const auto I : CheckedSet) {
+  for (auto *const I : CheckedSet) {
     ProgramStateRef CheckerState = I->getState();
 
     // The constraint manager has not been cleaned up yet, so clean up now.
@@ -785,7 +785,7 @@ void ExprEngine::ProcessStmt(const Stmt *currStmt, ExplodedNode *Pred) {
 
   // Visit the statement.
   ExplodedNodeSet Dst;
-  for (const auto I : CleanedStates) {
+  for (auto *const I : CleanedStates) {
     ExplodedNodeSet DstI;
     // Visit the statement.
     Visit(currStmt, I, DstI);
@@ -893,7 +893,7 @@ void ExprEngine::ProcessInitializer(const CFGInitializer CFGInit,
   PostInitializer PP(BMI, FieldLoc.getAsRegion(), stackFrame);
   ExplodedNodeSet Dst;
   NodeBuilder Bldr(Tmp, Dst, *currBldrCtx);
-  for (const auto I : Tmp) {
+  for (auto *const I : Tmp) {
     ProgramStateRef State = I->getState();
     Bldr.generateNode(PP, State, I);
   }
@@ -1448,7 +1448,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
         ConstantVal = UnknownVal();
 
       const LocationContext *LCtx = Pred->getLocationContext();
-      for (const auto I : PreVisit) {
+      for (auto *const I : PreVisit) {
         ProgramStateRef State = I->getState();
         State = State->BindExpr(S, LCtx, *ConstantVal);
         if (IsTemporary)
@@ -1479,7 +1479,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
       const auto *Ex = cast<Expr>(S);
       QualType resultType = Ex->getType();
 
-      for (const auto N : preVisit) {
+      for (auto *const N : preVisit) {
         const LocationContext *LCtx = N->getLocationContext();
         SVal result = svalBuilder.conjureSymbolVal(nullptr, Ex, LCtx,
                                                    resultType,
@@ -1491,7 +1491,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
         if (!(isa<ObjCBoxedExpr>(Ex) &&
               !cast<ObjCBoxedExpr>(Ex)->getSubExpr()
                                       ->getType()->isRecordType()))
-          for (auto Child : Ex->children()) {
+          for (const Stmt *Child : Ex->children()) {
             assert(Child);
             SVal Val = State->getSVal(Child, LCtx);
             State = escapeValues(State, Val, PSK_EscapeOther);
@@ -1625,7 +1625,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
       getCheckerManager().runCheckersForPreStmt(PreVisit, Pred, S, *this);
 
       ExplodedNodeSet PostVisit;
-      for (const auto i : PreVisit)
+      for (auto *const i : PreVisit)
         VisitCXXNewExpr(cast<CXXNewExpr>(S), i, PostVisit);
 
       getCheckerManager().runCheckersForPostStmt(Dst, PostVisit, S, *this);
@@ -1639,7 +1639,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
       const auto *CDE = cast<CXXDeleteExpr>(S);
       getCheckerManager().runCheckersForPreStmt(PreVisit, Pred, S, *this);
 
-      for (const auto i : PreVisit)
+      for (auto *const i : PreVisit)
         VisitCXXDeleteExpr(CDE, i, Dst);
 
       Bldr.addNodes(Dst);
@@ -1723,7 +1723,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
       ExplodedNodeSet dstPrevisit;
       getCheckerManager().runCheckersForPreStmt(dstPrevisit, Pred, MTE, *this);
       ExplodedNodeSet dstExpr;
-      for (const auto i : dstPrevisit)
+      for (auto *const i : dstPrevisit)
         CreateCXXTemporaryObject(MTE, i, dstExpr);
       getCheckerManager().runCheckersForPostStmt(Dst, dstExpr, MTE, *this);
       Bldr.addNodes(Dst);
@@ -1785,7 +1785,7 @@ void ExprEngine::Visit(const Stmt *S, ExplodedNode *Pred,
       getCheckerManager().runCheckersForPreStmt(PreVisit, Pred, S, *this);
 
       ExplodedNodeSet PostVisit;
-      for (const auto Node : PreVisit)
+      for (auto *const Node : PreVisit)
         VisitOffsetOfExpr(cast<OffsetOfExpr>(S), Node, PostVisit);
 
       getCheckerManager().runCheckersForPostStmt(Dst, PostVisit, S, *this);
@@ -2133,7 +2133,7 @@ void ExprEngine::processBranch(const Stmt *Condition,
     return;
 
   BranchNodeBuilder builder(CheckersOutSet, Dst, BldCtx, DstT, DstF);
-  for (const auto PredI : CheckersOutSet) {
+  for (auto *const PredI : CheckersOutSet) {
     if (PredI->isSink())
       continue;
 
@@ -2335,7 +2335,7 @@ void ExprEngine::processEndOfFunction(NodeBuilderContext& BC,
     removeDeadOnEndOfFunction(BC, Pred, AfterRemovedDead);
 
     // Notify checkers.
-    for (const auto I : AfterRemovedDead)
+    for (auto *const I : AfterRemovedDead)
       getCheckerManager().runCheckersForEndFunction(BC, Dst, I, *this, RS);
   } else {
     getCheckerManager().runCheckersForEndFunction(BC, Dst, Pred, *this, RS);
@@ -2583,13 +2583,13 @@ void ExprEngine::VisitMemberExpr(const MemberExpr *M, ExplodedNode *Pred,
   // Handle static member variables and enum constants accessed via
   // member syntax.
   if (isa<VarDecl>(Member) || isa<EnumConstantDecl>(Member)) {
-    for (const auto I : CheckedSet)
+    for (auto *const I : CheckedSet)
       VisitCommonDeclRefExpr(M, Member, I, EvalSet);
   } else {
     StmtNodeBuilder Bldr(CheckedSet, EvalSet, *currBldrCtx);
     ExplodedNodeSet Tmp;
 
-    for (const auto I : CheckedSet) {
+    for (auto *const I : CheckedSet) {
       ProgramStateRef state = I->getState();
       const LocationContext *LCtx = I->getLocationContext();
       Expr *BaseExpr = M->getBase();
@@ -2662,7 +2662,7 @@ void ExprEngine::VisitAtomicExpr(const AtomicExpr *AE, ExplodedNode *Pred,
   ExplodedNodeSet AfterInvalidateSet;
   StmtNodeBuilder Bldr(AfterPreSet, AfterInvalidateSet, *currBldrCtx);
 
-  for (const auto I : AfterPreSet) {
+  for (auto *const I : AfterPreSet) {
     ProgramStateRef State = I->getState();
     const LocationContext *LCtx = I->getLocationContext();
 
@@ -2762,7 +2762,7 @@ ExprEngine::notifyCheckersOfPointerEscape(ProgramStateRef State,
   // If the symbols were invalidated by a call, we want to find out which ones
   // were invalidated directly due to being arguments to the call.
   InvalidatedSymbols SymbolsDirectlyInvalidated;
-  for (const auto I : ExplicitRegions) {
+  for (const auto *const I : ExplicitRegions) {
     if (const SymbolicRegion *R = I->StripCasts()->getAs<SymbolicRegion>())
       SymbolsDirectlyInvalidated.insert(R->getSymbol());
   }
@@ -2815,7 +2815,7 @@ void ExprEngine::evalBind(ExplodedNodeSet &Dst, const Stmt *StoreE,
     return;
   }
 
-  for (const auto PredI : CheckedSet) {
+  for (auto *const PredI : CheckedSet) {
     ProgramStateRef state = PredI->getState();
 
     state = processPointerEscapedOnBind(state, location, Val, LC);
@@ -2864,7 +2864,7 @@ void ExprEngine::evalStore(ExplodedNodeSet &Dst, const Expr *AssignE,
   if (location.isUndef())
     return;
 
-  for (const auto I : Tmp)
+  for (auto *const I : Tmp)
     evalBind(Dst, StoreE, I, location, Val, false);
 }
 
@@ -2890,7 +2890,7 @@ void ExprEngine::evalLoad(ExplodedNodeSet &Dst,
     return;
 
   // Proceed with the load.
-  for (const auto I : Tmp) {
+  for (auto *const I : Tmp) {
     state = I->getState();
     const LocationContext *LCtx = I->getLocationContext();
 
@@ -2957,7 +2957,7 @@ void ExprEngine::evalEagerlyAssumeBinOpBifurcation(ExplodedNodeSet &Dst,
                                                    const Expr *Ex) {
   StmtNodeBuilder Bldr(Src, Dst, *currBldrCtx);
 
-  for (const auto Pred : Src) {
+  for (auto *const Pred : Src) {
     // Test if the previous node was as the same expression.  This can happen
     // when the expression fails to evaluate to anything meaningful and
     // (as an optimization) we don't generate a node.
