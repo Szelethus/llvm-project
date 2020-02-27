@@ -47,6 +47,7 @@
 #include "AllocationState.h"
 #include "InterCheckerAPI.h"
 #include "clang/AST/Attr.h"
+#include "clang/AST/ExprCXX.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceManager.h"
@@ -421,8 +422,9 @@ private:
 
   /// Process C++ operator new()'s allocation, which is the part of C++
   /// new-expression that goes before the constructor.
-  State processNewAllocation(const CXXNewExpr *NE, CheckerContext &C,
-                            SVal Target, AllocationFamily Family) const;
+  ProgramStateRef processNewAllocation(const CXXAllocatorCall &Call,
+                                      CheckerContext &C, ProgramStateRef State,
+                                         AllocationFamily Family) const;
 
   /// Perform a zero-allocation check.
   ///
@@ -1084,11 +1086,10 @@ void MallocChecker::checkIfFreeNameIndex(const CallEvent &Call, CheckerContext &
 void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call, CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
-  if (!CE)
-    return;
   bool IsKnownToBeAllocatedMemory = false;
 
-  const CXXAllocatorCall &AC = dyn_cast<CXXAllocatorCall>(Call);
+  const CXXAllocatorCall *AC = dyn_cast<CXXAllocatorCall>(&Call);
+  assert(isStandardNewDelete(Call));
 
   const FunctionDecl *FD = C.getCalleeDecl(CE);
   // Process direct calls to operator new/new[]/delete/delete[] functions
@@ -1097,12 +1098,15 @@ void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call, CheckerContext
   // CXXDeleteExpr.
   switch (FD->getOverloadedOperator()) {
   case OO_New:
-    State = processNewAllocation(C, AC.getObjectUnderConstruction(C.getState())
+    assert(!AC);
+    //State = processNewAllocation(*AC, C, State, AF_CXXNew);
     State =
         MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State, AF_CXXNew);
     State = ProcessZeroAllocCheck(C, CE, 0, State);
     break;
   case OO_Array_New:
+    assert(!AC);
+    //State = processNewAllocation(*AC, C, State, AF_CXXNewArray);
     State = MallocMemAux(C, CE, CE->getArg(0), UndefinedVal(), State,
                          AF_CXXNewArray);
     State = ProcessZeroAllocCheck(C, CE, 0, State);
@@ -1335,11 +1339,9 @@ static bool hasNonTrivialConstructorCall(const CXXNewExpr *NE) {
 }
 
 ProgramStateRef MallocChecker::processNewAllocation(const CXXAllocatorCall &Call,
-                                      CheckerContext &C,
+                                      CheckerContext &C, ProgramStateRef State,
                                          AllocationFamily Family) const {
-  if (!isStandardNewDelete(NE->getOperatorNew()))
-    return;
-
+  const CXXNewExpr *NE = Call.getOriginExpr();
   const ParentMap &PM = C.getLocationContext()->getParentMap();
 
   // Non-trivial constructors have a chance to escape 'this', but marking all
@@ -1347,13 +1349,13 @@ ProgramStateRef MallocChecker::processNewAllocation(const CXXAllocatorCall &Call
   // reduction of true positives, so let's just do that for constructors that
   // have an argument of a pointer-to-record type.
   if (!PM.isConsumedExpr(NE) && hasNonTrivialConstructorCall(NE))
-    return;
+    return State;
 
-  ProgramStateRef State = C.getState();
   // The return value from operator new is bound to a specified initialization
   // value (if any) and we don't want to loose this value. So we call
   // MallocUpdateRefState() instead of MallocMemAux() which breaks the
   // existing binding.
+  SVal Target = Call.getObjectUnderConstruction(State);
   State = MallocUpdateRefState(C, NE, State, Family, Target);
   State = addExtentSize(C, NE, State, Target);
   State = ProcessZeroAllocCheck(C, NE, 0, State, Target);
