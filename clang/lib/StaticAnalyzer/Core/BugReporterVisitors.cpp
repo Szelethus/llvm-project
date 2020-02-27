@@ -1596,6 +1596,67 @@ PathDiagnosticPieceRef TrackConstraintBRVisitor::VisitNode(
 }
 
 //===----------------------------------------------------------------------===//
+// Implementation of SuppressInvalidationVisitor.
+//===----------------------------------------------------------------------===//
+
+SuppressInvalidationVisitor::
+SuppressInvalidationVisitor(const MemRegion *R, const ExplodedNode *N)
+    : R(R) {
+  // Check if the visitor is disabled.
+  //AnalyzerOptions &Options = N->getState()->getAnalysisManager().options;
+  //if (!Options.ShouldSuppressInlinedDefensiveChecks)
+  //  IsSatisfied = true;
+}
+
+void SuppressInvalidationVisitor::Profile(
+    llvm::FoldingSetNodeID &ID) const {
+  static int id = 0;
+  ID.AddPointer(&id);
+  ID.Add(R);
+}
+
+const char *SuppressInvalidationVisitor::getTag() {
+  return "InvalidSuppVisitor";
+}
+
+PathDiagnosticPieceRef
+SuppressInvalidationVisitor::VisitNode(const ExplodedNode *Succ,
+                                                BugReporterContext &BRC,
+                                                PathSensitiveBugReport &BR) {
+  const ExplodedNode *Pred = Succ->getFirstPred();
+  if (IsSatisfied)
+    return nullptr;
+
+  // Start tracking after we see the first state in which the value is null.
+  if (!IsTrackingTurnedOn)
+    if (Succ->getState()->getSVal(R).isUnknown())
+      IsTrackingTurnedOn = true;
+Succ->getState()->getSVal(R).dump();
+llvm::errs() << '\n';
+  assert(!IsTrackingTurnedOn);
+  if (!IsTrackingTurnedOn)
+    return nullptr;
+  llvm_unreachable("yo2");
+
+  // Check if in the previous state it was feasible for this value
+  // to *not* be null.
+  if (!Pred->getState()->getSVal(R).isUnknown() &&
+      Succ->getState()->getSVal(R).isUnknown()) {
+    IsSatisfied = true;
+
+    // Check if this is inlined defensive checks.
+    const LocationContext *CurLC = Succ->getLocationContext();
+    const LocationContext *ReportLC = BR.getErrorNode()->getLocationContext();
+    //if (CurLC != ReportLC && !CurLC->isParentOf(ReportLC)) {
+      BR.markInvalid("Suppress IDC", CurLC);
+      return nullptr;
+    //}
+  }
+  return nullptr;
+}
+
+
+//===----------------------------------------------------------------------===//
 // Implementation of SuppressInlineDefensiveChecksVisitor.
 //===----------------------------------------------------------------------===//
 
@@ -1988,6 +2049,9 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
 
     if (R) {
 
+        report.addVisitor(
+            std::make_unique<SuppressInvalidationVisitor>(R, InputNode));
+
       // Mark both the variable region and its contents as interesting.
       SVal V = LVState->getRawSVal(loc::MemRegionVal(R));
       report.addVisitor(
@@ -2006,7 +2070,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
               V.castAs<DefinedSVal>(), false));
 
       // Add visitor, which will suppress inline defensive checks.
-      if (auto DV = V.getAs<DefinedSVal>())
+      if (auto DV = V.getAs<DefinedSVal>()) {
         if (!DV->isZeroConstant() && EnableNullFPSuppression) {
           // Note that LVNode may be too late (i.e., too far from the InputNode)
           // because the lvalue may have been computed before the inlined call
@@ -2017,6 +2081,7 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
               std::make_unique<SuppressInlineDefensiveChecksVisitor>(
                   *DV, InputNode));
         }
+      }
 
       if (auto KV = V.getAs<KnownSVal>())
         report.addVisitor(std::make_unique<FindLastStoreBRVisitor>(

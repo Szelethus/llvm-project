@@ -367,6 +367,35 @@ public:
                                    PathSensitiveBugReport &BR) override;
 };
 
+class SuppressInvalidationVisitor final : public BugReporterVisitor {
+  /// The symbolic value for which we are tracking constraints.
+  /// This value is constrained to null in the end of path.
+  const MemRegion *R;
+
+  /// Track if we found the node where the constraint was first added.
+  bool IsSatisfied = false;
+
+  /// Since the visitors can be registered on nodes previous to the last
+  /// node in the BugReport, but the path traversal always starts with the last
+  /// node, the visitor invariant (that we start with a node in which V is null)
+  /// might not hold when node visitation starts. We are going to start tracking
+  /// from the last node in which the value is UnknownVal.
+  bool IsTrackingTurnedOn = false;
+
+public:
+  SuppressInvalidationVisitor(const MemRegion *R, const ExplodedNode *N);
+
+  void Profile(llvm::FoldingSetNodeID &ID) const override;
+
+  /// Return the tag associated with this visitor.  This tag will be used
+  /// to make all PathDiagnosticPieces created by this visitor.
+  static const char *getTag();
+
+  PathDiagnosticPieceRef VisitNode(const ExplodedNode *Succ,
+                                   BugReporterContext &BRC,
+                                   PathSensitiveBugReport &BR) override;
+};
+
 /// The bug visitor will walk all the nodes in a path and collect all the
 /// constraints. When it reaches the root node, will create a refutation
 /// manager and check if the constraints are satisfiable
