@@ -1078,7 +1078,9 @@ void MallocChecker::checkIfFreeNameIndex(const CallEvent &Call, CheckerContext &
 void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call, CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   bool IsKnownToBeAllocatedMemory = false;
-  const auto *CE = Call.getOriginExpr();
+  const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
+  if (!CE)
+    return;
 
   assert(isStandardNewDelete(Call));
 
@@ -1093,13 +1095,14 @@ void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call, CheckerContext
     AC->dump();
     llvm::errs() << AC->getNumArgs() << ' ' << AC->getNumImplicitArgs() << '\n';
     CE->dump();
+    //C.getSValBuilder().makeIntVal(AC->getOriginExpr()->
     if (AC->getOriginExpr()->isArray()) {
-      // State = processNewAllocation(*AC, C, State, AF_CXXNewArray);
-      State = MallocMemAux(C, Call, AC->getOriginExpr()->getPlacementArg(0), UndefinedVal(), State,
+      State = processNewAllocation(*AC, C, State, AF_CXXNewArray);
+      State = MallocMemAux(C, Call, AC->getArgExpr(0), UndefinedVal(), State,
                            AF_CXXNewArray);
     } else {
-      // State = processNewAllocation(*AC, C, State, AF_CXXNew);
-      State = MallocMemAux(C, Call, AC->getOriginExpr()->getPlacementArg(0), UndefinedVal(), State,
+      State = processNewAllocation(*AC, C, State, AF_CXXNew);
+      State = MallocMemAux(C, Call, AC->getArgExpr(0), UndefinedVal(), State,
                            AF_CXXNew);
     }
     State = ProcessZeroAllocCheck(Call, 0, State);
