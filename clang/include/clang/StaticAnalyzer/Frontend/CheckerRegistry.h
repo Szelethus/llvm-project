@@ -10,7 +10,7 @@
 #define LLVM_CLANG_STATICANALYZER_CORE_CHECKERREGISTRY_H
 
 #include "clang/Basic/LLVM.h"
-#include "clang/StaticAnalyzer/Core/CheckerManager.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include <cstddef>
@@ -73,6 +73,8 @@ class LangOptions;
 
 namespace ento {
 
+class CheckerManager;
+
 /// Manages a set of available checkers for running a static analysis.
 /// The checkers are organized into packages by full name, where including
 /// a package will recursively include all subpackages and checkers within it.
@@ -82,9 +84,14 @@ namespace ento {
 class CheckerRegistry {
 public:
   CheckerRegistry(ArrayRef<std::string> plugins, DiagnosticsEngine &diags,
-                  AnalyzerOptions &AnOpts, const LangOptions &LangOpts,
+                  AnalyzerOptions &AnOpts,
                   ArrayRef<std::function<void(CheckerRegistry &)>>
                       checkerRegistrationFns = {});
+
+  /// Collects all enabled checkers in the field EnabledCheckers. It preserves
+  /// the order of insertion, as dependencies have to be enabled before the
+  /// checkers that depend on them.
+  void initializeRegistry(const CheckerManager &Mgr);
 
   /// Initialization functions perform any necessary setup for a checker.
   /// They should include a call to CheckerManager::registerChecker.
@@ -205,11 +212,11 @@ public:
   using PackageInfoList = llvm::SmallVector<PackageInfo, 0>;
 
 private:
-  template <typename T> static void initializeManager(CheckerManager &mgr) {
-    mgr.registerChecker<T>();
+  template <typename MGR, typename T> static void initializeManager(MGR &mgr) {
+    mgr.template registerChecker<T>();
   }
 
-  template <typename T> static bool returnTrue(const LangOptions &LO) {
+  template <typename T> static bool returnTrue(const LangOptions &) {
     return true;
   }
 
@@ -227,9 +234,8 @@ public:
                   bool IsHidden = false) {
     // Avoid MSVC's Compiler Error C2276:
     // http://msdn.microsoft.com/en-us/library/850cstw1(v=VS.80).aspx
-    addChecker(&CheckerRegistry::initializeManager<T>,
-               &CheckerRegistry::returnTrue<T>, FullName, Desc, DocsUri,
-               IsHidden);
+    addChecker(&initializeManager<CheckerManager, T>, &returnTrue<T>, FullName,
+               Desc, DocsUri, IsHidden);
   }
 
   /// Makes the checker with the full name \p fullName depends on the checker
@@ -265,7 +271,7 @@ public:
   void addPackageOption(StringRef OptionType, StringRef PackageFullName,
                         StringRef OptionName, StringRef DefaultValStr,
                         StringRef Description, StringRef DevelopmentStatus,
-                         bool IsHidden = false);
+                        bool IsHidden = false);
 
   // FIXME: This *really* should be added to the frontend flag descriptions.
   /// Initializes a CheckerManager by calling the initialization functions for
@@ -285,11 +291,6 @@ public:
   void printCheckerOptionList(raw_ostream &Out) const;
 
 private:
-  /// Collect all enabled checkers. The returned container preserves the order
-  /// of insertion, as dependencies have to be enabled before the checkers that
-  /// depend on them.
-  CheckerInfoSet getEnabledCheckers() const;
-
   /// Return an iterator range of mutable CheckerInfos \p CmdLineArg applies to.
   /// For example, it'll return the checkers for the core package, if
   /// \p CmdLineArg is "core".
@@ -316,7 +317,7 @@ private:
 
   DiagnosticsEngine &Diags;
   AnalyzerOptions &AnOpts;
-  const LangOptions &LangOpts;
+  CheckerInfoSet EnabledCheckers;
 };
 
 } // namespace ento
