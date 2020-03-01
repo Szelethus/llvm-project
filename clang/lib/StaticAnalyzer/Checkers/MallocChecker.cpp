@@ -373,7 +373,8 @@ private:
   CHECK_FN(checkReallocN)
   CHECK_FN(checkOwnershipAttr)
 
-  using CheckFn = void (MallocChecker::*)(const CallEvent &Call, CheckerContext &C) const;
+  using CheckFn = void (MallocChecker::*)(const CallEvent &Call,
+                                          CheckerContext &C) const;
 
   CallDescriptionMap<CheckFn> FreeingMemFnMap{
       {{"realloc", 2}, &MallocChecker::checkRealloc<false>},
@@ -423,8 +424,8 @@ private:
   /// Process C++ operator new()'s allocation, which is the part of C++
   /// new-expression that goes before the constructor.
   ProgramStateRef processNewAllocation(const CXXAllocatorCall &Call,
-                                      CheckerContext &C, ProgramStateRef State,
-                                         AllocationFamily Family) const;
+                                       CheckerContext &C, ProgramStateRef State,
+                                       AllocationFamily Family) const;
 
   /// Perform a zero-allocation check.
   ///
@@ -455,9 +456,8 @@ private:
   /// \param [in] Att The ownership_returns attribute.
   /// \param [in] State The \c ProgramState right before allocation.
   /// \returns The ProgramState right after allocation.
-  ProgramStateRef MallocMemReturnsAttr(CheckerContext &C,
-                                       const CallEvent &Call,
-                                       const OwnershipAttr* Att,
+  ProgramStateRef MallocMemReturnsAttr(CheckerContext &C, const CallEvent &Call,
+                                       const OwnershipAttr *Att,
                                        ProgramStateRef State) const;
 
   /// Models memory allocation.
@@ -515,7 +515,7 @@ private:
   /// \param [in] State The \c ProgramState right before allocation.
   /// \returns The ProgramState right after deallocation.
   ProgramStateRef FreeMemAttr(CheckerContext &C, const CallEvent &Call,
-                              const OwnershipAttr* Att,
+                              const OwnershipAttr *Att,
                               ProgramStateRef State) const;
 
   /// Models memory deallocation.
@@ -562,7 +562,8 @@ private:
   /// \param [in] ReturnsNullOnFailure Whether the memory deallocation function
   ///   we're modeling returns with Null on failure.
   /// \returns The ProgramState right after deallocation.
-  ProgramStateRef FreeMemAux(CheckerContext &C, const Expr *ArgExpr, const CallEvent &Call, ProgramStateRef State,
+  ProgramStateRef FreeMemAux(CheckerContext &C, const Expr *ArgExpr,
+                             const CallEvent &Call, ProgramStateRef State,
                              bool Hold, bool &IsKnownToBeAllocated,
                              AllocationFamily Family,
                              bool ReturnsNullOnFailure = false) const;
@@ -961,7 +962,8 @@ MallocChecker::performKernelMalloc(const CallEvent &Call, CheckerContext &C,
   // If M_ZERO is set, treat this like calloc (initialized).
   if (TrueState && !FalseState) {
     SVal ZeroVal = C.getSValBuilder().makeZeroVal(Ctx.CharTy);
-    return MallocMemAux(C, Call, Call.getArgExpr(0), ZeroVal, TrueState, AF_Malloc);
+    return MallocMemAux(C, Call, Call.getArgExpr(0), ZeroVal, TrueState,
+                        AF_Malloc);
   }
 
   return None;
@@ -978,18 +980,21 @@ SVal MallocChecker::evalMulForBufferSize(CheckerContext &C, const Expr *Blocks,
   return TotalSize;
 }
 
-void MallocChecker::checkBasicAlloc(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkBasicAlloc(const CallEvent &Call,
+                                    CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
     return;
 
-  State = MallocMemAux(C, Call, Call.getArgExpr(0), UndefinedVal(), State, AF_Malloc);
+  State = MallocMemAux(C, Call, Call.getArgExpr(0), UndefinedVal(), State,
+                       AF_Malloc);
   State = ProcessZeroAllocCheck(Call, 0, State);
   C.addTransition(State);
 }
 
-void MallocChecker::checkKernelMalloc(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkKernelMalloc(const CallEvent &Call,
+                                      CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
@@ -999,13 +1004,14 @@ void MallocChecker::checkKernelMalloc(const CallEvent &Call, CheckerContext &C) 
   if (MaybeState.hasValue())
     State = MaybeState.getValue();
   else
-    State =
-        MallocMemAux(C, Call, Call.getArgExpr(0), UndefinedVal(), State, AF_Malloc);
+    State = MallocMemAux(C, Call, Call.getArgExpr(0), UndefinedVal(), State,
+                         AF_Malloc);
   C.addTransition(State);
 }
 
 template <bool ShouldFreeOnFail>
-void MallocChecker::checkRealloc(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkRealloc(const CallEvent &Call,
+                                 CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
@@ -1015,7 +1021,8 @@ void MallocChecker::checkRealloc(const CallEvent &Call, CheckerContext &C) const
   C.addTransition(State);
 }
 
-void MallocChecker::checkCalloc(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkCalloc(const CallEvent &Call,
+                                CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   State = CallocMem(C, Call, State);
   State = ProcessZeroAllocCheck(Call, 0, State);
@@ -1028,19 +1035,22 @@ void MallocChecker::checkFree(const CallEvent &Call, CheckerContext &C) const {
   bool IsKnownToBeAllocatedMemory = false;
   if (suppressDeallocationsInSuspiciousContexts(Call, C))
     return;
-  State =
-      FreeMemAux(C, Call, State, 0, false, IsKnownToBeAllocatedMemory, AF_Malloc);
+  State = FreeMemAux(C, Call, State, 0, false, IsKnownToBeAllocatedMemory,
+                     AF_Malloc);
   C.addTransition(State);
 }
 
-void MallocChecker::checkAlloca(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkAlloca(const CallEvent &Call,
+                                CheckerContext &C) const {
   ProgramStateRef State = C.getState();
-  State = MallocMemAux(C, Call, Call.getArgExpr(0), UndefinedVal(), State, AF_Alloca);
+  State = MallocMemAux(C, Call, Call.getArgExpr(0), UndefinedVal(), State,
+                       AF_Alloca);
   State = ProcessZeroAllocCheck(Call, 0, State);
   C.addTransition(State);
 }
 
-void MallocChecker::checkStrdup(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkStrdup(const CallEvent &Call,
+                                CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
@@ -1050,7 +1060,8 @@ void MallocChecker::checkStrdup(const CallEvent &Call, CheckerContext &C) const 
   C.addTransition(State);
 }
 
-void MallocChecker::checkIfNameIndex(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkIfNameIndex(const CallEvent &Call,
+                                     CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
@@ -1063,7 +1074,8 @@ void MallocChecker::checkIfNameIndex(const CallEvent &Call, CheckerContext &C) c
   C.addTransition(State);
 }
 
-void MallocChecker::checkIfFreeNameIndex(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkIfFreeNameIndex(const CallEvent &Call,
+                                         CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
@@ -1074,7 +1086,8 @@ void MallocChecker::checkIfFreeNameIndex(const CallEvent &Call, CheckerContext &
   C.addTransition(State);
 }
 
-void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call,
+                                           CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   bool IsKnownToBeAllocatedMemory = false;
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
@@ -1094,15 +1107,16 @@ void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call, CheckerContext
   switch (FD->getOverloadedOperator()) {
   case OO_New:
     assert(!AC);
-    //State = processNewAllocation(*AC, C, State, AF_CXXNew);
+    // State = processNewAllocation(*AC, C, State, AF_CXXNew);
     State =
         MallocMemAux(C, Call, CE->getArg(0), UndefinedVal(), State, AF_CXXNew);
     State = ProcessZeroAllocCheck(Call, 0, State);
     break;
   case OO_Array_New:
     assert(!AC);
-    //State = processNewAllocation(*AC, C, State, AF_CXXNewArray);
-    State = MallocMemAux(C, Call, CE->getArg(0), UndefinedVal(), State, AF_CXXNewArray);
+    // State = processNewAllocation(*AC, C, State, AF_CXXNewArray);
+    State = MallocMemAux(C, Call, CE->getArg(0), UndefinedVal(), State,
+                         AF_CXXNewArray);
     State = ProcessZeroAllocCheck(Call, 0, State);
     break;
   case OO_Delete:
@@ -1120,7 +1134,8 @@ void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call, CheckerContext
   C.addTransition(State);
 }
 
-void MallocChecker::checkGMalloc0(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkGMalloc0(const CallEvent &Call,
+                                  CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
@@ -1132,17 +1147,20 @@ void MallocChecker::checkGMalloc0(const CallEvent &Call, CheckerContext &C) cons
   C.addTransition(State);
 }
 
-void MallocChecker::checkGMemdup(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkGMemdup(const CallEvent &Call,
+                                 CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
     return;
-  State = MallocMemAux(C, Call, Call.getArgExpr(1), UndefinedVal(), State, AF_Malloc);
+  State = MallocMemAux(C, Call, Call.getArgExpr(1), UndefinedVal(), State,
+                       AF_Malloc);
   State = ProcessZeroAllocCheck(Call, 1, State);
   C.addTransition(State);
 }
 
-void MallocChecker::checkGMallocN(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkGMallocN(const CallEvent &Call,
+                                  CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
@@ -1155,7 +1173,8 @@ void MallocChecker::checkGMallocN(const CallEvent &Call, CheckerContext &C) cons
   C.addTransition(State);
 }
 
-void MallocChecker::checkGMallocN0(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkGMallocN0(const CallEvent &Call,
+                                   CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
@@ -1169,7 +1188,8 @@ void MallocChecker::checkGMallocN0(const CallEvent &Call, CheckerContext &C) con
   C.addTransition(State);
 }
 
-void MallocChecker::checkReallocN(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkReallocN(const CallEvent &Call,
+                                  CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
@@ -1181,7 +1201,8 @@ void MallocChecker::checkReallocN(const CallEvent &Call, CheckerContext &C) cons
   C.addTransition(State);
 }
 
-void MallocChecker::checkOwnershipAttr(const CallEvent &Call, CheckerContext &C) const {
+void MallocChecker::checkOwnershipAttr(const CallEvent &Call,
+                                       CheckerContext &C) const {
   ProgramStateRef State = C.getState();
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
   if (!CE)
@@ -1332,9 +1353,10 @@ static bool hasNonTrivialConstructorCall(const CXXNewExpr *NE) {
   return false;
 }
 
-ProgramStateRef MallocChecker::processNewAllocation(const CXXAllocatorCall &Call,
-                                      CheckerContext &C, ProgramStateRef State,
-                                         AllocationFamily Family) const {
+ProgramStateRef
+MallocChecker::processNewAllocation(const CXXAllocatorCall &Call,
+                                    CheckerContext &C, ProgramStateRef State,
+                                    AllocationFamily Family) const {
   const CXXNewExpr *NE = Call.getOriginExpr();
   const ParentMap &PM = C.getLocationContext()->getParentMap();
 
@@ -1358,7 +1380,7 @@ ProgramStateRef MallocChecker::processNewAllocation(const CXXAllocatorCall &Call
 
 void MallocChecker::checkPostStmt(const CXXNewExpr *NE,
                                   CheckerContext &C) const {
-  //if (!C.getAnalysisManager().getAnalyzerOptions().MayInlineCXXAllocator) {
+  // if (!C.getAnalysisManager().getAnalyzerOptions().MayInlineCXXAllocator) {
   //  if (NE->isArray())
   //    processNewAllocation(NE, C, C.getSVal(NE),
   //                         (NE->isArray() ? AF_CXXNewArray : AF_CXXNew));
@@ -1479,8 +1501,8 @@ MallocChecker::MallocMemReturnsAttr(CheckerContext &C, const CallEvent &Call,
 
   OwnershipAttr::args_iterator I = Att->args_begin(), E = Att->args_end();
   if (I != E) {
-    return MallocMemAux(C, Call, Call.getArgExpr(I->getASTIndex()), UndefinedVal(),
-                        State, AF_Malloc);
+    return MallocMemAux(C, Call, Call.getArgExpr(I->getASTIndex()),
+                        UndefinedVal(), State, AF_Malloc);
   }
   return MallocMemAux(C, Call, UnknownVal(), UndefinedVal(), State, AF_Malloc);
 }
@@ -1589,7 +1611,8 @@ ProgramStateRef MallocChecker::FreeMemAttr(CheckerContext &C,
   return State;
 }
 
-ProgramStateRef MallocChecker::FreeMemAux(CheckerContext &C, const CallEvent &Call,
+ProgramStateRef MallocChecker::FreeMemAux(CheckerContext &C,
+                                          const CallEvent &Call,
                                           ProgramStateRef State, unsigned Num,
                                           bool Hold, bool &IsKnownToBeAllocated,
                                           AllocationFamily Family,
@@ -1600,8 +1623,8 @@ ProgramStateRef MallocChecker::FreeMemAux(CheckerContext &C, const CallEvent &Ca
   if (Call.getNumArgs() < (Num + 1))
     return nullptr;
 
-  return FreeMemAux(C, Call.getArgExpr(Num), Call, State, Hold, IsKnownToBeAllocated,
-                    Family, ReturnsNullOnFailure);
+  return FreeMemAux(C, Call.getArgExpr(Num), Call, State, Hold,
+                    IsKnownToBeAllocated, Family, ReturnsNullOnFailure);
 }
 
 /// Checks if the previous call to free on the given symbol failed - if free
@@ -2372,8 +2395,8 @@ MallocChecker::ReallocMemAux(CheckerContext &C, const CallEvent &Call,
   // If the ptr is NULL and the size is not 0, the call is equivalent to
   // malloc(size).
   if (PrtIsNull && !SizeIsZero) {
-    ProgramStateRef stateMalloc =
-        MallocMemAux(C, Call, TotalSize, UndefinedVal(), StatePtrIsNull, Family);
+    ProgramStateRef stateMalloc = MallocMemAux(
+        C, Call, TotalSize, UndefinedVal(), StatePtrIsNull, Family);
     return stateMalloc;
   }
 
@@ -2396,8 +2419,8 @@ MallocChecker::ReallocMemAux(CheckerContext &C, const CallEvent &Call,
     // If size was equal to 0, either NULL or a pointer suitable to be passed
     // to free() is returned. We just free the input pointer and do not add
     // any constrains on the output pointer.
-    if (ProgramStateRef stateFree = FreeMemAux(C, Call, StateSizeIsZero, 0, false,
-                                               IsKnownToBeAllocated, Family))
+    if (ProgramStateRef stateFree = FreeMemAux(
+            C, Call, StateSizeIsZero, 0, false, IsKnownToBeAllocated, Family))
       return stateFree;
 
   // Default behavior.
@@ -2426,7 +2449,8 @@ MallocChecker::ReallocMemAux(CheckerContext &C, const CallEvent &Call,
   return nullptr;
 }
 
-ProgramStateRef MallocChecker::CallocMem(CheckerContext &C, const CallEvent &Call,
+ProgramStateRef MallocChecker::CallocMem(CheckerContext &C,
+                                         const CallEvent &Call,
                                          ProgramStateRef State) {
   if (!State)
     return nullptr;
@@ -2436,7 +2460,8 @@ ProgramStateRef MallocChecker::CallocMem(CheckerContext &C, const CallEvent &Cal
 
   SValBuilder &svalBuilder = C.getSValBuilder();
   SVal zeroVal = svalBuilder.makeZeroVal(svalBuilder.getContext().CharTy);
-  SVal TotalSize = evalMulForBufferSize(C, Call.getArgExpr(0), Call.getArgExpr(1));
+  SVal TotalSize =
+      evalMulForBufferSize(C, Call.getArgExpr(0), Call.getArgExpr(1));
 
   return MallocMemAux(C, Call, TotalSize, zeroVal, State, AF_Malloc);
 }
