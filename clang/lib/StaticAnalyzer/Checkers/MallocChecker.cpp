@@ -1168,7 +1168,7 @@ void MallocChecker::checkPostCall(const CallEvent &Call,
     return;
 
   const FunctionDecl *FD = C.getCalleeDecl(CE);
-  if (!FD || FD->getKind() != Decl::Function)
+  if (!FD)
     return;
 
   ProgramStateRef State = C.getState();
