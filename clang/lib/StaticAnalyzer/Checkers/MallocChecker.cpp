@@ -69,6 +69,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <climits>
 #include <utility>
@@ -421,6 +422,7 @@ private:
 
   /// Process C++ operator new()'s allocation, which is the part of C++
   /// new-expression that goes before the constructor.
+  LLVM_NODISCARD
   ProgramStateRef processNewAllocation(const CXXAllocatorCall &Call,
                                        CheckerContext &C, ProgramStateRef State,
                                        AllocationFamily Family) const;
@@ -433,6 +435,7 @@ private:
   ///   0.
   /// \param [in] RetVal Specifies the newly allocated pointer value;
   ///   if unspecified, the value of expression \p E is used.
+  LLVM_NODISCARD
   static ProgramStateRef ProcessZeroAllocCheck(const CallEvent &Call,
                                                const unsigned IndexOfSizeArg,
                                                ProgramStateRef State,
@@ -454,6 +457,7 @@ private:
   /// \param [in] Att The ownership_returns attribute.
   /// \param [in] State The \c ProgramState right before allocation.
   /// \returns The ProgramState right after allocation.
+  LLVM_NODISCARD
   ProgramStateRef MallocMemReturnsAttr(CheckerContext &C, const CallEvent &Call,
                                        const OwnershipAttr *Att,
                                        ProgramStateRef State) const;
@@ -467,6 +471,7 @@ private:
   /// malloc leaves it undefined.
   /// \param [in] State The \c ProgramState right before allocation.
   /// \returns The ProgramState right after allocation.
+  LLVM_NODISCARD
   static ProgramStateRef MallocMemAux(CheckerContext &C, const CallEvent &Call,
                                       const Expr *SizeEx, SVal Init,
                                       ProgramStateRef State,
@@ -481,16 +486,19 @@ private:
   /// malloc leaves it undefined.
   /// \param [in] State The \c ProgramState right before allocation.
   /// \returns The ProgramState right after allocation.
+  LLVM_NODISCARD
   static ProgramStateRef MallocMemAux(CheckerContext &C, const CallEvent &Call,
                                       SVal Size, SVal Init,
                                       ProgramStateRef State,
                                       AllocationFamily Family);
 
+  LLVM_NODISCARD
   static ProgramStateRef addExtentSize(CheckerContext &C, const CXXNewExpr *NE,
                                        ProgramStateRef State, SVal Target);
 
   // Check if this malloc() for special flags. At present that means M_ZERO or
   // __GFP_ZERO (in which case, treat it like calloc).
+  LLVM_NODISCARD
   llvm::Optional<ProgramStateRef>
   performKernelMalloc(const CallEvent &Call, CheckerContext &C,
                       const ProgramStateRef &State) const;
@@ -512,6 +520,7 @@ private:
   /// \param [in] Att The ownership_takes or ownership_holds attribute.
   /// \param [in] State The \c ProgramState right before allocation.
   /// \returns The ProgramState right after deallocation.
+  LLVM_NODISCARD
   ProgramStateRef FreeMemAttr(CheckerContext &C, const CallEvent &Call,
                               const OwnershipAttr *Att,
                               ProgramStateRef State) const;
@@ -535,6 +544,7 @@ private:
   /// \param [in] ReturnsNullOnFailure Whether the memory deallocation function
   ///   we're modeling returns with Null on failure.
   /// \returns The ProgramState right after deallocation.
+  LLVM_NODISCARD
   ProgramStateRef FreeMemAux(CheckerContext &C, const CallEvent &Call,
                              ProgramStateRef State, unsigned Num, bool Hold,
                              bool &IsKnownToBeAllocated,
@@ -560,6 +570,7 @@ private:
   /// \param [in] ReturnsNullOnFailure Whether the memory deallocation function
   ///   we're modeling returns with Null on failure.
   /// \returns The ProgramState right after deallocation.
+  LLVM_NODISCARD
   ProgramStateRef FreeMemAux(CheckerContext &C, const Expr *ArgExpr,
                              const CallEvent &Call, ProgramStateRef State,
                              bool Hold, bool &IsKnownToBeAllocated,
@@ -579,6 +590,7 @@ private:
   /// \param [in] SuffixWithN Whether the reallocation function we're modeling
   ///   has an '_n' suffix, such as g_realloc_n.
   /// \returns The ProgramState right after reallocation.
+  LLVM_NODISCARD
   ProgramStateRef ReallocMemAux(CheckerContext &C, const CallEvent &Call,
                                 bool ShouldFreeOnFail, ProgramStateRef State,
                                 AllocationFamily Family,
@@ -589,6 +601,7 @@ private:
   /// \param [in] Blocks The amount of blocks that needs to be allocated.
   /// \param [in] BlockBytes The size of a block.
   /// \returns The symbolic value of \p Blocks * \p BlockBytes.
+  LLVM_NODISCARD
   static SVal evalMulForBufferSize(CheckerContext &C, const Expr *Blocks,
                                    const Expr *BlockBytes);
 
@@ -597,6 +610,7 @@ private:
   /// \param [in] CE The expression that reallocated memory
   /// \param [in] State The \c ProgramState right before reallocation.
   /// \returns The ProgramState right after allocation.
+  LLVM_NODISCARD
   static ProgramStateRef CallocMem(CheckerContext &C, const CallEvent &Call,
                                    ProgramStateRef State);
 
@@ -631,6 +645,7 @@ private:
                                    SymbolRef &EscapingSymbol) const;
 
   /// Implementation of the checkPointerEscape callbacks.
+  LLVM_NODISCARD
   ProgramStateRef checkPointerEscapeAux(ProgramStateRef State,
                                         const InvalidatedSymbols &Escaped,
                                         const CallEvent *Call,
@@ -1353,9 +1368,10 @@ void MallocChecker::checkPostStmt(const CXXNewExpr *NE,
 void MallocChecker::checkNewAllocator(const CXXAllocatorCall &Call,
                                       CheckerContext &C) const {
   if (!C.wasInlined) {
-    processNewAllocation(
+    ProgramStateRef State = processNewAllocation(
         Call, C, C.getState(),
         (Call.getOriginExpr()->isArray() ? AF_CXXNewArray : AF_CXXNew));
+    C.addTransition(State);
   }
 }
 
