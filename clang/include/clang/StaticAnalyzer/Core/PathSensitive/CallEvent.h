@@ -64,6 +64,7 @@ enum CallEventKind {
   CE_END_CXX_INSTANCE_CALLS = CE_CXXDestructor,
   CE_CXXConstructor,
   CE_CXXAllocator,
+  CE_CXXDeallocator,
   CE_BEG_FUNCTION_CALLS = CE_Function,
   CE_END_FUNCTION_CALLS = CE_CXXAllocator,
   CE_Block,
@@ -929,6 +930,51 @@ public:
   }
 };
 
+/// Represents the memory deallocation call in a C++ delete-expression.
+///
+/// This is a call to "operator delete".
+class CXXDeallocatorCall : public AnyFunctionCall {
+  friend class CallEventManager;
+
+protected:
+  CXXDeallocatorCall(const CXXDeleteExpr *E, ProgramStateRef St,
+                   const LocationContext *LCtx)
+      : AnyFunctionCall(E, St, LCtx) {}
+  CXXDeallocatorCall(const CXXDeallocatorCall &Other) = default;
+
+  void cloneTo(void *Dest) const override { new (Dest) CXXDeallocatorCall(*this); }
+
+public:
+  virtual const CXXDeleteExpr *getOriginExpr() const {
+    return cast<CXXDeleteExpr>(AnyFunctionCall::getOriginExpr());
+  }
+
+  const FunctionDecl *getDecl() const override {
+    return getOriginExpr()->getOperatorDelete();
+  }
+
+  ///// Number of non-placement arguments to the call. It is equal to 2 for
+  ///// C++17 aligned operator new() calls that have alignment implicitly
+  ///// passed as the second argument, and to 1 for other operator new() calls.
+  //unsigned getNumImplicitArgs() const {
+  //  return getOriginExpr()->passAlignment() ? 2 : 1;
+  //}
+
+  unsigned getNumArgs() const override {
+    return getDecl()->getNumParams();
+  }
+
+  const Expr *getArgExpr(unsigned Index = 0) const override {
+    return getOriginExpr()->getArgument();
+  }
+
+  Kind getKind() const override { return CE_CXXDeallocator; }
+
+  static bool classof(const CallEvent *CE) {
+    return CE->getKind() == CE_CXXDeallocator;
+  }
+};
+
 /// Represents the ways an Objective-C message send can occur.
 //
 // Note to maintainers: OCM_Message should always be last, since it does not
@@ -1243,6 +1289,12 @@ public:
   getCXXAllocatorCall(const CXXNewExpr *E, ProgramStateRef State,
                       const LocationContext *LCtx) {
     return create<CXXAllocatorCall>(E, State, LCtx);
+  }
+
+  CallEventRef<CXXDeallocatorCall>
+  getCXXDeallocatorCall(const CXXDeleteExpr *E, ProgramStateRef State,
+                      const LocationContext *LCtx) {
+    return create<CXXDeallocatorCall>(E, State, LCtx);
   }
 };
 

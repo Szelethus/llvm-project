@@ -1380,21 +1380,7 @@ ProgramStateRef MallocChecker::addExtentSize(CheckerContext &C,
 
 void MallocChecker::checkPreStmt(const CXXDeleteExpr *DE,
                                  CheckerContext &C) const {
-
-  if (!ChecksEnabled[CK_NewDeleteChecker])
-    if (SymbolRef Sym = C.getSVal(DE->getArgument()).getAsSymbol())
-      checkUseAfterFree(Sym, C, DE->getArgument());
-
-  if (!isStandardNewDelete(DE->getOperatorDelete()))
-    return;
-
-  ProgramStateRef State = C.getState();
-  bool IsKnownToBeAllocated;
-  State = FreeMemAux(C, DE->getArgument(), DE, State,
-                     /*Hold*/ false, IsKnownToBeAllocated,
-                     (DE->isArrayForm() ? AF_CXXNewArray : AF_CXXNew));
-
-  C.addTransition(State);
+  llvm::errs() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
 }
 
 static bool isKnownDeallocObjCMethodName(const ObjCMethodCall &Call) {
@@ -2580,7 +2566,29 @@ void MallocChecker::checkDeadSymbols(SymbolReaper &SymReaper,
 void MallocChecker::checkPreCall(const CallEvent &Call,
                                  CheckerContext &C) const {
 
-  if (const CXXDestructorCall *DC = dyn_cast<CXXDestructorCall>(&Call)) {
+  if (const auto *DC = dyn_cast<CXXDeallocatorCall>(&Call)) {
+    const CXXDeleteExpr *DE = DC->getOriginExpr();
+    llvm::errs() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n";
+    DC->dump();
+
+    if (!ChecksEnabled[CK_NewDeleteChecker])
+      if (SymbolRef Sym = C.getSVal(DE->getArgument()).getAsSymbol())
+        checkUseAfterFree(Sym, C, DE->getArgument());
+
+    if (!isStandardNewDelete(DC->getDecl()))
+      return;
+
+    ProgramStateRef State = C.getState();
+    bool IsKnownToBeAllocated;
+    State = FreeMemAux(C, DE->getArgument(), DE, State,
+                       /*Hold*/ false, IsKnownToBeAllocated,
+                       (DE->isArrayForm() ? AF_CXXNewArray : AF_CXXNew));
+
+    C.addTransition(State);
+    return;
+  }
+
+  if (const auto *DC = dyn_cast<CXXDestructorCall>(&Call)) {
     SymbolRef Sym = DC->getCXXThisVal().getAsSymbol();
     if (!Sym || checkDoubleDelete(Sym, C))
       return;
