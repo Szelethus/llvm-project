@@ -938,11 +938,13 @@ class CXXDeallocatorCall : public AnyFunctionCall {
 
 protected:
   CXXDeallocatorCall(const CXXDeleteExpr *E, ProgramStateRef St,
-                   const LocationContext *LCtx)
+                     const LocationContext *LCtx)
       : AnyFunctionCall(E, St, LCtx) {}
   CXXDeallocatorCall(const CXXDeallocatorCall &Other) = default;
 
-  void cloneTo(void *Dest) const override { new (Dest) CXXDeallocatorCall(*this); }
+  void cloneTo(void *Dest) const override {
+    new (Dest) CXXDeallocatorCall(*this);
+  }
 
 public:
   virtual const CXXDeleteExpr *getOriginExpr() const {
@@ -953,16 +955,7 @@ public:
     return getOriginExpr()->getOperatorDelete();
   }
 
-  ///// Number of non-placement arguments to the call. It is equal to 2 for
-  ///// C++17 aligned operator new() calls that have alignment implicitly
-  ///// passed as the second argument, and to 1 for other operator new() calls.
-  //unsigned getNumImplicitArgs() const {
-  //  return getOriginExpr()->passAlignment() ? 2 : 1;
-  //}
-
-  unsigned getNumArgs() const override {
-    return getDecl()->getNumParams();
-  }
+  unsigned getNumArgs() const override { return getDecl()->getNumParams(); }
 
   const Expr *getArgExpr(unsigned Index = 0) const override {
     return getOriginExpr()->getArgument();
@@ -1293,7 +1286,7 @@ public:
 
   CallEventRef<CXXDeallocatorCall>
   getCXXDeallocatorCall(const CXXDeleteExpr *E, ProgramStateRef State,
-                      const LocationContext *LCtx) {
+                        const LocationContext *LCtx) {
     return create<CXXDeallocatorCall>(E, State, LCtx);
   }
 };

@@ -848,8 +848,8 @@ void ExprEngine::VisitCXXDeleteExpr(const CXXDeleteExpr *CDE,
                                     ExplodedNode *Pred, ExplodedNodeSet &Dst) {
 
   CallEventManager &CEMgr = getStateManager().getCallEventManager();
-  CallEventRef<CXXDeallocatorCall> Call =
-    CEMgr.getCXXDeallocatorCall(CDE, Pred->getState(), Pred->getLocationContext());
+  CallEventRef<CXXDeallocatorCall> Call = CEMgr.getCXXDeallocatorCall(
+      CDE, Pred->getState(), Pred->getLocationContext());
   getCheckerManager().runCheckersForPreCall(Dst, Pred, *Call, *this);
 }
 

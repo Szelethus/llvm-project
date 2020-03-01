@@ -281,8 +281,8 @@ class MallocChecker
                      check::ConstPointerEscape, check::PreStmt<ReturnStmt>,
                      check::EndFunction, check::PreCall, check::PostCall,
                      check::PostStmt<CXXNewExpr>, check::NewAllocator,
-                     check::PreStmt<CXXDeleteExpr>, check::PostStmt<BlockExpr>,
-                     check::PostObjCMessage, check::Location, eval::Assume> {
+                     check::PostStmt<BlockExpr>, check::PostObjCMessage,
+                     check::Location, eval::Assume> {
 public:
   /// In pessimistic mode, the checker assumes that it does not know which
   /// functions might free the memory.
@@ -314,7 +314,6 @@ public:
   void checkPostStmt(const CXXNewExpr *NE, CheckerContext &C) const;
   void checkNewAllocator(const CXXNewExpr *NE, SVal Target,
                          CheckerContext &C) const;
-  void checkPreStmt(const CXXDeleteExpr *DE, CheckerContext &C) const;
   void checkPostObjCMessage(const ObjCMethodCall &Call, CheckerContext &C) const;
   void checkPostStmt(const BlockExpr *BE, CheckerContext &C) const;
   void checkDeadSymbols(SymbolReaper &SymReaper, CheckerContext &C) const;
@@ -1376,11 +1375,6 @@ ProgramStateRef MallocChecker::addExtentSize(CheckerContext &C,
     State = State->assume(DynSizeMatchesSize, true);
   }
   return State;
-}
-
-void MallocChecker::checkPreStmt(const CXXDeleteExpr *DE,
-                                 CheckerContext &C) const {
-  llvm::errs() << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
 }
 
 static bool isKnownDeallocObjCMethodName(const ObjCMethodCall &Call) {
@@ -2568,8 +2562,6 @@ void MallocChecker::checkPreCall(const CallEvent &Call,
 
   if (const auto *DC = dyn_cast<CXXDeallocatorCall>(&Call)) {
     const CXXDeleteExpr *DE = DC->getOriginExpr();
-    llvm::errs() << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n";
-    DC->dump();
 
     if (!ChecksEnabled[CK_NewDeleteChecker])
       if (SymbolRef Sym = C.getSVal(DE->getArgument()).getAsSymbol())
