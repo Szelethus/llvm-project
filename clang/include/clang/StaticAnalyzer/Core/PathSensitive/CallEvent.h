@@ -39,6 +39,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -202,6 +203,11 @@ public:
   /// called. May be null.
   virtual const Decl *getDecl() const {
     return Origin.dyn_cast<const Decl *>();
+  }
+
+  /// The state in which the call is being evaluated.
+  SValBuilder &getSValBuilder() const {
+    return State->getStateManager().getSValBuilder();
   }
 
   /// The state in which the call is being evaluated.
@@ -895,6 +901,15 @@ public:
 
   const FunctionDecl *getDecl() const override {
     return getOriginExpr()->getOperatorNew();
+  }
+
+  SVal getObjectUnderConstruction(ProgramStateRef State) const {
+    //assert(State != getState() &&
+    //       "The ProgramState stored in CallEvent is the state where the call "
+    //       "is *evaluated*, not where return values can be retrieved! Try with "
+    //       "CheckerContext::getState()?");
+    return ExprEngine::getObjectUnderConstruction(
+        State, getOriginExpr(), getLocationContext()).getValue();
   }
 
   /// Number of non-placement arguments to the call. It is equal to 2 for
