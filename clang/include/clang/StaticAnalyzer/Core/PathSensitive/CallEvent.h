@@ -904,12 +904,9 @@ public:
   }
 
   SVal getObjectUnderConstruction(ProgramStateRef State) const {
-    //assert(State != getState() &&
-    //       "The ProgramState stored in CallEvent is the state where the call "
-    //       "is *evaluated*, not where return values can be retrieved! Try with "
-    //       "CheckerContext::getState()?");
-    return ExprEngine::getObjectUnderConstruction(
-        State, getOriginExpr(), getLocationContext()).getValue();
+    return ExprEngine::getObjectUnderConstruction(State, getOriginExpr(),
+                                                  getLocationContext())
+        .getValue();
   }
 
   /// Number of non-placement arguments to the call. It is equal to 2 for

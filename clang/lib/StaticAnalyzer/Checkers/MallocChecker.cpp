@@ -1325,8 +1325,9 @@ void MallocChecker::checkPostStmt(const CXXNewExpr *NE,
 void MallocChecker::checkNewAllocator(const CXXAllocatorCall &Call,
                                       CheckerContext &C) const {
   if (!C.wasInlined) {
-    processNewAllocation(Call.getOriginExpr(), C, Call.getObjectUnderConstruction(C.getState()),
-                         (Call.getOriginExpr()->isArray() ? AF_CXXNewArray : AF_CXXNew));
+    processNewAllocation(
+        Call.getOriginExpr(), C, Call.getObjectUnderConstruction(C.getState()),
+        (Call.getOriginExpr()->isArray() ? AF_CXXNewArray : AF_CXXNew));
   }
 }
 

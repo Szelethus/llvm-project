@@ -511,16 +511,18 @@ namespace {
     bool WasInlined;
     ExprEngine &Eng;
 
-    CheckNewAllocatorContext(const CheckersTy &Checkers, const CXXAllocatorCall &Call, bool WasInlined, ExprEngine &Eng)
-        : Checkers(Checkers), Call(Call), WasInlined(WasInlined),
-          Eng(Eng) {}
+    CheckNewAllocatorContext(const CheckersTy &Checkers,
+                             const CXXAllocatorCall &Call, bool WasInlined,
+                             ExprEngine &Eng)
+        : Checkers(Checkers), Call(Call), WasInlined(WasInlined), Eng(Eng) {}
 
     CheckersTy::const_iterator checkers_begin() { return Checkers.begin(); }
     CheckersTy::const_iterator checkers_end() { return Checkers.end(); }
 
     void runChecker(CheckerManager::CheckNewAllocatorFunc checkFn,
                     NodeBuilder &Bldr, ExplodedNode *Pred) {
-      ProgramPoint L = PostAllocatorCall(Call.getOriginExpr(), Pred->getLocationContext());
+      ProgramPoint L =
+          PostAllocatorCall(Call.getOriginExpr(), Pred->getLocationContext());
       CheckerContext C(Bldr, Eng, Pred, L, WasInlined);
       checkFn(Call, C);
     }
@@ -528,9 +530,11 @@ namespace {
 
 } // namespace
 
-void CheckerManager::runCheckersForNewAllocator(
-    const CXXAllocatorCall &Call, ExplodedNodeSet &Dst, ExplodedNode *Pred,
-    ExprEngine &Eng, bool WasInlined) {
+void CheckerManager::runCheckersForNewAllocator(const CXXAllocatorCall &Call,
+                                                ExplodedNodeSet &Dst,
+                                                ExplodedNode *Pred,
+                                                ExprEngine &Eng,
+                                                bool WasInlined) {
   ExplodedNodeSet Src;
   Src.insert(Pred);
   CheckNewAllocatorContext C(NewAllocatorCheckers, Call, WasInlined, Eng);

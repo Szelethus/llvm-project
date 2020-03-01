@@ -728,12 +728,7 @@ void ExprEngine::VisitCXXNewAllocatorCall(const CXXNewExpr *CNE,
   getCheckerManager().runCheckersForPostCall(DstPostPostCallCallback,
                                              DstPostValue, *Call, *this);
   for (ExplodedNode *I : DstPostPostCallCallback) {
-    //assert(CNE == Call->getOriginExpr());
-    //assert(I->getState() == Call->getState());
-    //assert(LCtx == Call->getLocationContext());
-    getCheckerManager().runCheckersForNewAllocator(
-        *Call, Dst, I,
-        *this);
+    getCheckerManager().runCheckersForNewAllocator(*Call, Dst, I, *this);
   }
 }
 
