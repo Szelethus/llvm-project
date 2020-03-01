@@ -1243,10 +1243,11 @@ ProgramStateRef MallocChecker::ProcessZeroAllocCheck(
     Arg = CE->getArg(IndexOfSizeArg);
   } else if (const CXXNewExpr *NE =
                  dyn_cast<CXXNewExpr>(Call.getOriginExpr())) {
-    if (NE->isArray())
+    if (NE->isArray()) {
       Arg = *NE->getArraySize();
-    else
+    } else {
       return State;
+    }
   } else
     llvm_unreachable("not a CallExpr or CXXNewExpr");
 
@@ -1335,6 +1336,9 @@ ProgramStateRef
 MallocChecker::processNewAllocation(const CXXAllocatorCall &Call,
                                     CheckerContext &C, ProgramStateRef State,
                                     AllocationFamily Family) const {
+  if (!isStandardNewDelete(Call))
+    return nullptr;
+
   const CXXNewExpr *NE = Call.getOriginExpr();
   const ParentMap &PM = C.getLocationContext()->getParentMap();
 
