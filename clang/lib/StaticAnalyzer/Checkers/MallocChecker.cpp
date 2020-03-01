@@ -268,11 +268,9 @@ REGISTER_MAP_WITH_PROGRAMSTATE(ReallocPairs, SymbolRef, ReallocPair)
 /// placement operators and other standard overloads.
 static bool isStandardNewDelete(const FunctionDecl *FD);
 static bool isStandardNewDelete(const CallEvent &Call) {
-  if (isa<CXXAllocatorCall>(Call) || isa<CXXDeleteExpr>(Call.getOriginExpr()))
-    return true;
-  if (const auto *FD = dyn_cast_or_null<FunctionDecl>(Call.getDecl()))
-    return isStandardNewDelete(FD);
-  return false;
+  if (!Call.getDecl())
+    return false;
+  return isStandardNewDelete(cast<FunctionDecl>(Call.getDecl()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1091,11 +1089,8 @@ void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call,
   ProgramStateRef State = C.getState();
   bool IsKnownToBeAllocatedMemory = false;
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
-  const CXXAllocatorCall *AC = dyn_cast<CXXAllocatorCall>(&Call);
-  if (!CE) {
-    State = processNewAllocation(*AC, C, State, AF_CXXNewArray);
+  if (!CE)
     return;
-  }
 
   assert(isStandardNewDelete(Call));
 
@@ -1106,15 +1101,11 @@ void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call,
   const FunctionDecl *FD = C.getCalleeDecl(CE);
   switch (FD->getOverloadedOperator()) {
   case OO_New:
-    assert(!AC);
-    // State = processNewAllocation(*AC, C, State, AF_CXXNew);
     State =
         MallocMemAux(C, Call, CE->getArg(0), UndefinedVal(), State, AF_CXXNew);
     State = ProcessZeroAllocCheck(Call, 0, State);
     break;
   case OO_Array_New:
-    assert(!AC);
-    // State = processNewAllocation(*AC, C, State, AF_CXXNewArray);
     State = MallocMemAux(C, Call, CE->getArg(0), UndefinedVal(), State,
                          AF_CXXNewArray);
     State = ProcessZeroAllocCheck(Call, 0, State);
