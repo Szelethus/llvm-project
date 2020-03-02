@@ -285,9 +285,8 @@ class MallocChecker
     : public Checker<check::DeadSymbols, check::PointerEscape,
                      check::ConstPointerEscape, check::PreStmt<ReturnStmt>,
                      check::EndFunction, check::PreCall, check::PostCall,
-                     check::PostStmt<CXXNewExpr>, check::NewAllocator,
-                     check::PostStmt<BlockExpr>, check::PostObjCMessage,
-                     check::Location, eval::Assume> {
+                     check::NewAllocator, check::PostStmt<BlockExpr>,
+                     check::PostObjCMessage, check::Location, eval::Assume> {
 public:
   /// In pessimistic mode, the checker assumes that it does not know which
   /// functions might free the memory.
@@ -316,7 +315,6 @@ public:
 
   void checkPreCall(const CallEvent &Call, CheckerContext &C) const;
   void checkPostCall(const CallEvent &Call, CheckerContext &C) const;
-  void checkPostStmt(const CXXNewExpr *NE, CheckerContext &C) const;
   void checkNewAllocator(const CXXAllocatorCall &Call, CheckerContext &C) const;
   void checkPostObjCMessage(const ObjCMethodCall &Call, CheckerContext &C) const;
   void checkPostStmt(const BlockExpr *BE, CheckerContext &C) const;
@@ -1089,10 +1087,8 @@ void MallocChecker::checkCXXNewOrCXXDelete(const CallEvent &Call,
   ProgramStateRef State = C.getState();
   bool IsKnownToBeAllocatedMemory = false;
   const auto *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr());
-  if (!CE) {
-    Call.dump();
+  if (!CE)
     return;
-  }
 
   assert(isStandardNewDelete(Call));
 
@@ -1359,15 +1355,6 @@ MallocChecker::processNewAllocation(const CXXAllocatorCall &Call,
   State = addExtentSize(C, NE, State, Target);
   State = ProcessZeroAllocCheck(Call, 0, State, Target);
   return State;
-}
-
-void MallocChecker::checkPostStmt(const CXXNewExpr *NE,
-                                  CheckerContext &C) const {
-  // if (!C.getAnalysisManager().getAnalyzerOptions().MayInlineCXXAllocator) {
-  //  if (NE->isArray())
-  //    processNewAllocation(NE, C, C.getSVal(NE),
-  //                         (NE->isArray() ? AF_CXXNewArray : AF_CXXNew));
-  //}
 }
 
 void MallocChecker::checkNewAllocator(const CXXAllocatorCall &Call,
