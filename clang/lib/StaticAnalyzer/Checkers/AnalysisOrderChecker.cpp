@@ -33,18 +33,23 @@ class AnalysisOrderChecker
                      check::PostStmt<ArraySubscriptExpr>,
                      check::PreStmt<CXXNewExpr>,
                      check::PostStmt<CXXNewExpr>,
+                     check::PreStmt<CXXDeleteExpr>,
+                     check::PostStmt<CXXDeleteExpr>,
+                     check::PreStmt<CXXConstructExpr>,
+                     check::PostStmt<CXXConstructExpr>,
                      check::PreStmt<OffsetOfExpr>,
                      check::PostStmt<OffsetOfExpr>,
                      check::PreCall,
                      check::PostCall,
                      check::EndFunction,
+                     check::EndAnalysis,
                      check::NewAllocator,
                      check::Bind,
                      check::PointerEscape,
                      check::RegionChanges,
                      check::LiveSymbols> {
 
-  bool isCallbackEnabled(AnalyzerOptions &Opts, StringRef CallbackName) const {
+  bool isCallbackEnabled(const AnalyzerOptions &Opts, StringRef CallbackName) const {
     return Opts.getCheckerBooleanOption(this, "*") ||
            Opts.getCheckerBooleanOption(this, CallbackName);
   }
@@ -95,6 +100,26 @@ public:
       llvm::errs() << "PostStmt<CXXNewExpr>\n";
   }
 
+  void checkPreStmt(const CXXDeleteExpr *NE, CheckerContext &C) const {
+    if (isCallbackEnabled(C, "PreStmtCXXDeleteExpr"))
+      llvm::errs() << "PreStmt<CXXDeleteExpr>\n";
+  }
+
+  void checkPostStmt(const CXXDeleteExpr *NE, CheckerContext &C) const {
+    if (isCallbackEnabled(C, "PostStmtCXXDeleteExpr"))
+      llvm::errs() << "PostStmt<CXXDeleteExpr>\n";
+  }
+
+  void checkPreStmt(const CXXConstructExpr *NE, CheckerContext &C) const {
+    if (isCallbackEnabled(C, "PreStmtCXXConstructExpr"))
+      llvm::errs() << "PreStmt<CXXConstructExpr>\n";
+  }
+
+  void checkPostStmt(const CXXConstructExpr *NE, CheckerContext &C) const {
+    if (isCallbackEnabled(C, "PostStmtCXXConstructExpr"))
+      llvm::errs() << "PostStmt<CXXConstructExpr>\n";
+  }
+
   void checkPreStmt(const OffsetOfExpr *OOE, CheckerContext &C) const {
     if (isCallbackEnabled(C, "PreStmtOffsetOfExpr"))
       llvm::errs() << "PreStmt<OffsetOfExpr>\n";
@@ -138,6 +163,13 @@ public:
       else if (LastElement.getAs<CFGAutomaticObjDtor>())
         llvm::errs() << "CFGAutomaticObjDtor\n";
     }
+  }
+
+  void checkEndAnalysis(ExplodedGraph &G,
+                        BugReporter &BR,
+                        ExprEngine &Eng) const {
+    if (isCallbackEnabled(BR.getAnalyzerOptions(), "EndAnalysis"))
+      llvm::errs() << "EndAnalysis\n";
   }
 
   void checkNewAllocator(const CXXNewExpr *CNE, SVal Target,
