@@ -1600,15 +1600,14 @@ PathDiagnosticPieceRef TrackConstraintBRVisitor::VisitNode(
 // Implementation of SuppressInvalidationVisitor.
 //===----------------------------------------------------------------------===//
 
-SuppressInvalidationVisitor::
-SuppressInvalidationVisitor(const MemRegion *R, const ExplodedNode *N)
+SuppressInvalidationVisitor::SuppressInvalidationVisitor(const MemRegion *R,
+                                                         const ExplodedNode *N)
     : R(R) {
   if (!N->getState()->contains<HadInvalidation>(R))
     IsSatisfied = true;
 }
 
-void SuppressInvalidationVisitor::Profile(
-    llvm::FoldingSetNodeID &ID) const {
+void SuppressInvalidationVisitor::Profile(llvm::FoldingSetNodeID &ID) const {
   static int id = 0;
   ID.AddPointer(&id);
   ID.Add(R);
@@ -1863,9 +1862,9 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
       // isn't sufficient, because a new visitor is created for each tracked
       // expression, hence the BugReport level set.
       if (BR.addTrackedCondition(N)) {
-        bugreporter::trackExpressionValue(
-            N, Condition, BR, bugreporter::TrackingKind::Condition,
-            /*EnableNullFPSuppression=*/true);
+        bugreporter::trackExpressionValue(N, Condition, BR,
+                                          bugreporter::TrackingKind::Condition,
+                                          /*EnableNullFPSuppression=*/true);
         return constructDebugPieceForTrackedCondition(Condition, N, BRC);
       }
     }
@@ -2040,8 +2039,8 @@ bool bugreporter::trackExpressionValue(const ExplodedNode *InputNode,
 
     if (R) {
 
-        report.addVisitor(
-            std::make_unique<SuppressInvalidationVisitor>(R, InputNode));
+      report.addVisitor(
+          std::make_unique<SuppressInvalidationVisitor>(R, InputNode));
 
       // Mark both the variable region and its contents as interesting.
       SVal V = LVState->getRawSVal(loc::MemRegionVal(R));

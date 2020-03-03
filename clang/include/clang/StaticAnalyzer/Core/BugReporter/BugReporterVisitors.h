@@ -376,13 +376,13 @@ public:
 ///
 ///   int flag;
 ///   void foo(); // Function body is unknown.
-///   
+///
 ///   void f() {
 ///     flag = 0; // flag is initialized to false.
 ///     int *x = 0; // x is initialized to a nullptr
-///   
+///
 ///     foo(); // Invalidate flag's value.
-///   
+///
 ///     if (flag) // Assume flag is true.
 ///       *x = 5; // x is dereferenced as a nullptr
 ///   }

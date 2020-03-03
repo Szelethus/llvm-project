@@ -42,8 +42,8 @@ public:
     return State;
   }
 
-  void printState(raw_ostream &Out, ProgramStateRef State,
-                          const char *NL, const char *Sep) const override {
+  void printState(raw_ostream &Out, ProgramStateRef State, const char *NL,
+                  const char *Sep) const override {
     for (const HadInvalidation::value_type &I : State->get<HadInvalidation>()) {
       I.first->dumpToStream(Out);
       Out << " was invalidated by '";
