@@ -17,6 +17,7 @@
 #include "clang/Analysis/ProgramPoint.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState_Fwd.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/RangedConstraintManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/Store.h"
@@ -369,28 +370,35 @@ public:
                                    PathSensitiveBugReport &BR) override;
 };
 
+/// Looks for and suppresses reports where the tracked region's last value
+/// change was a result of an invalidation, which is prone to false positives.
+/// In this example, foo *could* change flags value, but it most likely doesn't.
+///
+///   int flag;
+///   void foo(); // Function body is unknown.
+///   
+///   void f() {
+///     flag = 0; // flag is initialized to false.
+///     int *x = 0; // x is initialized to a nullptr
+///   
+///     foo(); // Invalidate flag's value.
+///   
+///     if (flag) // Assume flag is true.
+///       *x = 5; // x is dereferenced as a nullptr
+///   }
 class SuppressInvalidationVisitor final : public BugReporterVisitor {
-  /// The symbolic value for which we are tracking constraints.
-  /// This value is constrained to null in the end of path.
+  /// The region whose changes we're analyzing.
   const MemRegion *R;
 
-  /// Track if we found the node where the constraint was first added.
+  /// Track until the last value change only, whether or not its an
+  /// invalidation.
   bool IsSatisfied = false;
-
-  /// Since the visitors can be registered on nodes previous to the last
-  /// node in the BugReport, but the path traversal always starts with the last
-  /// node, the visitor invariant (that we start with a node in which V is null)
-  /// might not hold when node visitation starts. We are going to start tracking
-  /// from the last node in which the value is UnknownVal.
-  bool IsTrackingTurnedOn = false;
 
 public:
   SuppressInvalidationVisitor(const MemRegion *R, const ExplodedNode *N);
 
   void Profile(llvm::FoldingSetNodeID &ID) const override;
 
-  /// Return the tag associated with this visitor.  This tag will be used
-  /// to make all PathDiagnosticPieces created by this visitor.
   static const char *getTag();
 
   PathDiagnosticPieceRef VisitNode(const ExplodedNode *Succ,
@@ -401,7 +409,9 @@ public:
 } // namespace ento
 } // namespace clang
 
-REGISTER_SET_FACTORY_WITH_PROGRAMSTATE(HadInvalidation, const clang::ento::MemRegion *)
+REGISTER_MAP_FACTORY_WITH_PROGRAMSTATE(HadInvalidation,
+                                       const clang::ento::MemRegion *,
+                                       const clang::LocationContext *)
 
 namespace clang {
 namespace ento {

@@ -3,6 +3,8 @@
 
 #include "Inputs/system-header-simulator.h"
 
+// expected-no-diagnostics
+
 int flag;
 void foo(); // Function body is unknown.
 

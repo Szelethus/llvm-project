@@ -1603,10 +1603,8 @@ PathDiagnosticPieceRef TrackConstraintBRVisitor::VisitNode(
 SuppressInvalidationVisitor::
 SuppressInvalidationVisitor(const MemRegion *R, const ExplodedNode *N)
     : R(R) {
-  // Check if the visitor is disabled.
-  //AnalyzerOptions &Options = N->getState()->getAnalysisManager().options;
-  //if (!Options.ShouldSuppressInlinedDefensiveChecks)
-  //  IsSatisfied = true;
+  if (!N->getState()->contains<HadInvalidation>(R))
+    IsSatisfied = true;
 }
 
 void SuppressInvalidationVisitor::Profile(
@@ -1630,25 +1628,20 @@ SuppressInvalidationVisitor::VisitNode(const ExplodedNode *Succ,
   ProgramStateRef SuccState = Succ->getState();
   ProgramStateRef PredState = Succ->getFirstPred()->getState();
 
-  // Check if in the previous state it was feasible for this value
-  // to *not* be null.
+  // Look for the last write of R.
   if (PredState->getSVal(R) != SuccState->getSVal(R)) {
-    if (!SuccState->contains<HadInvalidation>(R)) {
-      llvm::errs() << "NOT INVALIDATED: ";
-      R->dump();
-      llvm::errs() << '\n';
-      return nullptr;
-    }
+
+    // We found the last write, invalidations previous to this point are not
+    // interesting.
     IsSatisfied = true;
-    PredState->dump();
 
-    if (PredState->contains<HadInvalidation>(R))
+    // R may have been invalidated multiple times, is the last invalidation
+    // also the last write?
+    const LocationContext *CurLC = Succ->getLocationContext();
+    if (CurLC != *SuccState->get<HadInvalidation>(R))
       return nullptr;
 
-    // Check if this is inlined defensive checks.
-    const LocationContext *CurLC = Succ->getLocationContext();
-    BR.markInvalid("Suppress IDC", CurLC);
-    llvm::errs() << "INVALIDATED\n";
+    BR.markInvalid("Suppress IV", CurLC);
     return nullptr;
   }
   return nullptr;

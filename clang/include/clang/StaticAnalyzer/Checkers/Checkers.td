@@ -166,6 +166,13 @@ def NonnullGlobalConstantsChecker: Checker<"NonnilStringConstants">,
   Documentation<NotDocumented>,
   Hidden;
 
+def SuppressInvalidationRelatedReportsChecker
+  : Checker<"SuppressInvalidationRelatedReports">,
+  HelpText<"Suppress reports where the expression that was a cause of a bug "
+           "or other expressions related to this expression have been "
+           "invalidated">,
+  Documentation<NotDocumented>;
+
 } // end "core"
 
 let ParentPackage = CoreAlpha in {
@@ -298,13 +305,6 @@ def StdCLibraryFunctionsChecker : Checker<"StdCLibraryFunctions">,
 def TrustNonnullChecker : Checker<"TrustNonnull">,
   HelpText<"Trust that returns from framework methods annotated with _Nonnull "
            "are not null">,
-  Documentation<NotDocumented>;
-
-def SuppressInvalidationRelatedReportsChecker
-  : Checker<"SuppressInvalidationRelatedReports">,
-  HelpText<"Suppress reports where the expression that was a cause of a bug "
-           "or other expressions related to this expression have been "
-           "invalidated">,
   Documentation<NotDocumented>;
 
 } // end "apiModeling"
