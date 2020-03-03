@@ -32,6 +32,7 @@
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Basic/TargetBuiltins.h"
 #include "clang/Lex/Lexer.h"
 #include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
@@ -1621,40 +1622,37 @@ const char *SuppressInvalidationVisitor::getTag() {
 
 PathDiagnosticPieceRef
 SuppressInvalidationVisitor::VisitNode(const ExplodedNode *Succ,
-                                                BugReporterContext &BRC,
-                                                PathSensitiveBugReport &BR) {
-  const ExplodedNode *Pred = Succ->getFirstPred();
+                                       BugReporterContext &BRC,
+                                       PathSensitiveBugReport &BR) {
   if (IsSatisfied)
     return nullptr;
 
-  // Start tracking after we see the first state in which the value is null.
-  if (!IsTrackingTurnedOn)
-    if (Succ->getState()->getSVal(R).isUnknown())
-      IsTrackingTurnedOn = true;
-Succ->getState()->getSVal(R).dump();
-llvm::errs() << '\n';
-  assert(!IsTrackingTurnedOn);
-  if (!IsTrackingTurnedOn)
-    return nullptr;
-  llvm_unreachable("yo2");
+  ProgramStateRef SuccState = Succ->getState();
+  ProgramStateRef PredState = Succ->getFirstPred()->getState();
 
   // Check if in the previous state it was feasible for this value
   // to *not* be null.
-  if (!Pred->getState()->getSVal(R).isUnknown() &&
-      Succ->getState()->getSVal(R).isUnknown()) {
+  if (PredState->getSVal(R) != SuccState->getSVal(R)) {
+    if (!SuccState->contains<HadInvalidation>(R)) {
+      llvm::errs() << "NOT INVALIDATED: ";
+      R->dump();
+      llvm::errs() << '\n';
+      return nullptr;
+    }
     IsSatisfied = true;
+    PredState->dump();
+
+    if (PredState->contains<HadInvalidation>(R))
+      return nullptr;
 
     // Check if this is inlined defensive checks.
     const LocationContext *CurLC = Succ->getLocationContext();
-    const LocationContext *ReportLC = BR.getErrorNode()->getLocationContext();
-    //if (CurLC != ReportLC && !CurLC->isParentOf(ReportLC)) {
-      BR.markInvalid("Suppress IDC", CurLC);
-      return nullptr;
-    //}
+    BR.markInvalid("Suppress IDC", CurLC);
+    llvm::errs() << "INVALIDATED\n";
+    return nullptr;
   }
   return nullptr;
 }
-
 
 //===----------------------------------------------------------------------===//
 // Implementation of SuppressInlineDefensiveChecksVisitor.

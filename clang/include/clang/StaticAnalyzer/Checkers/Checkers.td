@@ -300,6 +300,13 @@ def TrustNonnullChecker : Checker<"TrustNonnull">,
            "are not null">,
   Documentation<NotDocumented>;
 
+def SuppressInvalidationRelatedReportsChecker
+  : Checker<"SuppressInvalidationRelatedReports">,
+  HelpText<"Suppress reports where the expression that was a cause of a bug "
+           "or other expressions related to this expression have been "
+           "invalidated">,
+  Documentation<NotDocumented>;
+
 } // end "apiModeling"
 
 //===----------------------------------------------------------------------===//

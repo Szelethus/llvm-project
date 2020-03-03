@@ -16,8 +16,10 @@
 
 #include "clang/Analysis/ProgramPoint.h"
 #include "clang/Basic/LLVM.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/RangedConstraintManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/Store.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -396,6 +398,14 @@ public:
                                    PathSensitiveBugReport &BR) override;
 };
 
+} // namespace ento
+} // namespace clang
+
+REGISTER_SET_FACTORY_WITH_PROGRAMSTATE(HadInvalidation, const clang::ento::MemRegion *)
+
+namespace clang {
+namespace ento {
+
 /// The bug visitor will walk all the nodes in a path and collect all the
 /// constraints. When it reaches the root node, will create a refutation
 /// manager and check if the constraints are satisfiable
@@ -416,7 +426,6 @@ public:
   void finalizeVisitor(BugReporterContext &BRC, const ExplodedNode *EndPathNode,
                        PathSensitiveBugReport &BR) override;
 };
-
 
 /// The visitor detects NoteTags and displays the event notes they contain.
 class TagVisitor : public BugReporterVisitor {
