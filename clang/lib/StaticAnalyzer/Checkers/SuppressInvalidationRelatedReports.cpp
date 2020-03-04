@@ -15,6 +15,7 @@
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporterVisitors.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
 #include "llvm/ADT/STLExtras.h"
 
 using namespace clang;
@@ -34,10 +35,8 @@ public:
     if (!Call)
       return State;
 
-    for (const MemRegion *MR : Regions) {
-      if (!llvm::is_contained(ExplicitRegions, MR))
-        State = State->set<HadInvalidation>(MR, LCtx);
-    }
+    for (const MemRegion *MR : Regions)
+      State = State->set<HadInvalidation>(MR, LCtx);
 
     return State;
   }

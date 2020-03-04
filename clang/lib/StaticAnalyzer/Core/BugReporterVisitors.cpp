@@ -1602,8 +1602,11 @@ PathDiagnosticPieceRef TrackConstraintBRVisitor::VisitNode(
 
 SuppressInvalidationVisitor::SuppressInvalidationVisitor(const MemRegion *R,
                                                          const ExplodedNode *N)
-    : R(R) {
-  if (!N->getState()->contains<HadInvalidation>(R))
+    : R(R), SuperRegion(R) {
+  for (HadInvalidation::value_type &HI : N->getState()->get<HadInvalidation>())
+    if (R->isSubRegionOf(HI.first))
+      SuperRegion = HI.first;
+  if (!N->getState()->contains<HadInvalidation>(SuperRegion))
     IsSatisfied = true;
 }
 
@@ -1637,7 +1640,7 @@ SuppressInvalidationVisitor::VisitNode(const ExplodedNode *Succ,
     // R may have been invalidated multiple times, is the last invalidation
     // also the last write?
     const LocationContext *CurLC = Succ->getLocationContext();
-    if (CurLC != *SuccState->get<HadInvalidation>(R))
+    if (CurLC != *SuccState->get<HadInvalidation>(SuperRegion))
       return nullptr;
 
     BR.markInvalid("Suppress IV", CurLC);

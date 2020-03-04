@@ -388,7 +388,11 @@ public:
 ///   }
 class SuppressInvalidationVisitor final : public BugReporterVisitor {
   /// The region whose changes we're analyzing.
-  const MemRegion *R;
+  const MemRegion *const R;
+  /// R may not be directly listed in the invalidation set, but its super region
+  /// might be. In case R *is* in the invalidation set, this field is equal to
+  /// it.
+  const MemRegion *SuperRegion;
 
   /// Track until the last value change only, whether or not its an
   /// invalidation.
