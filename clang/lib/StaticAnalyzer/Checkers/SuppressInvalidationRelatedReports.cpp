@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/ExprCXX.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporterVisitors.h"
@@ -24,7 +25,7 @@ using namespace ento;
 namespace {
 
 class SuppressInvalidationRelatedReportsChecker
-    : public Checker<check::RegionChanges> {
+    : public Checker<check::RegionChanges, check::PostStmt<CXXMemberCallExpr>> {
 public:
   ProgramStateRef
   checkRegionChanges(ProgramStateRef State,
@@ -32,15 +33,13 @@ public:
                      ArrayRef<const MemRegion *> ExplicitRegions,
                      ArrayRef<const MemRegion *> Regions,
                      const LocationContext *LCtx, const CallEvent *Call) const {
-    State->dump();
-    llvm::errs() << '\n';
-    llvm::errs() << '\n';
-    LCtx->dump();
-    llvm::errs() << '\n';
-    llvm::errs() << '\n';
-    llvm::errs() << '\n';
-    State->get
-
+    //State->dump();
+    //llvm::errs() << '\n';
+    //llvm::errs() << '\n';
+    //LCtx->dump();
+    //llvm::errs() << '\n';
+    //llvm::errs() << '\n';
+    //llvm::errs() << '\n';
       // add explicit binds and don't filetr no nothing
     if (!Call)
       return State;
@@ -51,6 +50,11 @@ public:
       State = State->set<HadInvalidation>(MR, Call->getLocationContext());
 
     return State;
+  }
+
+  void checkPostStmt(const CXXMemberCallExpr *M, CheckerContext &C) const {
+    //M->dump();
+    //assert(M->getMethodDecl()->hasBody());
   }
 
   void printState(raw_ostream &Out, ProgramStateRef State, const char *NL,
