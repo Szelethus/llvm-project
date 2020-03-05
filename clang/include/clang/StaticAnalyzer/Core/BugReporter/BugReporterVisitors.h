@@ -415,7 +415,7 @@ public:
 
 REGISTER_MAP_FACTORY_WITH_PROGRAMSTATE(HadInvalidation,
                                        const clang::ento::MemRegion *,
-                                       const clang::LocationContext *)
+                                       clang::ProgramPoint)
 
 namespace clang {
 namespace ento {

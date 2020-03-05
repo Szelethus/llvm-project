@@ -512,8 +512,8 @@ void ExprEngine::VisitCallExpr(const CallExpr *CE, ExplodedNode *Pred,
   for (ExplodedNode *I : dstPreVisit)
     evalCall(dstCallEvaluated, I, *CallTemplate);
 
-  if (dstPreVisit.empty())
-    evalCall(dstCallEvaluated, Pred, *CallTemplate);
+  //if (dstPreVisit.empty())
+  //  evalCall(dstCallEvaluated, Pred, *CallTemplate);
 
   // Finally, perform the post-condition check of the CallExpr and store
   // the created nodes in 'Dst'.

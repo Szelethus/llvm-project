@@ -1632,6 +1632,7 @@ SuppressInvalidationVisitor::VisitNode(const ExplodedNode *Succ,
 
   // Look for the last write of R.
   if (PredState->getSVal(R) != SuccState->getSVal(R)) {
+    Succ->getStmtForDiagnostics();
 
     // We found the last write, invalidations previous to this point are not
     // interesting.
@@ -1639,9 +1640,9 @@ SuppressInvalidationVisitor::VisitNode(const ExplodedNode *Succ,
 
     // R may have been invalidated multiple times, is the last invalidation
     // also the last write?
-    const LocationContext *CurLC = Succ->getLocationContext();
-    if (CurLC != *SuccState->get<HadInvalidation>(SuperRegion))
+    if (Succ->getLocation() != *SuccState->get<HadInvalidation>(SuperRegion))
       return nullptr;
+    const LocationContext *CurLC = Succ->getLocationContext();
 
     BR.markInvalid("Suppress IV", CurLC);
     return nullptr;

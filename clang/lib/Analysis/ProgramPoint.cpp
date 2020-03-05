@@ -43,6 +43,24 @@ ProgramPoint ProgramPoint::getProgramPoint(const Stmt *S, ProgramPoint::Kind K,
   }
 }
 
+const Stmt *ProgramPoint::getStmtForDiagnostics() const {
+  if (auto SP = getAs<StmtPoint>())
+    return SP->getStmt();
+  if (auto BE = getAs<BlockEdge>())
+    return BE->getSrc()->getTerminatorStmt();
+  if (auto CE = getAs<CallEnter>())
+    return CE->getCallExpr();
+  if (auto CEE = getAs<CallExitEnd>())
+    return CEE->getCalleeContext()->getCallSite();
+  if (auto PIPP = getAs<PostInitializer>())
+    return PIPP->getInitializer()->getInit();
+  if (auto CEB = getAs<CallExitBegin>())
+    return CEB->getReturnStmt();
+  if (auto FEP = getAs<FunctionExitPoint>())
+    return FEP->getStmt();
+  return nullptr;
+}
+
 LLVM_DUMP_METHOD void ProgramPoint::dump() const {
   return printJson(llvm::errs());
 }

@@ -330,24 +330,7 @@ const Stmt *ExplodedNode::getStmtForDiagnostics() const {
         ->getCallSite();
   }
   // Otherwise, see if the node's program point directly points to a statement.
-  // FIXME: Refactor into a ProgramPoint method?
-  ProgramPoint P = getLocation();
-  if (auto SP = P.getAs<StmtPoint>())
-    return SP->getStmt();
-  if (auto BE = P.getAs<BlockEdge>())
-    return BE->getSrc()->getTerminatorStmt();
-  if (auto CE = P.getAs<CallEnter>())
-    return CE->getCallExpr();
-  if (auto CEE = P.getAs<CallExitEnd>())
-    return CEE->getCalleeContext()->getCallSite();
-  if (auto PIPP = P.getAs<PostInitializer>())
-    return PIPP->getInitializer()->getInit();
-  if (auto CEB = P.getAs<CallExitBegin>())
-    return CEB->getReturnStmt();
-  if (auto FEP = P.getAs<FunctionExitPoint>())
-    return FEP->getStmt();
-
-  return nullptr;
+  return getLocation().getStmtForDiagnostics();
 }
 
 const Stmt *ExplodedNode::getNextStmtForDiagnostics() const {

@@ -18,6 +18,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/ErrorHandling.h"
 
 using namespace clang;
 using namespace ento;
@@ -25,7 +26,7 @@ using namespace ento;
 namespace {
 
 class SuppressInvalidationRelatedReportsChecker
-    : public Checker<check::RegionChanges, check::PostStmt<CXXMemberCallExpr>> {
+    : public Checker<check::RegionChanges> {
 public:
   ProgramStateRef
   checkRegionChanges(ProgramStateRef State,
@@ -33,38 +34,23 @@ public:
                      ArrayRef<const MemRegion *> ExplicitRegions,
                      ArrayRef<const MemRegion *> Regions,
                      const LocationContext *LCtx, const CallEvent *Call) const {
-    //State->dump();
-    //llvm::errs() << '\n';
-    //llvm::errs() << '\n';
-    //LCtx->dump();
-    //llvm::errs() << '\n';
-    //llvm::errs() << '\n';
-    //llvm::errs() << '\n';
-      // add explicit binds and don't filetr no nothing
     if (!Call)
       return State;
-    
-    llvm::errs() << "NONNULL\n";
 
     for (const MemRegion *MR : Regions)
-      State = State->set<HadInvalidation>(MR, Call->getLocationContext());
+      State = State->set<HadInvalidation>(MR, Call->getProgramPoint());
 
     return State;
-  }
-
-  void checkPostStmt(const CXXMemberCallExpr *M, CheckerContext &C) const {
-    //M->dump();
-    //assert(M->getMethodDecl()->hasBody());
   }
 
   void printState(raw_ostream &Out, ProgramStateRef State, const char *NL,
                   const char *Sep) const override {
     for (const HadInvalidation::value_type &I : State->get<HadInvalidation>()) {
       I.first->dumpToStream(Out);
-      Out << " was invalidated by '";
-      if (const auto *ND = dyn_cast<NamedDecl>(I.second->getDecl()))
-        if (const IdentifierInfo *II = ND->getIdentifier())
-          Out << II->getName();
+      Out << " was invalidated on '";
+      if (const Stmt *InvalidatingStmt = I.second.getStmtForDiagnostics())
+        InvalidatingStmt->getBeginLoc().print(Out,
+            State->getAnalysisManager().getSourceManager());
       Out << "'" << NL;
     }
   }

@@ -191,6 +191,10 @@ public:
     return ID.ComputeHash();
   }
 
+  /// If the program point corresponds to a statement, retrieve that statement.
+  /// Useful for figuring out where to put a warning or a note.
+  const Stmt *getStmtForDiagnostics() const;
+
   bool operator==(const ProgramPoint & RHS) const {
     return Data1 == RHS.Data1 &&
            Data2 == RHS.Data2 &&
