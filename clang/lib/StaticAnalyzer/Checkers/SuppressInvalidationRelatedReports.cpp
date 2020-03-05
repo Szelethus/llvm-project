@@ -49,8 +49,8 @@ public:
       I.first->dumpToStream(Out);
       Out << " was invalidated on '";
       if (const Stmt *InvalidatingStmt = I.second.getStmtForDiagnostics())
-        InvalidatingStmt->getBeginLoc().print(Out,
-            State->getAnalysisManager().getSourceManager());
+        InvalidatingStmt->getBeginLoc().print(
+            Out, State->getAnalysisManager().getSourceManager());
       Out << "'" << NL;
     }
   }
