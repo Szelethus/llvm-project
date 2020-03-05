@@ -1813,7 +1813,7 @@ TrackControlDependencyCondBRVisitor::VisitNode(const ExplodedNode *N,
       if (BR.addTrackedCondition(N)) {
         bugreporter::trackExpressionValue(
             N, Condition, BR, bugreporter::TrackingKind::Condition,
-            /*EnableNullFPSuppression=*/false);
+            /*EnableNullFPSuppression=*/true);
         return constructDebugPieceForTrackedCondition(Condition, N, BRC);
       }
     }

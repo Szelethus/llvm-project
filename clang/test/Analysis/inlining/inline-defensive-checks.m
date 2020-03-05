@@ -108,11 +108,9 @@ int dontSuppressNilReceiverRetNull(Foo* fPtr) {
   unsigned zero = 0;
   fPtr = retNil();
   // On a path where fPtr is nil, mem should be nil.
-  // The warning is not suppressed because the receiver being nil is not
-  // directly related to the value that triggers the warning.
   Foo *mem = [fPtr getFooPtr];
   if (!mem)
-    return 5/zero; // expected-warning {{Division by zero}}
+    return 5/zero;
   return 0;
 }
 
