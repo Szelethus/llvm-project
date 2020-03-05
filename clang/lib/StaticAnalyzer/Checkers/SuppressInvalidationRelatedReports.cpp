@@ -32,11 +32,23 @@ public:
                      ArrayRef<const MemRegion *> ExplicitRegions,
                      ArrayRef<const MemRegion *> Regions,
                      const LocationContext *LCtx, const CallEvent *Call) const {
+    State->dump();
+    llvm::errs() << '\n';
+    llvm::errs() << '\n';
+    LCtx->dump();
+    llvm::errs() << '\n';
+    llvm::errs() << '\n';
+    llvm::errs() << '\n';
+    State->get
+
+      // add explicit binds and don't filetr no nothing
     if (!Call)
       return State;
+    
+    llvm::errs() << "NONNULL\n";
 
     for (const MemRegion *MR : Regions)
-      State = State->set<HadInvalidation>(MR, LCtx);
+      State = State->set<HadInvalidation>(MR, Call->getLocationContext());
 
     return State;
   }
