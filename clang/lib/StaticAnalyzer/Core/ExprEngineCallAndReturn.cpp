@@ -509,11 +509,10 @@ void ExprEngine::VisitCallExpr(const CallExpr *CE, ExplodedNode *Pred,
   // Evaluate the function call.  We try each of the checkers
   // to see if the can evaluate the function call.
   ExplodedNodeSet dstCallEvaluated;
-  for (ExplodedNode *I : dstPreVisit)
-    evalCall(dstCallEvaluated, I, *CallTemplate);
-
-  //if (dstPreVisit.empty())
-  //  evalCall(dstCallEvaluated, Pred, *CallTemplate);
+  for (ExplodedNodeSet::iterator I = dstPreVisit.begin(), E = dstPreVisit.end();
+       I != E; ++I) {
+    evalCall(dstCallEvaluated, *I, *CallTemplate);
+  }
 
   // Finally, perform the post-condition check of the CallExpr and store
   // the created nodes in 'Dst'.
