@@ -203,8 +203,8 @@ void struct_switten(S s) {
   s.z.a = 5;
 }
 // CHECK:      GEN sets: blockid (varname [blockid, elementid])
-// CHECK-NEXT: 1 (global_var, [1, 14]) <invalidation>
-// CHECK-NEXT: 1 (s.z.a, [1, 19]) <write>
+// CHECK-NEXT: 1 (global_var, [1, 12]) <invalidation>
+// CHECK-NEXT: 1 (s.z.a, [1, 17]) <write>
 // CHECK-NEXT: 2 (s, [2, 0]) <write>
 // CHECK-NEXT: 2 (s.x, [2, 0]) <write>
 // CHECK-NEXT: 2 (s.y, [2, 0]) <write>
@@ -213,21 +213,21 @@ void struct_switten(S s) {
 // CHECK-NEXT: 2 (s.z.b, [2, 0]) <write>
 // CHECK-NEXT: KILL sets: blockid (varname [blockid, elementid])
 // CHECK-NEXT: 1 (s.z.a, [2, 0]) <write>
-// CHECK-NEXT: 2 (s.z.a, [1, 19]) <write>
+// CHECK-NEXT: 2 (s.z.a, [1, 17]) <write>
 // CHECK-NEXT: Reaching definition sets: blockid IN/OUT (varname [blockid, elementid])
-// CHECK-NEXT: 0 IN (global_var, [1, 14]) <invalidation>
+// CHECK-NEXT: 0 IN (global_var, [1, 12]) <invalidation>
 // CHECK-NEXT: 0 IN (s, [2, 0]) <write>
 // CHECK-NEXT: 0 IN (s.x, [2, 0]) <write>
 // CHECK-NEXT: 0 IN (s.y, [2, 0]) <write>
 // CHECK-NEXT: 0 IN (s.z, [2, 0]) <write>
-// CHECK-NEXT: 0 IN (s.z.a, [1, 19]) <write>
+// CHECK-NEXT: 0 IN (s.z.a, [1, 17]) <write>
 // CHECK-NEXT: 0 IN (s.z.b, [2, 0]) <write>
-// CHECK-NEXT: 0 OUT (global_var, [1, 14]) <invalidation>
+// CHECK-NEXT: 0 OUT (global_var, [1, 12]) <invalidation>
 // CHECK-NEXT: 0 OUT (s, [2, 0]) <write>
 // CHECK-NEXT: 0 OUT (s.x, [2, 0]) <write>
 // CHECK-NEXT: 0 OUT (s.y, [2, 0]) <write>
 // CHECK-NEXT: 0 OUT (s.z, [2, 0]) <write>
-// CHECK-NEXT: 0 OUT (s.z.a, [1, 19]) <write>
+// CHECK-NEXT: 0 OUT (s.z.a, [1, 17]) <write>
 // CHECK-NEXT: 0 OUT (s.z.b, [2, 0]) <write>
 // CHECK-NEXT: 1 IN (s, [2, 0]) <write>
 // CHECK-NEXT: 1 IN (s.x, [2, 0]) <write>
@@ -235,12 +235,12 @@ void struct_switten(S s) {
 // CHECK-NEXT: 1 IN (s.z, [2, 0]) <write>
 // CHECK-NEXT: 1 IN (s.z.a, [2, 0]) <write>
 // CHECK-NEXT: 1 IN (s.z.b, [2, 0]) <write>
-// CHECK-NEXT: 1 OUT (global_var, [1, 14]) <invalidation>
+// CHECK-NEXT: 1 OUT (global_var, [1, 12]) <invalidation>
 // CHECK-NEXT: 1 OUT (s, [2, 0]) <write>
 // CHECK-NEXT: 1 OUT (s.x, [2, 0]) <write>
 // CHECK-NEXT: 1 OUT (s.y, [2, 0]) <write>
 // CHECK-NEXT: 1 OUT (s.z, [2, 0]) <write>
-// CHECK-NEXT: 1 OUT (s.z.a, [1, 19]) <write>
+// CHECK-NEXT: 1 OUT (s.z.a, [1, 17]) <write>
 // CHECK-NEXT: 1 OUT (s.z.b, [2, 0]) <write>
 // CHECK-NEXT: 2 OUT (s, [2, 0]) <write>
 // CHECK-NEXT: 2 OUT (s.x, [2, 0]) <write>
