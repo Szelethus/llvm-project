@@ -103,8 +103,7 @@ using GenSet = std::set<Definition, VariableLess>;
 
 /// A set of definitions sorted by the variable and the location of the
 /// definition. For KILL, IN and OUT sets this is correct, because a CFGBlock
-/// may kill several definitions of the same variables from different locations,
-/// etc.
+/// may kill several definitions of the same variables from different locations.
 using DefinitionSet = std::set<Definition, VarAndCFGElementLess>;
 
 //===----------------------------------------------------------------------===//
@@ -125,7 +124,7 @@ protected:
 /// Responsible for building the GEN sets for each basic block.
 ///
 /// Since pointer escapes or function calls in general require us to generate
-/// definitions that are invalidation, we need to gather all variables relevant
+/// definitions that are invalidations, we need to gather all variables relevant
 /// for this analysis, like parameters, locals and globals. We refer to this
 /// stage as 'variable finding':
 ///   * Collect all non-local, visible variables
