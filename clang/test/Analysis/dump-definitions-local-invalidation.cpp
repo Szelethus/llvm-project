@@ -5,6 +5,8 @@
 // RUN:   -analyzer-checker=debug.DumpReachingDefinitions \
 // RUN:   2>&1 | FileCheck %s
 
+int global_var;
+
 namespace simple_invalidation {
 
 bool coin();
