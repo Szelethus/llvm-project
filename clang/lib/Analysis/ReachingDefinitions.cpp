@@ -36,6 +36,44 @@ using DefinitionKind = Definition::DefinitionKind;
 // Utility functions.
 //===----------------------------------------------------------------------===//
 
+/// Print a field chain, e.g. 's.x.y'. Mind that even the indirection operator
+/// (->) will be written as a dot, but that shouldn't really be an issue since
+/// we don't argue about pointees.
+static void dumpFieldChain(const FieldChainTy &FieldChain) {
+  for (const FieldDecl *Field : FieldChain)
+    llvm::errs() << "." + Field->getNameAsString();
+}
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+LLVM_DUMP_METHOD static void dumpFieldChainNL(const FieldChainTy &FieldChain) {
+  dumpFieldChain(FieldChain);
+  llvm::errs() << '\n';
+}
+#endif
+
+/// The reaching definitions calculator implemented here uses the CFG and some
+/// AST analysis and does not employ points-to analysis, so we're ignoring
+/// any field that is indirectly contained.
+static bool hasIndirection(FieldChainTy FieldChain) {
+  if (FieldChain.empty())
+    return false;
+
+  FieldChainTy::iterator It = llvm::find_if(FieldChain, [](const FieldDecl *F) {
+    return ento::Loc::isLocType(F->getType());
+  });
+
+  // Yay, no indirection in the chain.
+  if (It == FieldChain.end())
+    return false;
+
+  // If the last element in the chain is a LocType, we're not arguing about
+  // aliasing, only the value of a pointer object. That is fine.
+  if (*It == FieldChain.back())
+    return false;
+
+  return true;
+}
+
 /// Visit each field of a 'variable', and its subfields recursively, and call
 /// the callback on each.
 ///
@@ -43,15 +81,8 @@ using DefinitionKind = Definition::DefinitionKind;
 template <class CallBack>
 static void forAllFields(const VarDecl *Var, FieldChainTy FieldChain,
                          CallBack CB) {
-  // Let's not argue about pointees. For the following code snippet:
-  //   s.x->y = 4;
-  // We would like to note a write to s.x, but not to s.x->y.
-  if (FieldChain.size() != 1)
-    if (std::find_if(FieldChain.begin(), FieldChain.end(),
-                     [](const FieldDecl *F) {
-                       return ento::Loc::isLocType(F->getType());
-                     }) != FieldChain.end())
-      return;
+  if (hasIndirection(FieldChain))
+    return;
 
   const RecordDecl *R = nullptr;
   if (FieldChain.empty())
@@ -105,9 +136,7 @@ bool operator<(const FieldChainTy &Lhs, const FieldChainTy &Rhs) {
 
 void Definition::dump() const {
   llvm::errs() << "(" << Var->getNameAsString();
-
-  for (const FieldDecl *Field : FieldChain)
-    llvm::errs() << "." + Field->getNameAsString();
+  dumpFieldChain(FieldChain);
 
   llvm::errs() << ", [" << getCFGBlock()->getIndexInCFG() << ", "
                << E.getIndexInBlock() << "])"
