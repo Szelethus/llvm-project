@@ -212,6 +212,10 @@ public:
   using PackageInfoList = llvm::SmallVector<PackageInfo, 0>;
 
 private:
+  /// Default initialization function for checkers -- since CheckerManager
+  /// includes this header, we need to make it a template parameter, and since
+  /// the checker must be a template parameter as well, we can't put this in the
+  /// cpp file.
   template <typename MGR, typename T> static void initializeManager(MGR &mgr) {
     mgr.template registerChecker<T>();
   }
@@ -229,6 +233,9 @@ public:
 
   /// Adds a checker to the registry. Use this templated overload when your
   /// checker does not require any custom initialization.
+  /// This function isn't really needed and probably causes more headaches than
+  /// the tiny convenience that it provides, but external plugins might use it,
+  /// and there isn't a strong incentive to remove it.
   template <class T>
   void addChecker(StringRef FullName, StringRef Desc, StringRef DocsUri,
                   bool IsHidden = false) {
