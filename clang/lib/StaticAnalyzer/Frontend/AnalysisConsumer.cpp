@@ -86,7 +86,8 @@ class TextDiagnostics : public PathDiagnosticConsumer {
 public:
   TextDiagnostics(DiagnosticsEngine &Diag, bool ShouldIncludePath,
                   const AnalyzerOptions &AnOpts)
-      : DiagEng(Diag), IncludePath(ShouldIncludePath),
+      : PathDiagnosticConsumer(ShouldIncludePath ? PD_TEXT : PD_TEXT_MINIMAL),
+        DiagEng(Diag), IncludePath(ShouldIncludePath),
         ShouldEmitAsError(AnOpts.AnalyzerWerror),
         FixitsAsRemarks(AnOpts.ShouldEmitFixItHintsAsRemarks) {}
   ~TextDiagnostics() override {}
@@ -167,10 +168,19 @@ public:
 };
 } // end anonymous namespace
 
+static bool wasTextDiagnosticsAddedAlready(PathDiagnosticConsumers &C) {
+  return llvm::find_if(C, [](const PathDiagnosticConsumer *PD) {
+           return PD->getKind() == PD_TEXT;
+         }) != C.end();
+}
+
 void ento::createTextPathDiagnosticConsumer(
     AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
     const std::string &Prefix, const clang::Preprocessor &PP,
     const cross_tu::CrossTranslationUnitContext &CTU) {
+
+  if (wasTextDiagnosticsAddedAlready(C))
+    return;
 
   C.emplace_back(new TextDiagnostics(PP.getDiagnostics(),
                                      /*ShouldIncludePath*/ true, AnalyzerOpts));
@@ -180,6 +190,10 @@ void ento::createTextMinimalPathDiagnosticConsumer(
     AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
     const std::string &Prefix, const clang::Preprocessor &PP,
     const cross_tu::CrossTranslationUnitContext &CTU) {
+
+  if (wasTextDiagnosticsAddedAlready(C))
+    return;
+
   C.emplace_back(new TextDiagnostics(PP.getDiagnostics(),
                                      /*ShouldIncludePath*/ false, AnalyzerOpts));
 }

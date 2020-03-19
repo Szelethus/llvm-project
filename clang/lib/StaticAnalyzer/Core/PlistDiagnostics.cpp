@@ -574,7 +574,8 @@ PlistDiagnostics::PlistDiagnostics(
     AnalyzerOptions &AnalyzerOpts, const std::string &output,
     const Preprocessor &PP, const cross_tu::CrossTranslationUnitContext &CTU,
     bool supportsMultipleFiles)
-    : OutputFile(output), PP(PP), CTU(CTU), AnOpts(AnalyzerOpts),
+    : PathDiagnosticConsumer(PD_PLIST), OutputFile(output), PP(PP), CTU(CTU),
+      AnOpts(AnalyzerOpts),
       SupportsCrossFileDiagnostics(supportsMultipleFiles) {
 
   // TODO: Emit an error here.

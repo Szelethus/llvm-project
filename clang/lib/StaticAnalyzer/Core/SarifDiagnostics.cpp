@@ -33,14 +33,13 @@ class SarifDiagnostics : public PathDiagnosticConsumer {
 public:
   SarifDiagnostics(AnalyzerOptions &, const std::string &Output,
                    const LangOptions &LO)
-      : OutputFile(Output), LO(LO) {}
+      : PathDiagnosticConsumer(PD_SARIF), OutputFile(Output), LO(LO) {}
   ~SarifDiagnostics() override = default;
 
   void FlushDiagnosticsImpl(std::vector<const PathDiagnostic *> &Diags,
                             FilesMade *FM) override;
 
   StringRef getName() const override { return "SarifDiagnostics"; }
-  void *getTag() const override { static int x; return &x; }
   PathGenerationScheme getGenerationScheme() const override { return Minimal; }
   bool supportsLogicalOpControlFlow() const override { return true; }
   bool supportsCrossFileDiagnostics() const override { return true; }

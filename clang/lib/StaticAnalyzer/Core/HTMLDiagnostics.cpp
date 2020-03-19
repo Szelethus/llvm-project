@@ -68,7 +68,8 @@ class HTMLDiagnostics : public PathDiagnosticConsumer {
 public:
   HTMLDiagnostics(AnalyzerOptions &AnalyzerOpts, const std::string &OutputDir,
                   const Preprocessor &pp, bool supportsMultipleFiles)
-      : Directory(OutputDir), PP(pp), AnalyzerOpts(AnalyzerOpts),
+      : PathDiagnosticConsumer(PD_HTML),
+      Directory(OutputDir), PP(pp), AnalyzerOpts(AnalyzerOpts),
         SupportsCrossFileDiagnostics(supportsMultipleFiles) {}
 
   ~HTMLDiagnostics() override { FlushDiagnostics(nullptr); }
@@ -79,8 +80,6 @@ public:
   StringRef getName() const override {
     return "HTMLDiagnostics";
   }
-
-  void *getTag() const override { static int x; return &x; }
 
   bool supportsCrossFileDiagnostics() const override {
     return SupportsCrossFileDiagnostics;

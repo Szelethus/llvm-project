@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/Analysis/PathDiagnostic.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
@@ -26,7 +27,8 @@ class TestAction : public ASTFrontendAction {
     llvm::raw_ostream &Output;
 
   public:
-    DiagConsumer(llvm::raw_ostream &Output) : Output(Output) {}
+    DiagConsumer(llvm::raw_ostream &Output)
+        : PathDiagnosticConsumer(PD_TEXT_MINIMAL), Output(Output) {}
     void FlushDiagnosticsImpl(std::vector<const PathDiagnostic *> &Diags,
                               FilesMade *filesMade) override {
       for (const auto *PD : Diags)
