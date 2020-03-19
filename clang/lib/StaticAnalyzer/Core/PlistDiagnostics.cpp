@@ -45,8 +45,8 @@ namespace {
     AnalyzerOptions &AnOpts;
     const bool SupportsCrossFileDiagnostics;
   public:
-    PlistDiagnostics(AnalyzerOptions &AnalyzerOpts, const std::string &prefix,
-                     const Preprocessor &PP,
+    PlistDiagnostics(AnalyzerOptions &AnalyzerOpts,
+                     const std::string &OutputFile, const Preprocessor &PP,
                      const cross_tu::CrossTranslationUnitContext &CTU,
                      bool supportsMultipleFiles);
 
@@ -576,23 +576,38 @@ PlistDiagnostics::PlistDiagnostics(
     bool supportsMultipleFiles)
     : OutputFile(output), PP(PP), CTU(CTU), AnOpts(AnalyzerOpts),
       SupportsCrossFileDiagnostics(supportsMultipleFiles) {
+
+  // TODO: Emit an error here.
+  if (OutputFile.empty())
+    return;
+
   // FIXME: Will be used by a later planned change.
   (void)this->CTU;
 }
 
 void ento::createPlistDiagnosticConsumer(
     AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
-    const std::string &s, const Preprocessor &PP,
+    const std::string &OutputFile, const Preprocessor &PP,
     const cross_tu::CrossTranslationUnitContext &CTU) {
-  C.push_back(new PlistDiagnostics(AnalyzerOpts, s, PP, CTU,
+
+  // TODO: Emit an error here.
+  if (OutputFile.empty())
+    return;
+
+  C.push_back(new PlistDiagnostics(AnalyzerOpts, OutputFile, PP, CTU,
                                    /*supportsMultipleFiles*/ false));
 }
 
 void ento::createPlistMultiFileDiagnosticConsumer(
     AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
-    const std::string &s, const Preprocessor &PP,
+    const std::string &OutputFile, const Preprocessor &PP,
     const cross_tu::CrossTranslationUnitContext &CTU) {
-  C.push_back(new PlistDiagnostics(AnalyzerOpts, s, PP, CTU,
+
+  // TODO: Emit an error here.
+  if (OutputFile.empty())
+    return;
+
+  C.push_back(new PlistDiagnostics(AnalyzerOpts, OutputFile, PP, CTU,
                                    /*supportsMultipleFiles*/ true));
 }
 void PlistDiagnostics::FlushDiagnosticsImpl(

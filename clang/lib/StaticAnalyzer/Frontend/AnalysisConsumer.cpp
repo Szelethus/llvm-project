@@ -78,19 +78,21 @@ void ento::createTextPathDiagnosticConsumer(
     AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
     const std::string &Prefix, const clang::Preprocessor &PP,
     const cross_tu::CrossTranslationUnitContext &CTU) {
-  llvm_unreachable("'text' consumer should be enabled on ClangDiags");
+  llvm_unreachable("The 'text' output should have been created on its own!");
 }
 
 namespace {
-class ClangDiagPathDiagConsumer : public PathDiagnosticConsumer {
-  DiagnosticsEngine &Diag;
+/// Emitsd minimal diagnostics (report message + notes) for the 'none' output
+/// type to the standard error, or to to compliment many others. Emits detailed
+/// diagnostics in textual format for the 'text' output type.
+class TextDiagnostics : public PathDiagnosticConsumer {
+  DiagnosticsEngine &DiagEng;
   bool IncludePath = false, ShouldEmitAsError = false, FixitsAsRemarks = false;
 
 public:
-  ClangDiagPathDiagConsumer(DiagnosticsEngine &Diag)
-      : Diag(Diag) {}
-  ~ClangDiagPathDiagConsumer() override {}
-  StringRef getName() const override { return "ClangDiags"; }
+  TextDiagnostics(DiagnosticsEngine &Diag) : DiagEng(Diag) {}
+  ~TextDiagnostics() override {}
+  StringRef getName() const override { return "TextDiagnostics"; }
 
   bool supportsLogicalOpControlFlow() const override { return true; }
   bool supportsCrossFileDiagnostics() const override { return true; }
@@ -107,20 +109,21 @@ public:
                             FilesMade *filesMade) override {
     unsigned WarnID =
         ShouldEmitAsError
-            ? Diag.getCustomDiagID(DiagnosticsEngine::Error, "%0")
-            : Diag.getCustomDiagID(DiagnosticsEngine::Warning, "%0");
-    unsigned NoteID = Diag.getCustomDiagID(DiagnosticsEngine::Note, "%0");
-    unsigned RemarkID = Diag.getCustomDiagID(DiagnosticsEngine::Remark, "%0");
+            ? DiagEng.getCustomDiagID(DiagnosticsEngine::Error, "%0")
+            : DiagEng.getCustomDiagID(DiagnosticsEngine::Warning, "%0");
+    unsigned NoteID = DiagEng.getCustomDiagID(DiagnosticsEngine::Note, "%0");
+    unsigned RemarkID =
+        DiagEng.getCustomDiagID(DiagnosticsEngine::Remark, "%0");
 
     auto reportPiece =
         [&](unsigned ID, SourceLocation Loc, StringRef String,
             ArrayRef<SourceRange> Ranges, ArrayRef<FixItHint> Fixits) {
           if (!FixitsAsRemarks) {
-            Diag.Report(Loc, ID) << String << Ranges << Fixits;
+            DiagEng.Report(Loc, ID) << String << Ranges << Fixits;
           } else {
-            Diag.Report(Loc, ID) << String << Ranges;
+            DiagEng.Report(Loc, ID) << String << Ranges;
             for (const FixItHint &Hint : Fixits) {
-              SourceManager &SM = Diag.getSourceManager();
+              SourceManager &SM = DiagEng.getSourceManager();
               llvm::SmallString<128> Str;
               llvm::raw_svector_ostream OS(Str);
               // FIXME: Add support for InsertFromRange and
@@ -130,7 +133,7 @@ public:
               OS << SM.getSpellingColumnNumber(Hint.RemoveRange.getBegin())
                  << "-" << SM.getSpellingColumnNumber(Hint.RemoveRange.getEnd())
                  << ": '" << Hint.CodeToInsert << "'";
-              Diag.Report(Loc, RemarkID) << OS.str();
+              DiagEng.Report(Loc, RemarkID) << OS.str();
             }
           }
         };
@@ -256,8 +259,7 @@ public:
   void DigestAnalyzerOptions() {
     if (Opts->AnalysisDiagOpt != PD_NONE) {
       // Create the PathDiagnosticConsumer.
-      ClangDiagPathDiagConsumer *clangDiags =
-          new ClangDiagPathDiagConsumer(PP.getDiagnostics());
+      TextDiagnostics *clangDiags = new TextDiagnostics(PP.getDiagnostics());
       PathConsumers.push_back(clangDiags);
 
       if (Opts->AnalyzerWerror)
@@ -269,7 +271,7 @@ public:
       if (Opts->AnalysisDiagOpt == PD_TEXT) {
         clangDiags->enablePaths();
 
-      } else if (!OutDir.empty()) {
+      } else {
         switch (Opts->AnalysisDiagOpt) {
         default:
 #define ANALYSIS_DIAGNOSTICS(NAME, CMDFLAG, DESC, CREATEFN)                    \

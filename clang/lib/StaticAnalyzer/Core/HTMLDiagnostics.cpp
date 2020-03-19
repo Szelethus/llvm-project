@@ -66,11 +66,9 @@ class HTMLDiagnostics : public PathDiagnosticConsumer {
   const bool SupportsCrossFileDiagnostics;
 
 public:
-  HTMLDiagnostics(AnalyzerOptions &AnalyzerOpts,
-                  const std::string& prefix,
-                  const Preprocessor &pp,
-                  bool supportsMultipleFiles)
-      : Directory(prefix), PP(pp), AnalyzerOpts(AnalyzerOpts),
+  HTMLDiagnostics(AnalyzerOptions &AnalyzerOpts, const std::string &OutputDir,
+                  const Preprocessor &pp, bool supportsMultipleFiles)
+      : Directory(OutputDir), PP(pp), AnalyzerOpts(AnalyzerOpts),
         SupportsCrossFileDiagnostics(supportsMultipleFiles) {}
 
   ~HTMLDiagnostics() override { FlushDiagnostics(nullptr); }
@@ -136,16 +134,26 @@ private:
 
 void ento::createHTMLDiagnosticConsumer(
     AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
-    const std::string &prefix, const Preprocessor &PP,
+    const std::string &OutputDir, const Preprocessor &PP,
     const cross_tu::CrossTranslationUnitContext &) {
-  C.push_back(new HTMLDiagnostics(AnalyzerOpts, prefix, PP, true));
+
+  // TODO: Emit an error here.
+  if (OutputDir.empty())
+    return;
+
+  C.push_back(new HTMLDiagnostics(AnalyzerOpts, OutputDir, PP, true));
 }
 
 void ento::createHTMLSingleFileDiagnosticConsumer(
     AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
-    const std::string &prefix, const Preprocessor &PP,
+    const std::string &OutputDir, const Preprocessor &PP,
     const cross_tu::CrossTranslationUnitContext &) {
-  C.push_back(new HTMLDiagnostics(AnalyzerOpts, prefix, PP, false));
+
+  // TODO: Emit an error here.
+  if (OutputDir.empty())
+    return;
+
+  C.push_back(new HTMLDiagnostics(AnalyzerOpts, OutputDir, PP, false));
 }
 
 //===----------------------------------------------------------------------===//
