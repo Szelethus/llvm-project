@@ -80,6 +80,8 @@ public:
     return "HTMLDiagnostics";
   }
 
+  void *getTag() const override { static int x; return &x; }
+
   bool supportsCrossFileDiagnostics() const override {
     return SupportsCrossFileDiagnostics;
   }

@@ -74,24 +74,23 @@ void ento::createPlistHTMLDiagnosticConsumer(
   createPlistMultiFileDiagnosticConsumer(AnalyzerOpts, C, prefix, PP, CTU);
 }
 
-void ento::createTextPathDiagnosticConsumer(
-    AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
-    const std::string &Prefix, const clang::Preprocessor &PP,
-    const cross_tu::CrossTranslationUnitContext &CTU) {
-  llvm_unreachable("The 'text' output should have been created on its own!");
-}
-
 namespace {
 /// Emitsd minimal diagnostics (report message + notes) for the 'none' output
 /// type to the standard error, or to to compliment many others. Emits detailed
 /// diagnostics in textual format for the 'text' output type.
 class TextDiagnostics : public PathDiagnosticConsumer {
   DiagnosticsEngine &DiagEng;
-  bool IncludePath = false, ShouldEmitAsError = false, FixitsAsRemarks = false;
+  const bool IncludePath = false, ShouldEmitAsError = false,
+             FixitsAsRemarks = false;
 
 public:
-  TextDiagnostics(DiagnosticsEngine &Diag) : DiagEng(Diag) {}
+  TextDiagnostics(DiagnosticsEngine &Diag, bool ShouldIncludePath,
+                  const AnalyzerOptions &AnOpts)
+      : DiagEng(Diag), IncludePath(ShouldIncludePath),
+        ShouldEmitAsError(AnOpts.AnalyzerWerror),
+        FixitsAsRemarks(AnOpts.ShouldEmitFixItHintsAsRemarks) {}
   ~TextDiagnostics() override {}
+
   StringRef getName() const override { return "TextDiagnostics"; }
 
   bool supportsLogicalOpControlFlow() const override { return true; }
@@ -100,10 +99,6 @@ public:
   PathGenerationScheme getGenerationScheme() const override {
     return IncludePath ? Minimal : None;
   }
-
-  void enablePaths() { IncludePath = true; }
-  void enableWerror() { ShouldEmitAsError = true; }
-  void enableFixitsAsRemarks() { FixitsAsRemarks = true; }
 
   void FlushDiagnosticsImpl(std::vector<const PathDiagnostic *> &Diags,
                             FilesMade *filesMade) override {
@@ -171,6 +166,23 @@ public:
   }
 };
 } // end anonymous namespace
+
+void ento::createTextPathDiagnosticConsumer(
+    AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
+    const std::string &Prefix, const clang::Preprocessor &PP,
+    const cross_tu::CrossTranslationUnitContext &CTU) {
+
+  C.emplace_back(new TextDiagnostics(PP.getDiagnostics(),
+                                     /*ShouldIncludePath*/ true, AnalyzerOpts));
+}
+
+void ento::createTextMinimalPathDiagnosticConsumer(
+    AnalyzerOptions &AnalyzerOpts, PathDiagnosticConsumers &C,
+    const std::string &Prefix, const clang::Preprocessor &PP,
+    const cross_tu::CrossTranslationUnitContext &CTU) {
+  C.emplace_back(new TextDiagnostics(PP.getDiagnostics(),
+                                     /*ShouldIncludePath*/ false, AnalyzerOpts));
+}
 
 //===----------------------------------------------------------------------===//
 // AnalysisConsumer declaration.
@@ -258,39 +270,26 @@ public:
 
   void DigestAnalyzerOptions() {
     if (Opts->AnalysisDiagOpt != PD_NONE) {
-      // Create the PathDiagnosticConsumer.
-      TextDiagnostics *clangDiags = new TextDiagnostics(PP.getDiagnostics());
-      PathConsumers.push_back(clangDiags);
-
-      if (Opts->AnalyzerWerror)
-        clangDiags->enableWerror();
-
-      if (Opts->ShouldEmitFixItHintsAsRemarks)
-        clangDiags->enableFixitsAsRemarks();
-
-      if (Opts->AnalysisDiagOpt == PD_TEXT) {
-        clangDiags->enablePaths();
-
-      } else {
-        switch (Opts->AnalysisDiagOpt) {
-        default:
+      switch (Opts->AnalysisDiagOpt) {
+      default:
 #define ANALYSIS_DIAGNOSTICS(NAME, CMDFLAG, DESC, CREATEFN)                    \
-  case PD_##NAME:                                                              \
-    CREATEFN(*Opts.get(), PathConsumers, OutDir, PP, CTU);                     \
-    break;
+      case PD_##NAME:                                                          \
+        CREATEFN(*Opts.get(), PathConsumers, OutDir, PP, CTU);                 \
+        createTextMinimalPathDiagnosticConsumer(*Opts.get(), PathConsumers,    \
+                                                OutDir, PP, CTU);              \
+        break;
 #include "clang/StaticAnalyzer/Core/Analyses.def"
-        }
       }
     }
 
-    // Create the analyzer component creators.
-    switch (Opts->AnalysisStoreOpt) {
-    default:
-      llvm_unreachable("Unknown store manager.");
+  // Create the analyzer component creators.
+  switch (Opts->AnalysisStoreOpt) {
+  default:
+    llvm_unreachable("Unknown store manager.");
 #define ANALYSIS_STORE(NAME, CMDFLAG, DESC, CREATEFN)           \
       case NAME##Model: CreateStoreMgr = CREATEFN; break;
 #include "clang/StaticAnalyzer/Core/Analyses.def"
-    }
+  }
 
     switch (Opts->AnalysisConstraintsOpt) {
     default:
@@ -299,39 +298,38 @@ public:
       case NAME##Model: CreateConstraintMgr = CREATEFN; break;
 #include "clang/StaticAnalyzer/Core/Analyses.def"
     }
-  }
+}
 
   void DisplayFunction(const Decl *D, AnalysisMode Mode,
                        ExprEngine::InliningModes IMode) {
-    if (!Opts->AnalyzerDisplayProgress)
-      return;
+  if (!Opts->AnalyzerDisplayProgress)
+    return;
 
-    SourceManager &SM = Mgr->getASTContext().getSourceManager();
-    PresumedLoc Loc = SM.getPresumedLoc(D->getLocation());
-    if (Loc.isValid()) {
-      llvm::errs() << "ANALYZE";
+  SourceManager &SM = Mgr->getASTContext().getSourceManager();
+  PresumedLoc Loc = SM.getPresumedLoc(D->getLocation());
+  if (Loc.isValid()) {
+    llvm::errs() << "ANALYZE";
 
-      if (Mode == AM_Syntax)
-        llvm::errs() << " (Syntax)";
-      else if (Mode == AM_Path) {
-        llvm::errs() << " (Path, ";
-        switch (IMode) {
-          case ExprEngine::Inline_Minimal:
-            llvm::errs() << " Inline_Minimal";
-            break;
-          case ExprEngine::Inline_Regular:
-            llvm::errs() << " Inline_Regular";
-            break;
-        }
-        llvm::errs() << ")";
+    if (Mode == AM_Syntax)
+      llvm::errs() << " (Syntax)";
+    else if (Mode == AM_Path) {
+      llvm::errs() << " (Path, ";
+      switch (IMode) {
+      case ExprEngine::Inline_Minimal:
+        llvm::errs() << " Inline_Minimal";
+        break;
+      case ExprEngine::Inline_Regular:
+        llvm::errs() << " Inline_Regular";
+        break;
       }
-      else
-        assert(Mode == (AM_Syntax | AM_Path) && "Unexpected mode!");
+      llvm::errs() << ")";
+    } else
+      assert(Mode == (AM_Syntax | AM_Path) && "Unexpected mode!");
 
-      llvm::errs() << ": " << Loc.getFilename() << ' '
-                           << getFunctionName(D) << '\n';
-    }
+    llvm::errs() << ": " << Loc.getFilename() << ' ' << getFunctionName(D)
+                 << '\n';
   }
+}
 
   void Initialize(ASTContext &Context) override {
     Ctx = &Context;
@@ -472,7 +470,7 @@ private:
 
   /// Print \p S to stderr if \c Opts->AnalyzerDisplayProgress is set.
   void reportAnalyzerProgress(StringRef S);
-};
+  }; // namespace
 } // end anonymous namespace
 
 

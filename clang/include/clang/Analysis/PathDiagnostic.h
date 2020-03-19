@@ -17,6 +17,7 @@
 #include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceLocation.h"
+#include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/Optional.h"
@@ -58,7 +59,7 @@ namespace ento {
 
 class PathDiagnostic;
 
-class PathDiagnosticConsumer {
+class PathDiagnosticConsumer : public llvm::FoldingSetNode {
 public:
   class PDFileEntry : public llvm::FoldingSetNode {
   public:
@@ -96,7 +97,7 @@ private:
   virtual void anchor();
 
 public:
-  PathDiagnosticConsumer() = default;
+  PathDiagnosticConsumer(AnalysisDiagClients Kind) : Kind(Kind) {}
   virtual ~PathDiagnosticConsumer();
 
   void FlushDiagnostics(FilesMade *FilesMade);
@@ -105,6 +106,8 @@ public:
                                     FilesMade *filesMade) = 0;
 
   virtual StringRef getName() const = 0;
+
+  AnalysisDiagClients getKind() const { return Kind; }
 
   void HandlePathDiagnostic(std::unique_ptr<PathDiagnostic> D);
 
@@ -136,6 +139,7 @@ public:
 protected:
   bool flushed = false;
   llvm::FoldingSet<PathDiagnostic> Diags;
+  AnalysisDiagClients Kind;
 };
 
 //===----------------------------------------------------------------------===//

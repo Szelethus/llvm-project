@@ -40,6 +40,7 @@ public:
                             FilesMade *FM) override;
 
   StringRef getName() const override { return "SarifDiagnostics"; }
+  void *getTag() const override { static int x; return &x; }
   PathGenerationScheme getGenerationScheme() const override { return Minimal; }
   bool supportsLogicalOpControlFlow() const override { return true; }
   bool supportsCrossFileDiagnostics() const override { return true; }

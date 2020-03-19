@@ -58,6 +58,10 @@ ANALYSIS_DIAGNOSTICS(SARIF, "sarif", "Output analysis results in a SARIF file",
 ANALYSIS_DIAGNOSTICS(TEXT, "text", "Text output of analysis results",
                      createTextPathDiagnosticConsumer)
 
+ANALYSIS_DIAGNOSTICS(TEXT_MINIMAL, "text-minimal",
+                     "Text output of analysis results",
+                     createTextMinimalPathDiagnosticConsumer)
+
 #ifndef ANALYSIS_PURGE
 #define ANALYSIS_PURGE(NAME, CMDFLAG, DESC)
 #endif
