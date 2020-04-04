@@ -21,6 +21,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
@@ -48,8 +49,13 @@ class CallAndMessageChecker
   mutable std::unique_ptr<BugType> BT_call_few_args;
 
 public:
-  DefaultBool Check_CallAndMessageUnInitRefArg;
-  CheckerNameRef CheckName_CallAndMessageUnInitRefArg;
+  enum CheckKind {
+    CK_CallAndMessageUnInitRefArg,
+    CK_NumCheckKinds
+  };
+
+  DefaultBool ChecksEnabled[CK_NumCheckKinds];
+  CheckerNameRef CheckNames[CK_NumCheckKinds];
 
   void checkPreStmt(const CallExpr *CE, CheckerContext &C) const;
   void checkPreStmt(const CXXDeleteExpr *DE, CheckerContext &C) const;
@@ -144,7 +150,7 @@ bool CallAndMessageChecker::uninitRefOrPointer(
     CheckerContext &C, const SVal &V, SourceRange ArgRange, const Expr *ArgEx,
     std::unique_ptr<BugType> &BT, const ParmVarDecl *ParamDecl, const char *BD,
     int ArgumentNumber) const {
-  if (!Check_CallAndMessageUnInitRefArg)
+  if (!ChecksEnabled[CK_CallAndMessageUnInitRefArg])
     return false;
 
   // No parameter declaration available, i.e. variadic function argument.
@@ -313,32 +319,6 @@ bool CallAndMessageChecker::PreVisitProcessArg(CheckerContext &C,
 
 void CallAndMessageChecker::checkPreStmt(const CallExpr *CE,
                                          CheckerContext &C) const{
-
-  const Expr *Callee = CE->getCallee()->IgnoreParens();
-  ProgramStateRef State = C.getState();
-  const LocationContext *LCtx = C.getLocationContext();
-  SVal L = State->getSVal(Callee, LCtx);
-
-  if (L.isUndef()) {
-    if (!BT_call_undef)
-      BT_call_undef.reset(new BuiltinBug(
-          this, "Called function pointer is an uninitialized pointer value"));
-    emitBadCall(BT_call_undef.get(), C, Callee);
-    return;
-  }
-
-  ProgramStateRef StNonNull, StNull;
-  std::tie(StNonNull, StNull) = State->assume(L.castAs<DefinedOrUnknownSVal>());
-
-  if (StNull && !StNonNull) {
-    if (!BT_call_null)
-      BT_call_null.reset(new BuiltinBug(
-          this, "Called function pointer is null (null dereference)"));
-    emitBadCall(BT_call_null.get(), C, Callee);
-    return;
-  }
-
-  C.addTransition(StNonNull);
 }
 
 void CallAndMessageChecker::checkPreStmt(const CXXDeleteExpr *DE,
@@ -368,6 +348,33 @@ void CallAndMessageChecker::checkPreStmt(const CXXDeleteExpr *DE,
 void CallAndMessageChecker::checkPreCall(const CallEvent &Call,
                                          CheckerContext &C) const {
   ProgramStateRef State = C.getState();
+  if (const CallExpr *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr())) {
+    const Expr *Callee = CE->getCallee()->IgnoreParens();
+    const LocationContext *LCtx = C.getLocationContext();
+    SVal L = State->getSVal(Callee, LCtx);
+
+    if (L.isUndef()) {
+      if (!BT_call_undef)
+        BT_call_undef.reset(new BuiltinBug(
+            this, "Called function pointer is an uninitialized pointer value"));
+      emitBadCall(BT_call_undef.get(), C, Callee);
+      return;
+    }
+
+    ProgramStateRef StNonNull, StNull;
+    std::tie(StNonNull, StNull) =
+        State->assume(L.castAs<DefinedOrUnknownSVal>());
+
+    if (StNull && !StNonNull) {
+      if (!BT_call_null)
+        BT_call_null.reset(new BuiltinBug(
+            this, "Called function pointer is null (null dereference)"));
+      emitBadCall(BT_call_null.get(), C, Callee);
+      return;
+    }
+
+    State = StNonNull;
+  }
 
   // If this is a call to a C++ method, check if the callee is null or
   // undefined.
@@ -609,12 +616,14 @@ bool ento::shouldRegisterCallAndMessageChecker(const CheckerManager &mgr) {
   return true;
 }
 
-void ento::registerCallAndMessageUnInitRefArg(CheckerManager &mgr) {
-  CallAndMessageChecker *Checker = mgr.getChecker<CallAndMessageChecker>();
-  Checker->Check_CallAndMessageUnInitRefArg = true;
-  Checker->CheckName_CallAndMessageUnInitRefArg = mgr.getCurrentCheckerName();
-}
+#define REGISTER_CHECKER(name)                                                 \
+  void ento::register##name(CheckerManager &mgr) {                             \
+    CallAndMessageChecker *checker = mgr.getChecker<CallAndMessageChecker>();                  \
+    checker->ChecksEnabled[CallAndMessageChecker::CK_##name] = true;                   \
+    checker->CheckNames[CallAndMessageChecker::CK_##name] =                            \
+        mgr.getCurrentCheckerName();                                           \
+  }                                                                            \
+                                                                               \
+  bool ento::shouldRegister##name(const CheckerManager &mgr) { return true; }
 
-bool ento::shouldRegisterCallAndMessageUnInitRefArg(const CheckerManager &mgr) {
-  return true;
-}
+REGISTER_CHECKER(CallAndMessageUnInitRefArg)
