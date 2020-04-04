@@ -1741,6 +1741,15 @@ ProgramStateRef MallocChecker::FreeMemAux(
   const MemRegion *R = ArgVal.getAsRegion();
   const Expr *ParentExpr = Call.getOriginExpr();
 
+  // NOTE: There is a philosophical question to be answered when we detect a
+  // bug, but the checker under whose name we would emit the error is disabled.
+  // Generally speaking, the MallocChecker family is an integral part of the
+  // Static Analyzer, and disabling any part of it should only be done under
+  // exceptional circumstances, such as frequent false positives. If this is the
+  // case, we can reasonably believe that there are serious faults in our
+  // understanding of the source code, and even if we don't emit an warning, we
+  // should terminate further analysis with a sink node.
+
   // Nonlocs can't be freed, of course.
   // Non-region locations (labels and fixed addresses) also shouldn't be freed.
   if (!R) {

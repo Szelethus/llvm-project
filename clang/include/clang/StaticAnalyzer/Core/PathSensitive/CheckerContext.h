@@ -175,8 +175,7 @@ public:
   /// @param Pred The transition will be generated from the specified Pred node
   ///             to the newly generated node.
   /// @param Tag The tag to uniquely identify the creation site.
-  ExplodedNode *addTransition(ProgramStateRef State,
-                              ExplodedNode *Pred,
+  ExplodedNode *addTransition(ProgramStateRef State, ExplodedNode *Pred,
                               const ProgramPointTag *Tag = nullptr) {
     return addTransitionImpl(State, false, Pred, Tag);
   }
@@ -189,12 +188,14 @@ public:
     return addTransitionImpl(State ? State : getState(), true, Pred, Tag);
   }
 
-  /// Generates a sink node, and adds a new transition with it, essentially
-  /// halting the exploration on the current path.
-  ExplodedNode *addSink(const ProgramPointTag *Tag = nullptr) {
-    return addTransition(getState(),
-                         generateSink(getState(), getPredecessor()));
+  /// Add a sink node to the current path of execution, halting analysis.
+  void addSink(ProgramStateRef State = nullptr,
+               const ProgramPointTag *Tag = nullptr) {
+    // Say this 3 times fast.
+    State = State ? State : getState();
+    addTransition(State, generateSink(State, getPredecessor()));
   }
+
   /// Generate a transition to a node that will be used to report
   /// an error. This node will be a sink. That is, it will stop exploration of
   /// the given path.
