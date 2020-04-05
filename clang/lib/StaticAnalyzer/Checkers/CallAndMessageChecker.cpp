@@ -30,8 +30,7 @@ using namespace ento;
 namespace {
 
 class CallAndMessageChecker
-  : public Checker< check::PreStmt<CallExpr>,
-                    check::PreStmt<CXXDeleteExpr>,
+  : public Checker< check::PreStmt<CXXDeleteExpr>,
                     check::PreObjCMessage,
                     check::ObjCMessageNil,
                     check::PreCall > {
@@ -57,7 +56,6 @@ public:
   DefaultBool ChecksEnabled[CK_NumCheckKinds];
   CheckerNameRef CheckNames[CK_NumCheckKinds];
 
-  void checkPreStmt(const CallExpr *CE, CheckerContext &C) const;
   void checkPreStmt(const CXXDeleteExpr *DE, CheckerContext &C) const;
   void checkPreObjCMessage(const ObjCMethodCall &msg, CheckerContext &C) const;
 
@@ -315,10 +313,6 @@ bool CallAndMessageChecker::PreVisitProcessArg(CheckerContext &C,
   }
 
   return false;
-}
-
-void CallAndMessageChecker::checkPreStmt(const CallExpr *CE,
-                                         CheckerContext &C) const{
 }
 
 void CallAndMessageChecker::checkPreStmt(const CXXDeleteExpr *DE,
