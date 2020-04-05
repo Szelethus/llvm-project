@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/ExprCXX.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/Basic/TargetInfo.h"
@@ -30,8 +31,7 @@ using namespace ento;
 namespace {
 
 class CallAndMessageChecker
-  : public Checker< check::PreStmt<CXXDeleteExpr>,
-                    check::PreObjCMessage,
+  : public Checker< check::PreObjCMessage,
                     check::ObjCMessageNil,
                     check::PreCall > {
   mutable std::unique_ptr<BugType> BT_call_null;
@@ -56,7 +56,6 @@ public:
   DefaultBool ChecksEnabled[CK_NumCheckKinds];
   CheckerNameRef CheckNames[CK_NumCheckKinds];
 
-  void checkPreStmt(const CXXDeleteExpr *DE, CheckerContext &C) const;
   void checkPreObjCMessage(const ObjCMethodCall &msg, CheckerContext &C) const;
 
   /// Fill in the return value that results from messaging nil based on the
@@ -315,30 +314,6 @@ bool CallAndMessageChecker::PreVisitProcessArg(CheckerContext &C,
   return false;
 }
 
-void CallAndMessageChecker::checkPreStmt(const CXXDeleteExpr *DE,
-                                         CheckerContext &C) const {
-
-  SVal Arg = C.getSVal(DE->getArgument());
-  if (Arg.isUndef()) {
-    StringRef Desc;
-    ExplodedNode *N = C.generateErrorNode();
-    if (!N)
-      return;
-    if (!BT_cxx_delete_undef)
-      BT_cxx_delete_undef.reset(
-          new BuiltinBug(this, "Uninitialized argument value"));
-    if (DE->isArrayFormAsWritten())
-      Desc = "Argument to 'delete[]' is uninitialized";
-    else
-      Desc = "Argument to 'delete' is uninitialized";
-    BugType *BT = BT_cxx_delete_undef.get();
-    auto R = std::make_unique<PathSensitiveBugReport>(*BT, Desc, N);
-    bugreporter::trackExpressionValue(N, DE, *R);
-    C.emitReport(std::move(R));
-    return;
-  }
-}
-
 void CallAndMessageChecker::checkPreCall(const CallEvent &Call,
                                          CheckerContext &C) const {
   ProgramStateRef State = C.getState();
@@ -426,6 +401,30 @@ void CallAndMessageChecker::checkPreCall(const CallEvent &Call,
     }
   }
 
+  if (const auto *DC = dyn_cast<CXXDeallocatorCall>(&Call)) {
+    const CXXDeleteExpr *DE = DC->getOriginExpr();
+    assert(DE);
+    SVal Arg = C.getSVal(DE->getArgument());
+    if (Arg.isUndef()) {
+      StringRef Desc;
+      ExplodedNode *N = C.generateErrorNode();
+      if (!N)
+        return;
+      if (!BT_cxx_delete_undef)
+        BT_cxx_delete_undef.reset(
+            new BuiltinBug(this, "Uninitialized argument value"));
+      if (DE->isArrayFormAsWritten())
+        Desc = "Argument to 'delete[]' is uninitialized";
+      else
+        Desc = "Argument to 'delete' is uninitialized";
+      BugType *BT = BT_cxx_delete_undef.get();
+      auto R = std::make_unique<PathSensitiveBugReport>(*BT, Desc, N);
+      bugreporter::trackExpressionValue(N, DE, *R);
+      C.emitReport(std::move(R));
+      return;
+    }
+  }
+
   // Don't check for uninitialized field values in arguments if the
   // caller has a body that is available and we have the chance to inline it.
   // This is a hack, but is a reasonable compromise betweens sometimes warning
@@ -445,8 +444,8 @@ void CallAndMessageChecker::checkPreCall(const CallEvent &Call,
     if(FD && i < FD->getNumParams())
       ParamDecl = FD->getParamDecl(i);
     if (PreVisitProcessArg(C, Call.getArgSVal(i), Call.getArgSourceRange(i),
-                           Call.getArgExpr(i), i,
-                           checkUninitFields, Call, *BT, ParamDecl))
+                           Call.getArgExpr(i), i, checkUninitFields, Call, *BT,
+                           ParamDecl))
       return;
   }
 
