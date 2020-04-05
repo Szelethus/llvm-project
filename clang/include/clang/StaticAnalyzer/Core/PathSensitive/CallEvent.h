@@ -56,8 +56,8 @@ class StackFrameContext;
 namespace ento {
 
 enum CallEventKind {
-  CE_CXXDeallocator,
   CE_Function,
+  CE_CXXDeallocator,
   CE_CXXMember,
   CE_CXXMemberOperator,
   CE_CXXDestructor,

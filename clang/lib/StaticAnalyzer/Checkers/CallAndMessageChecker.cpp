@@ -67,8 +67,15 @@ public:
                                            CheckerContext &C,
                                            ProgramStateRef State) const;
 
+  ProgramStateRef checkCXXMethodCall(const CXXInstanceCall *CC, CheckerContext &C,
+                                  ProgramStateRef State) const;
+
   ProgramStateRef checkParameterCount(const CallEvent &Call, CheckerContext &C,
                                       ProgramStateRef State) const;
+
+  ProgramStateRef checkCXXDeallocation(const CXXDeallocatorCall *DC,
+                                       CheckerContext &C,
+                                       ProgramStateRef State) const;
 
 private:
   bool PreVisitProcessArg(CheckerContext &C, SVal V, SourceRange ArgRange,
@@ -379,6 +386,60 @@ ProgramStateRef CallAndMessageChecker::checkParameterCount(
   return nullptr;
 }
 
+ProgramStateRef CallAndMessageChecker::checkCXXMethodCall(
+    const CXXInstanceCall *CC, CheckerContext &C, ProgramStateRef State) const {
+
+  SVal V = CC->getCXXThisVal();
+  if (V.isUndef()) {
+    if (!BT_cxx_call_undef)
+      BT_cxx_call_undef.reset(
+          new BuiltinBug(this, "Called C++ object pointer is uninitialized"));
+    emitBadCall(BT_cxx_call_undef.get(), C, CC->getCXXThisExpr());
+    return nullptr;
+  }
+
+  ProgramStateRef StNonNull, StNull;
+  std::tie(StNonNull, StNull) = State->assume(V.castAs<DefinedOrUnknownSVal>());
+
+  if (StNull && !StNonNull) {
+    if (!BT_cxx_call_null)
+      BT_cxx_call_null.reset(
+          new BuiltinBug(this, "Called C++ object pointer is null"));
+    emitBadCall(BT_cxx_call_null.get(), C, CC->getCXXThisExpr());
+    return nullptr;
+  }
+
+  return StNonNull;
+}
+
+ProgramStateRef
+CallAndMessageChecker::checkCXXDeallocation(const CXXDeallocatorCall *DC,
+                                            CheckerContext &C,
+                                            ProgramStateRef State) const {
+  const CXXDeleteExpr *DE = DC->getOriginExpr();
+  assert(DE);
+  SVal Arg = C.getSVal(DE->getArgument());
+  if (!Arg.isUndef())
+    return State;
+
+  StringRef Desc;
+  ExplodedNode *N = C.generateErrorNode();
+  if (!N)
+    return nullptr;
+  if (!BT_cxx_delete_undef)
+    BT_cxx_delete_undef.reset(
+        new BuiltinBug(this, "Uninitialized argument value"));
+  if (DE->isArrayFormAsWritten())
+    Desc = "Argument to 'delete[]' is uninitialized";
+  else
+    Desc = "Argument to 'delete' is uninitialized";
+  BugType *BT = BT_cxx_delete_undef.get();
+  auto R = std::make_unique<PathSensitiveBugReport>(*BT, Desc, N);
+  bugreporter::trackExpressionValue(N, DE, *R);
+  C.emitReport(std::move(R));
+  return nullptr;
+}
+
 void CallAndMessageChecker::checkPreCall(const CallEvent &Call,
                                          CheckerContext &C) const {
   ProgramStateRef State = C.getState();
@@ -387,60 +448,28 @@ void CallAndMessageChecker::checkPreCall(const CallEvent &Call,
     if (const CallExpr *CE = dyn_cast_or_null<CallExpr>(Call.getOriginExpr()))
       State = checkFunctionPointerCall(CE, C, State);
 
+    if (!State)
+      return;
+
     if (Call.getDecl())
       State = checkParameterCount(Call, C, State);
+
+    if (!State)
+      return;
+
+    if (const auto *CC = dyn_cast<CXXInstanceCall>(&Call))
+      State = checkCXXMethodCall(CC, C, State);
+
+    if (!State)
+      return;
+
+    if (const auto *DC = dyn_cast<CXXDeallocatorCall>(&Call))
+      State = checkCXXDeallocation(DC, C, State);
+
+    if (!State)
+      return;
   }
 
-  // If this is a call to a C++ method, check if the callee is null or
-  // undefined.
-  if (const CXXInstanceCall *CC = dyn_cast<CXXInstanceCall>(&Call)) {
-    SVal V = CC->getCXXThisVal();
-    if (V.isUndef()) {
-      if (!BT_cxx_call_undef)
-        BT_cxx_call_undef.reset(
-            new BuiltinBug(this, "Called C++ object pointer is uninitialized"));
-      emitBadCall(BT_cxx_call_undef.get(), C, CC->getCXXThisExpr());
-      return;
-    }
-
-    ProgramStateRef StNonNull, StNull;
-    std::tie(StNonNull, StNull) =
-        State->assume(V.castAs<DefinedOrUnknownSVal>());
-
-    if (StNull && !StNonNull) {
-      if (!BT_cxx_call_null)
-        BT_cxx_call_null.reset(
-            new BuiltinBug(this, "Called C++ object pointer is null"));
-      emitBadCall(BT_cxx_call_null.get(), C, CC->getCXXThisExpr());
-      return;
-    }
-
-    State = StNonNull;
-  }
-
-  if (const auto *DC = dyn_cast<CXXDeallocatorCall>(&Call)) {
-    const CXXDeleteExpr *DE = DC->getOriginExpr();
-    assert(DE);
-    SVal Arg = C.getSVal(DE->getArgument());
-    if (Arg.isUndef()) {
-      StringRef Desc;
-      ExplodedNode *N = C.generateErrorNode();
-      if (!N)
-        return;
-      if (!BT_cxx_delete_undef)
-        BT_cxx_delete_undef.reset(
-            new BuiltinBug(this, "Uninitialized argument value"));
-      if (DE->isArrayFormAsWritten())
-        Desc = "Argument to 'delete[]' is uninitialized";
-      else
-        Desc = "Argument to 'delete' is uninitialized";
-      BugType *BT = BT_cxx_delete_undef.get();
-      auto R = std::make_unique<PathSensitiveBugReport>(*BT, Desc, N);
-      bugreporter::trackExpressionValue(N, DE, *R);
-      C.emitReport(std::move(R));
-      return;
-    }
-  }
   const Decl *D = Call.getDecl();
 
   // Don't check for uninitialized field values in arguments if the
