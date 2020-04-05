@@ -12,9 +12,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/ExprCXX.h"
-#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/Basic/TargetInfo.h"
+#include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
@@ -31,9 +31,8 @@ using namespace ento;
 namespace {
 
 class CallAndMessageChecker
-  : public Checker< check::PreObjCMessage,
-                    check::ObjCMessageNil,
-                    check::PreCall > {
+    : public Checker<check::PreObjCMessage, check::ObjCMessageNil,
+                     check::PreCall> {
   mutable std::unique_ptr<BugType> BT_call_null;
   mutable std::unique_ptr<BugType> BT_call_undef;
   mutable std::unique_ptr<BugType> BT_cxx_call_null;
@@ -48,10 +47,7 @@ class CallAndMessageChecker
   mutable std::unique_ptr<BugType> BT_call_few_args;
 
 public:
-  enum CheckKind {
-    CK_CallAndMessageUnInitRefArg,
-    CK_NumCheckKinds
-  };
+  enum CheckKind { CK_CallAndMessageUnInitRefArg, CK_NumCheckKinds };
 
   DefaultBool ChecksEnabled[CK_NumCheckKinds];
   CheckerNameRef CheckNames[CK_NumCheckKinds];
@@ -611,9 +607,9 @@ bool ento::shouldRegisterCallAndMessageChecker(const CheckerManager &mgr) {
 
 #define REGISTER_CHECKER(name)                                                 \
   void ento::register##name(CheckerManager &mgr) {                             \
-    CallAndMessageChecker *checker = mgr.getChecker<CallAndMessageChecker>();                  \
-    checker->ChecksEnabled[CallAndMessageChecker::CK_##name] = true;                   \
-    checker->CheckNames[CallAndMessageChecker::CK_##name] =                            \
+    CallAndMessageChecker *checker = mgr.getChecker<CallAndMessageChecker>();  \
+    checker->ChecksEnabled[CallAndMessageChecker::CK_##name] = true;           \
+    checker->CheckNames[CallAndMessageChecker::CK_##name] =                    \
         mgr.getCurrentCheckerName();                                           \
   }                                                                            \
                                                                                \
