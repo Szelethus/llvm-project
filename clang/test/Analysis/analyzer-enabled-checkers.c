@@ -7,6 +7,7 @@
 // CHECK:      OVERVIEW: Clang Static Analyzer Enabled Checkers List
 // CHECK-EMPTY:
 // CHECK-NEXT: apiModeling.StdCLibraryFunctions
+// CHECK-NEXT: core.CallAndMessageModeling
 // CHECK-NEXT: core.CallAndMessage
 // CHECK-NEXT: apiModeling.StdCLibraryFunctionArgs
 // CHECK-NEXT: apiModeling.TrustNonnull

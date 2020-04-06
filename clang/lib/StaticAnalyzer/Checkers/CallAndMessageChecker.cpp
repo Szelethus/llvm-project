@@ -49,9 +49,36 @@ class CallAndMessageChecker
   mutable std::unique_ptr<BugType> BT_call_few_args;
 
 public:
-  enum CheckKind { CK_CallAndMessageUnInitRefArg, CK_NumCheckKinds };
+  // These correspond with the checker options. Looking at other checkers such
+  // as MallocChecker and CStringChecker, this is similar as to how they pull
+  // off having a modeling class, but emitting diagnostics under a smaller
+  // checker's name that can be safely disabled without disturbing the
+  // underlaying modeling engine.
+  // The reason behind having *checker options* rather then actual *checkers*
+  // here is that CallAndMessage is among the oldest checkers out there, and can
+  // be responsible for the majority of the reports on any given project. This
+  // is obviously not ideal, but changing checker name has the consequence of
+  // changing the issue hashes associated with the reports, and databases
+  // relying on this (CodeChecker, for instance) would suffer greatly.
+  // If we ever end up making changes to the issue hash generation algorithm, or
+  // the warning messages here, we should totally jump on the opportunity to
+  // convert these to actual checkers.
+  enum CheckKind {
+    CK_FunctionPointer,
+    CK_ParameterCount,
+    CK_CXXThisMethodCall,
+    CK_CXXDeallocationArg,
+    CK_ArgInitializedness,
+    CK_ArgPointeeInitializedness,
+    CK_NilReceiver,
+    CK_UndefReceiver,
+    CK_NumCheckKinds
+  };
 
   DefaultBool ChecksEnabled[CK_NumCheckKinds];
+  // The original core.CallAndMessage checker name. This should rather be an
+  // array, as seen in MallocChecker and CStringChecker.
+  CheckerNameRef OriginalName;
 
   void checkPreObjCMessage(const ObjCMethodCall &msg, CheckerContext &C) const;
 
@@ -98,7 +125,7 @@ private:
 
   void LazyInit_BT(const char *desc, std::unique_ptr<BugType> &BT) const {
     if (!BT)
-      BT.reset(new BuiltinBug(this, desc));
+      BT.reset(new BuiltinBug(OriginalName, desc));
   }
   bool uninitRefOrPointer(CheckerContext &C, const SVal &V,
                           SourceRange ArgRange, const Expr *ArgEx,
@@ -163,7 +190,10 @@ bool CallAndMessageChecker::uninitRefOrPointer(
     CheckerContext &C, const SVal &V, SourceRange ArgRange, const Expr *ArgEx,
     std::unique_ptr<BugType> &BT, const ParmVarDecl *ParamDecl, const char *BD,
     int ArgumentNumber) const {
-  if (!ChecksEnabled[CK_CallAndMessageUnInitRefArg])
+
+  // The pointee being uninitialized is a sign of code smell, not a bug, no need
+  // to sink here.
+  if (!ChecksEnabled[CK_ArgPointeeInitializedness])
     return false;
 
   // No parameter declaration available, i.e. variadic function argument.
@@ -265,6 +295,10 @@ bool CallAndMessageChecker::PreVisitProcessArg(CheckerContext &C,
     return true;
 
   if (V.isUndef()) {
+    if (!ChecksEnabled[CK_ArgInitializedness]) {
+      C.addSink();
+      return true;
+    }
     if (ExplodedNode *N = C.generateErrorNode()) {
       LazyInit_BT(BD, BT);
       // Generate a report for this bug.
@@ -291,6 +325,10 @@ bool CallAndMessageChecker::PreVisitProcessArg(CheckerContext &C,
                              D->getStore());
 
     if (F.Find(D->getRegion())) {
+      if (!ChecksEnabled[CK_ArgInitializedness]) {
+        C.addSink();
+        return true;
+      }
       if (ExplodedNode *N = C.generateErrorNode()) {
         LazyInit_BT(BD, BT);
         SmallString<512> Str;
@@ -338,9 +376,14 @@ ProgramStateRef CallAndMessageChecker::checkFunctionPointerCall(
   SVal L = State->getSVal(Callee, LCtx);
 
   if (L.isUndef()) {
+    if (!ChecksEnabled[CK_FunctionPointer]) {
+      C.addSink(State);
+      return nullptr;
+    }
     if (!BT_call_undef)
       BT_call_undef.reset(new BuiltinBug(
-          this, "Called function pointer is an uninitialized pointer value"));
+          OriginalName,
+          "Called function pointer is an uninitialized pointer value"));
     emitBadCall(BT_call_undef.get(), C, Callee);
     return nullptr;
   }
@@ -349,9 +392,14 @@ ProgramStateRef CallAndMessageChecker::checkFunctionPointerCall(
   std::tie(StNonNull, StNull) = State->assume(L.castAs<DefinedOrUnknownSVal>());
 
   if (StNull && !StNonNull) {
+    if (!ChecksEnabled[CK_FunctionPointer]) {
+      C.addSink(StNull);
+      return nullptr;
+    }
     if (!BT_call_null)
-      BT_call_null.reset(new BuiltinBug(
-          this, "Called function pointer is null (null dereference)"));
+      BT_call_null.reset(
+          new BuiltinBug(OriginalName,
+                         "Called function pointer is null (null dereference)"));
     emitBadCall(BT_call_null.get(), C, Callee);
     return nullptr;
   }
@@ -367,6 +415,11 @@ ProgramStateRef CallAndMessageChecker::checkParameterCount(
   unsigned Params = Call.parameters().size();
   if (Call.getNumArgs() >= Params)
     return State;
+
+  if (!ChecksEnabled[CK_ParameterCount]) {
+    C.addSink(State);
+    return nullptr;
+  }
 
   ExplodedNode *N = C.generateErrorNode();
   if (!N)
@@ -395,9 +448,14 @@ ProgramStateRef CallAndMessageChecker::checkCXXMethodCall(
 
   SVal V = CC->getCXXThisVal();
   if (V.isUndef()) {
+    if (!ChecksEnabled[CK_CXXThisMethodCall]) {
+      C.addSink(State);
+      return nullptr;
+    }
     if (!BT_cxx_call_undef)
       BT_cxx_call_undef.reset(
-          new BuiltinBug(this, "Called C++ object pointer is uninitialized"));
+          new BuiltinBug(OriginalName,
+                         "Called C++ object pointer is uninitialized"));
     emitBadCall(BT_cxx_call_undef.get(), C, CC->getCXXThisExpr());
     return nullptr;
   }
@@ -406,9 +464,14 @@ ProgramStateRef CallAndMessageChecker::checkCXXMethodCall(
   std::tie(StNonNull, StNull) = State->assume(V.castAs<DefinedOrUnknownSVal>());
 
   if (StNull && !StNonNull) {
+    if (!ChecksEnabled[CK_CXXThisMethodCall]) {
+      C.addSink(StNull);
+      return nullptr;
+    }
     if (!BT_cxx_call_null)
       BT_cxx_call_null.reset(
-          new BuiltinBug(this, "Called C++ object pointer is null"));
+          new BuiltinBug(OriginalName,
+                         "Called C++ object pointer is null"));
     emitBadCall(BT_cxx_call_null.get(), C, CC->getCXXThisExpr());
     return nullptr;
   }
@@ -426,13 +489,19 @@ CallAndMessageChecker::checkCXXDeallocation(const CXXDeallocatorCall *DC,
   if (!Arg.isUndef())
     return State;
 
+  if (!ChecksEnabled[CK_CXXDeallocationArg]) {
+      C.addSink(State);
+    return nullptr;
+  }
+
   StringRef Desc;
   ExplodedNode *N = C.generateErrorNode();
   if (!N)
     return nullptr;
   if (!BT_cxx_delete_undef)
     BT_cxx_delete_undef.reset(
-        new BuiltinBug(this, "Uninitialized argument value"));
+        new BuiltinBug(OriginalName,
+                       "Uninitialized argument value"));
   if (DE->isArrayFormAsWritten())
     Desc = "Argument to 'delete[]' is uninitialized";
   else
@@ -515,12 +584,16 @@ void CallAndMessageChecker::checkPreObjCMessage(const ObjCMethodCall &msg,
                                                 CheckerContext &C) const {
   SVal recVal = msg.getReceiverSVal();
   if (recVal.isUndef()) {
+    if (!ChecksEnabled[CK_UndefReceiver]) {
+      C.addSink();
+      return;
+    }
     if (ExplodedNode *N = C.generateErrorNode()) {
       BugType *BT = nullptr;
       switch (msg.getMessageKind()) {
       case OCM_Message:
         if (!BT_msg_undef)
-          BT_msg_undef.reset(new BuiltinBug(this,
+          BT_msg_undef.reset(new BuiltinBug(OriginalName,
                                             "Receiver in message expression "
                                             "is an uninitialized value"));
         BT = BT_msg_undef.get();
@@ -528,13 +601,15 @@ void CallAndMessageChecker::checkPreObjCMessage(const ObjCMethodCall &msg,
       case OCM_PropertyAccess:
         if (!BT_objc_prop_undef)
           BT_objc_prop_undef.reset(new BuiltinBug(
-              this, "Property access on an uninitialized object pointer"));
+              OriginalName,
+              "Property access on an uninitialized object pointer"));
         BT = BT_objc_prop_undef.get();
         break;
       case OCM_Subscript:
         if (!BT_objc_subscript_undef)
           BT_objc_subscript_undef.reset(new BuiltinBug(
-              this, "Subscript access on an uninitialized object pointer"));
+              OriginalName,
+              "Subscript access on an uninitialized object pointer"));
         BT = BT_objc_subscript_undef.get();
         break;
       }
@@ -561,10 +636,14 @@ void CallAndMessageChecker::checkObjCMessageNil(const ObjCMethodCall &msg,
 void CallAndMessageChecker::emitNilReceiverBug(CheckerContext &C,
                                                const ObjCMethodCall &msg,
                                                ExplodedNode *N) const {
+  if (!ChecksEnabled[CK_NilReceiver]) {
+    C.addSink();
+    return;
+  }
 
   if (!BT_msg_ret)
-    BT_msg_ret.reset(
-        new BuiltinBug(this, "Receiver in message expression is 'nil'"));
+    BT_msg_ret.reset(new BuiltinBug(OriginalName,
+                                    "Receiver in message expression is 'nil'"));
 
   const ObjCMessageExpr *ME = msg.getOriginExpr();
 
@@ -659,21 +738,34 @@ void CallAndMessageChecker::HandleNilReceiver(CheckerContext &C,
   C.addTransition(state);
 }
 
-void ento::registerCallAndMessageChecker(CheckerManager &mgr) {
+void ento::registerCallAndMessageModeling(CheckerManager &mgr) {
   mgr.registerChecker<CallAndMessageChecker>();
+}
+
+bool ento::shouldRegisterCallAndMessageModeling(const CheckerManager &mgr) {
+  return true;
+}
+
+void ento::registerCallAndMessageChecker(CheckerManager &mgr) {
+  CallAndMessageChecker *checker = mgr.getChecker<CallAndMessageChecker>();
+
+  checker->OriginalName = mgr.getCurrentCheckerName();
+
+#define QUERY_CHECKER_OPTION(OPTION)                                           \
+  checker->ChecksEnabled[CallAndMessageChecker::CK_##OPTION] =                 \
+      mgr.getAnalyzerOptions().getCheckerBooleanOption(                        \
+          mgr.getCurrentCheckerName(), #OPTION);
+
+  QUERY_CHECKER_OPTION(FunctionPointer)
+  QUERY_CHECKER_OPTION(ParameterCount)
+  QUERY_CHECKER_OPTION(CXXThisMethodCall)
+  QUERY_CHECKER_OPTION(CXXDeallocationArg)
+  QUERY_CHECKER_OPTION(ArgInitializedness)
+  QUERY_CHECKER_OPTION(ArgPointeeInitializedness)
+  QUERY_CHECKER_OPTION(NilReceiver)
+  QUERY_CHECKER_OPTION(UndefReceiver)
 }
 
 bool ento::shouldRegisterCallAndMessageChecker(const CheckerManager &mgr) {
   return true;
 }
-
-#define REGISTER_CHECKER(name)                                                 \
-  void ento::register##name(CheckerManager &mgr) {                             \
-    CallAndMessageChecker *checker = mgr.getChecker<CallAndMessageChecker>();  \
-    checker->ChecksEnabled[CallAndMessageChecker::CK_##name] = true;           \
-                                                                               \
-  }                                                                            \
-                                                                               \
-  bool ento::shouldRegister##name(const CheckerManager &mgr) { return true; }
-
-REGISTER_CHECKER(CallAndMessageUnInitRefArg)
