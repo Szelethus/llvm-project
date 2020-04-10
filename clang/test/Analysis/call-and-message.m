@@ -17,7 +17,7 @@
 // Foundation.h (Mac OS X).
 //
 // It includes the basic definitions for the test cases below.
-// Not directly including Foundation.h directly makes this test case 
+// Not directly including Foundation.h directly makes this test case
 // both svelte and portable to non-Mac platforms.
 //===----------------------------------------------------------------------===//
 
@@ -25,14 +25,25 @@ typedef signed char BOOL;
 typedef unsigned int NSUInteger;
 typedef struct _NSZone NSZone;
 @class NSInvocation, NSMethodSignature, NSCoder, NSString, NSEnumerator;
-@protocol NSObject  - (BOOL)isEqual:(id)object; @end
-@protocol NSCopying  - (id)copyWithZone:(NSZone *)zone; @end
-@protocol NSMutableCopying  - (id)mutableCopyWithZone:(NSZone *)zone; @end
-@protocol NSCoding  - (void)encodeWithCoder:(NSCoder *)aCoder; @end
-@interface NSObject <NSObject> {} @end
+@protocol NSObject
+- (BOOL)isEqual:(id)object;
+@end
+@protocol NSCopying
+- (id)copyWithZone:(NSZone *)zone;
+@end
+@protocol NSMutableCopying
+- (id)mutableCopyWithZone:(NSZone *)zone;
+@end
+@protocol NSCoding
+- (void)encodeWithCoder:(NSCoder *)aCoder;
+@end
+@interface NSObject <NSObject> {
+}
+@end
 @class NSString, NSData;
 @class NSString, NSData, NSMutableData, NSMutableDictionary, NSMutableArray;
-typedef struct {} NSFastEnumerationState;
+typedef struct {
+} NSFastEnumerationState;
 @protocol NSFastEnumeration
 - (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state objects:(id *)stackbuf count:(NSUInteger)len;
 @end
@@ -45,7 +56,7 @@ typedef struct {} NSFastEnumerationState;
 - (NSUInteger)length;
 - (void)addObject:(id)object;
 @end
-extern NSString * const NSUndoManagerCheckpointNotification;
+extern NSString *const NSUndoManagerCheckpointNotification;
 
 //===----------------------------------------------------------------------===//
 // Test cases.
@@ -62,28 +73,28 @@ unsigned f1() {
 // CHECK-SAME: <string>29873175e1cc0a98f7040057279925a0</string>
 
 @interface RDar9241180
-@property (readwrite,assign) id x;
--(id)testAnalyzer1:(int) y;
+@property(readwrite, assign) id x;
+- (id)testAnalyzer1:(int)y;
 @end
 
 @implementation RDar9241180
 @synthesize x;
--(id)testAnalyzer1:(int)y {
-    RDar9241180 *o;
-    if (y && o.x) // expected-warning {{Property access on an uninitialized object pointer [core.CallAndMessage]}}
-      return o;
+- (id)testAnalyzer1:(int)y {
+  RDar9241180 *o;
+  if (y && o.x) // expected-warning {{Property access on an uninitialized object pointer [core.CallAndMessage]}}
+    return o;
 
-// TODO: If this hash ever changes, turn core.CallAndMessage:UndefReceiver from
-// a checker option into a checker, as described in the CallAndMessage comments!
-// CHECK: <key>issue_hash_content_of_line_in_context</key>
-// CHECK-SAME: <string>de06a6c7914e7021546808b45253bdc3</string>
+  // TODO: If this hash ever changes, turn core.CallAndMessage:UndefReceiver from
+  // a checker option into a checker, as described in the CallAndMessage comments!
+  // CHECK: <key>issue_hash_content_of_line_in_context</key>
+  // CHECK-SAME: <string>00ddd30796a283de33e662da8449c796</string>
 
-    return o; // expected-warning {{Undefined or garbage value returned to caller [core.uninitialized.UndefReturn]}}
+  return o; // expected-warning {{Undefined or garbage value returned to caller [core.uninitialized.UndefReturn]}}
 }
 @end
 
 // CHECK: <key>issue_hash_content_of_line_in_context</key>
-// CHECK-SAME: <string>7f7991e7642280a33cea7700d1e52f1b</string>
+// CHECK-SAME: <string>8d468e24df7d887f4182bf49f5dd8b71</string>
 
 typedef signed char BOOL;
 typedef unsigned int NSUInteger;
@@ -106,9 +117,9 @@ typedef unsigned int NSUInteger;
   Test *o;
   if (keyed) {
     if (o[self]) // expected-warning {{Subscript access on an uninitialized object pointer [core.CallAndMessage]}}
-      return o; // no-warning (sink)
+      return o;  // no-warning (sink)
   } else {
-    if (o[0]) // expected-warning {{Subscript access on an uninitialized object pointer [core.CallAndMessage]}}
+    if (o[0])   // expected-warning {{Subscript access on an uninitialized object pointer [core.CallAndMessage]}}
       return o; // no-warning (sink)
   }
   return self;
