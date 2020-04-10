@@ -397,9 +397,8 @@ ProgramStateRef CallAndMessageChecker::checkFunctionPointerCall(
       return nullptr;
     }
     if (!BT_call_null)
-      BT_call_null.reset(
-          new BuiltinBug(OriginalName,
-                         "Called function pointer is null (null dereference)"));
+      BT_call_null.reset(new BuiltinBug(
+          OriginalName, "Called function pointer is null (null dereference)"));
     emitBadCall(BT_call_null.get(), C, Callee);
     return nullptr;
   }
@@ -453,9 +452,8 @@ ProgramStateRef CallAndMessageChecker::checkCXXMethodCall(
       return nullptr;
     }
     if (!BT_cxx_call_undef)
-      BT_cxx_call_undef.reset(
-          new BuiltinBug(OriginalName,
-                         "Called C++ object pointer is uninitialized"));
+      BT_cxx_call_undef.reset(new BuiltinBug(
+          OriginalName, "Called C++ object pointer is uninitialized"));
     emitBadCall(BT_cxx_call_undef.get(), C, CC->getCXXThisExpr());
     return nullptr;
   }
@@ -470,8 +468,7 @@ ProgramStateRef CallAndMessageChecker::checkCXXMethodCall(
     }
     if (!BT_cxx_call_null)
       BT_cxx_call_null.reset(
-          new BuiltinBug(OriginalName,
-                         "Called C++ object pointer is null"));
+          new BuiltinBug(OriginalName, "Called C++ object pointer is null"));
     emitBadCall(BT_cxx_call_null.get(), C, CC->getCXXThisExpr());
     return nullptr;
   }
@@ -490,7 +487,7 @@ CallAndMessageChecker::checkCXXDeallocation(const CXXDeallocatorCall *DC,
     return State;
 
   if (!ChecksEnabled[CK_CXXDeallocationArg]) {
-      C.addSink(State);
+    C.addSink(State);
     return nullptr;
   }
 
@@ -500,8 +497,7 @@ CallAndMessageChecker::checkCXXDeallocation(const CXXDeallocatorCall *DC,
     return nullptr;
   if (!BT_cxx_delete_undef)
     BT_cxx_delete_undef.reset(
-        new BuiltinBug(OriginalName,
-                       "Uninitialized argument value"));
+        new BuiltinBug(OriginalName, "Uninitialized argument value"));
   if (DE->isArrayFormAsWritten())
     Desc = "Argument to 'delete[]' is uninitialized";
   else

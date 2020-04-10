@@ -18,12 +18,12 @@
 Foo *getFoo() { return 0; }
 
 void testNullPointerSuppression() {
-	getFoo().ref = 1;
+  getFoo().ref = 1;
 }
 
 void testPositiveNullReference() {
   Foo *x = 0;
-	x.ref = 1; // expected-warning {{The receiver of message 'ref' is nil, which results in forming a null reference [core.CallAndMessage]}}
+  x.ref = 1; // expected-warning {{The receiver of message 'ref' is nil, which results in forming a null reference [core.CallAndMessage]}}
 }
 
 // TODO: If this hash ever changes, turn core.CallAndMessage:NilReceiver from a

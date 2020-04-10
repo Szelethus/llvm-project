@@ -5,7 +5,6 @@
 // Just exercise the analyzer on code that has at one point caused issues
 // (i.e., no assertions or crashes).
 
-
 static void f1(const char *x, char *y) {
   while (*x != 0) {
     *y++ = *x++;

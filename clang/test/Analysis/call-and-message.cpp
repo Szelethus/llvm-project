@@ -62,7 +62,7 @@
 // RUN: cat %t.plist | FileCheck %s
 
 namespace function_pointer {
-using Fn = void(*)();
+using Fn = void (*)();
 
 void uninit() {
   Fn f;
@@ -71,7 +71,7 @@ void uninit() {
 
 void null() {
   Fn f = nullptr;
-  f();  // fn-pointer-warning{{Called function pointer is null (null dereference) [core.CallAndMessage]}}
+  f(); // fn-pointer-warning{{Called function pointer is null (null dereference) [core.CallAndMessage]}}
 }
 
 // TODO: If this hash ever changes, turn
@@ -85,15 +85,15 @@ void null() {
 } // namespace function_pointer
 
 namespace wrong_param_count {
-using FnOneParam = void(*)(int);
-using FnTwoParam = void(*)(int, int);
+using FnOneParam = void (*)(int);
+using FnTwoParam = void (*)(int, int);
 
 void f(int, int) {}
 
 void wrong_cast() {
   FnTwoParam f1 = f;
   FnOneParam f2 = reinterpret_cast<FnOneParam>(f1);
-  f2(5);  // param-count-warning{{Function taking 2 arguments is called with fewer (1) [core.CallAndMessage]}}
+  f2(5); // param-count-warning{{Function taking 2 arguments is called with fewer (1) [core.CallAndMessage]}}
 }
 
 // TODO: If this hash ever changes, turn
@@ -134,7 +134,7 @@ void null() {
 namespace operator_delete {
 void f() {
   int *i;
-  delete i;  // delete-warning{{Argument to 'delete' is uninitialized [core.CallAndMessage]}}
+  delete i; // delete-warning{{Argument to 'delete' is uninitialized [core.CallAndMessage]}}
 }
 
 // TODO: If this hash ever changes, turn
@@ -150,7 +150,7 @@ void consume(T);
 
 void fundamental_uninit() {
   int i;
-  consume(i);  // arg-init-warning{{1st function call argument is an uninitialized value [core.CallAndMessage]}}
+  consume(i); // arg-init-warning{{1st function call argument is an uninitialized value [core.CallAndMessage]}}
 }
 
 struct A {
@@ -159,7 +159,7 @@ struct A {
 
 void record_uninit() {
   A a;
-  consume(a);  // arg-init-warning{{Passed-by-value struct argument contains uninitialized data (e.g., field: 'i') [core.CallAndMessage]}}
+  consume(a); // arg-init-warning{{Passed-by-value struct argument contains uninitialized data (e.g., field: 'i') [core.CallAndMessage]}}
 }
 
 // TODO: If this hash ever changes, turn
