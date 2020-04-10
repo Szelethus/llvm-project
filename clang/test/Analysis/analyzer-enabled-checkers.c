@@ -8,11 +8,11 @@
 // CHECK-EMPTY:
 // CHECK-NEXT: apiModeling.StdCLibraryFunctions
 // CHECK-NEXT: core.CallAndMessageModeling
-// CHECK-NEXT: core.CallAndMessage
 // CHECK-NEXT: apiModeling.StdCLibraryFunctionArgs
 // CHECK-NEXT: apiModeling.TrustNonnull
 // CHECK-NEXT: apiModeling.llvm.CastValue
 // CHECK-NEXT: apiModeling.llvm.ReturnValue
+// CHECK-NEXT: core.CallAndMessage
 // CHECK-NEXT: core.DivideZero
 // CHECK-NEXT: core.DynamicTypePropagation
 // CHECK-NEXT: core.NonNullParamChecker

@@ -29,4 +29,4 @@ void testPositiveNullReference() {
 // TODO: If this hash ever changes, turn core.CallAndMessage:NilReceiver from a
 // checker option into a checker, as described in the CallAndMessage comments!
 // CHECK: <key>issue_hash_content_of_line_in_context</key>
-// CHECK-SAME: <string>a6467c954018a03425ad75adbb48dae7</string>
+// CHECK-SAME: <string>abe2e0574dd901094c511bae2f93f926</string>
