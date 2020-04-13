@@ -1498,9 +1498,8 @@ static bool getOption(const AnalyzerOptions &Options,
 void ento::registerRetainCountChecker(CheckerManager &Mgr) {
   auto *Chk = Mgr.getChecker<RetainCountChecker>();
   Chk->TrackObjCAndCFObjects = true;
-  Chk->TrackNSCFStartParam = getOption(Mgr.getAnalyzerOptions(),
-                                       "TrackNSCFStartParam",
-                                       "true");
+  Chk->TrackNSCFStartParam = Mgr.getAnalyzerOptions().getCheckerBooleanOption(
+      Mgr.getCurrentCheckerName(), "TrackNSCFStartParam");
 }
 
 bool ento::shouldRegisterRetainCountChecker(const CheckerManager &mgr) {
