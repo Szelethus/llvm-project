@@ -1486,7 +1486,6 @@ void ento::registerRetainCountBase(CheckerManager &Mgr) {
 bool ento::shouldRegisterRetainCountBase(const CheckerManager &mgr) {
   return true;
 }
-
 void ento::registerRetainCountChecker(CheckerManager &Mgr) {
   auto *Chk = Mgr.getChecker<RetainCountChecker>();
   Chk->TrackObjCAndCFObjects = true;
@@ -1496,6 +1495,7 @@ void ento::registerRetainCountChecker(CheckerManager &Mgr) {
 #define INIT_BUGTYPE(KIND)                                                     \
   Chk->KIND = std::make_unique<RefCountBug>(Mgr.getCurrentCheckerName(),       \
                                             RefCountBug::KIND);
+  // TODO: Ideally, we should have a checker for each of these bug types.
   INIT_BUGTYPE(UseAfterRelease)
   INIT_BUGTYPE(ReleaseNotOwned)
   INIT_BUGTYPE(DeallocNotOwned)
@@ -1513,6 +1513,26 @@ bool ento::shouldRegisterRetainCountChecker(const CheckerManager &mgr) {
 void ento::registerOSObjectRetainCountChecker(CheckerManager &Mgr) {
   auto *Chk = Mgr.getChecker<RetainCountChecker>();
   Chk->TrackOSObjects = true;
+
+  // FIXME: We want bug reports to always have the same checker name associated
+  // with them, yet here, if RetainCountChecker is disabled but
+  // OSObjectRetainCountChecker is enabled, the checker names will be different.
+  // For the most part, we want **non-hidden checkers** to be associated with
+  // diagnostics, and **hidden checker options** with the fine-tuning of
+  // modeling. Following this logic, OSObjectRetainCountChecker should be the
+  // latter, but we can't just remove it for backward compatibility reasons.
+#define LAZY_INIT_BUGTYPE(KIND)                                                \
+  if (!Chk->KIND)                                                              \
+    Chk->KIND = std::make_unique<RefCountBug>(Mgr.getCurrentCheckerName(),     \
+                                              RefCountBug::KIND);
+  LAZY_INIT_BUGTYPE(UseAfterRelease)
+  LAZY_INIT_BUGTYPE(ReleaseNotOwned)
+  LAZY_INIT_BUGTYPE(DeallocNotOwned)
+  LAZY_INIT_BUGTYPE(FreeNotOwned)
+  LAZY_INIT_BUGTYPE(OverAutorelease)
+  LAZY_INIT_BUGTYPE(ReturnNotOwnedForOwned)
+  LAZY_INIT_BUGTYPE(LeakWithinFunction)
+  LAZY_INIT_BUGTYPE(LeakAtReturn)
 }
 
 bool ento::shouldRegisterOSObjectRetainCountChecker(const CheckerManager &mgr) {
