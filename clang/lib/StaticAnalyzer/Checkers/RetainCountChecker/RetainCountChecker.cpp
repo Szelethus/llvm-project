@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "RetainCountChecker.h"
+#include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 
 using namespace clang;
@@ -701,7 +702,7 @@ void RetainCountChecker::checkSummary(const RetainSummary &Summ,
 
   for (ProgramStateRef St : Out) {
     if (DeallocSent) {
-      C.addTransition(St, C.getPredecessor(), &DeallocSentTag);
+      C.addTransition(St, C.getPredecessor(), &getDeallocSentTag());
     } else {
       C.addTransition(St);
     }
@@ -844,13 +845,13 @@ RetainCountChecker::errorKindToBugKind(RefVal::Kind ErrorKind,
                                        SymbolRef Sym) const {
   switch (ErrorKind) {
     case RefVal::ErrorUseAfterRelease:
-      return useAfterRelease;
+      return *UseAfterRelease;
     case RefVal::ErrorReleaseNotOwned:
-      return releaseNotOwned;
+      return *ReleaseNotOwned;
     case RefVal::ErrorDeallocNotOwned:
       if (Sym->getType()->getPointeeCXXRecordDecl())
-        return freeNotOwned;
-      return deallocNotOwned;
+        return *FreeNotOwned;
+      return *DeallocNotOwned;
     default:
       llvm_unreachable("Unhandled error.");
   }
@@ -946,7 +947,7 @@ bool RetainCountChecker::evalCall(const CallEvent &Call,
       // Assume that output is zero on the other branch.
       NullOutputState = NullOutputState->BindExpr(
           CE, LCtx, C.getSValBuilder().makeNull(), /*Invalidate=*/false);
-      C.addTransition(NullOutputState, &CastFailTag);
+      C.addTransition(NullOutputState, &getCastFailTag());
 
       // And on the original branch assume that both input and
       // output are non-zero.
@@ -1095,7 +1096,7 @@ ExplodedNode * RetainCountChecker::checkReturnWithRetEffect(const ReturnStmt *S,
         if (N) {
           const LangOptions &LOpts = C.getASTContext().getLangOpts();
           auto R =
-              std::make_unique<RefLeakReport>(leakAtReturn, LOpts, N, Sym, C);
+              std::make_unique<RefLeakReport>(*LeakAtReturn, LOpts, N, Sym, C);
           C.emitReport(std::move(R));
         }
         return N;
@@ -1120,7 +1121,7 @@ ExplodedNode * RetainCountChecker::checkReturnWithRetEffect(const ReturnStmt *S,
         ExplodedNode *N = C.addTransition(state, Pred, &ReturnNotOwnedTag);
         if (N) {
           auto R = std::make_unique<RefCountReport>(
-              returnNotOwnedForOwned, C.getASTContext().getLangOpts(), N, Sym);
+              *ReturnNotOwnedForOwned, C.getASTContext().getLangOpts(), N, Sym);
           C.emitReport(std::move(R));
         }
         return N;
@@ -1273,7 +1274,7 @@ RetainCountChecker::handleAutoreleaseCounts(ProgramStateRef state,
     os << "has a +" << V.getCount() << " retain count";
 
     const LangOptions &LOpts = Ctx.getASTContext().getLangOpts();
-    auto R = std::make_unique<RefCountReport>(overAutorelease, LOpts, N, Sym,
+    auto R = std::make_unique<RefCountReport>(*OverAutorelease, LOpts, N, Sym,
                                                os.str());
     Ctx.emitReport(std::move(R));
   }
@@ -1320,7 +1321,7 @@ RetainCountChecker::processLeaks(ProgramStateRef state,
 
   if (N) {
     for (SymbolRef L : Leaked) {
-      const RefCountBug &BT = Pred ? leakWithinFunction : leakAtReturn;
+      const RefCountBug &BT = Pred ? *LeakWithinFunction : *LeakAtReturn;
       Ctx.emitReport(std::make_unique<RefLeakReport>(BT, LOpts, N, L, Ctx));
     }
   }
@@ -1473,8 +1474,13 @@ void RetainCountChecker::printState(raw_ostream &Out, ProgramStateRef State,
 // Checker registration.
 //===----------------------------------------------------------------------===//
 
+std::unique_ptr<CheckerProgramPointTag> RetainCountChecker::DeallocSentTag;
+std::unique_ptr<CheckerProgramPointTag> RetainCountChecker::CastFailTag;
+
 void ento::registerRetainCountBase(CheckerManager &Mgr) {
-  Mgr.registerChecker<RetainCountChecker>();
+  auto *Chk = Mgr.registerChecker<RetainCountChecker>();
+  Chk->DeallocSentTag = std::make_unique<CheckerProgramPointTag>( Chk, "DeallocSent");
+  Chk->CastFailTag = std::make_unique<CheckerProgramPointTag>(Chk, "DynamicCastFail");
 }
 
 bool ento::shouldRegisterRetainCountBase(const CheckerManager &mgr) {
@@ -1486,6 +1492,18 @@ void ento::registerRetainCountChecker(CheckerManager &Mgr) {
   Chk->TrackObjCAndCFObjects = true;
   Chk->TrackNSCFStartParam = Mgr.getAnalyzerOptions().getCheckerBooleanOption(
       Mgr.getCurrentCheckerName(), "TrackNSCFStartParam");
+
+#define INIT_BUGTYPE(KIND)                                                     \
+  Chk->KIND = std::make_unique<RefCountBug>(Mgr.getCurrentCheckerName(),       \
+                                            RefCountBug::KIND);
+  INIT_BUGTYPE(UseAfterRelease)
+  INIT_BUGTYPE(ReleaseNotOwned)
+  INIT_BUGTYPE(DeallocNotOwned)
+  INIT_BUGTYPE(FreeNotOwned)
+  INIT_BUGTYPE(OverAutorelease)
+  INIT_BUGTYPE(ReturnNotOwnedForOwned)
+  INIT_BUGTYPE(LeakWithinFunction)
+  INIT_BUGTYPE(LeakAtReturn)
 }
 
 bool ento::shouldRegisterRetainCountChecker(const CheckerManager &mgr) {
