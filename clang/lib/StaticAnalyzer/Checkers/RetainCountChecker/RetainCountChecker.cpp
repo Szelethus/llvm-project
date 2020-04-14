@@ -1275,7 +1275,7 @@ RetainCountChecker::handleAutoreleaseCounts(ProgramStateRef state,
 
     const LangOptions &LOpts = Ctx.getASTContext().getLangOpts();
     auto R = std::make_unique<RefCountReport>(*OverAutorelease, LOpts, N, Sym,
-                                               os.str());
+                                              os.str());
     Ctx.emitReport(std::move(R));
   }
 
@@ -1479,8 +1479,10 @@ std::unique_ptr<CheckerProgramPointTag> RetainCountChecker::CastFailTag;
 
 void ento::registerRetainCountBase(CheckerManager &Mgr) {
   auto *Chk = Mgr.registerChecker<RetainCountChecker>();
-  Chk->DeallocSentTag = std::make_unique<CheckerProgramPointTag>( Chk, "DeallocSent");
-  Chk->CastFailTag = std::make_unique<CheckerProgramPointTag>(Chk, "DynamicCastFail");
+  Chk->DeallocSentTag =
+      std::make_unique<CheckerProgramPointTag>(Chk, "DeallocSent");
+  Chk->CastFailTag =
+      std::make_unique<CheckerProgramPointTag>(Chk, "DynamicCastFail");
 }
 
 bool ento::shouldRegisterRetainCountBase(const CheckerManager &mgr) {

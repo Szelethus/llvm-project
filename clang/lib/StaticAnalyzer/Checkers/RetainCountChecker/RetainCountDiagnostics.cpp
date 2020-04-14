@@ -65,7 +65,8 @@ StringRef RefCountBug::getDescription() const {
 
 RefCountBug::RefCountBug(CheckerNameRef Checker, RefCountBugKind BT)
     : BugType(Checker, bugTypeToName(BT), categories::MemoryRefCount,
-              /*SuppressOnSink=*/BT == LeakWithinFunction || BT == LeakAtReturn),
+              /*SuppressOnSink=*/BT == LeakWithinFunction ||
+                  BT == LeakAtReturn),
       BT(BT) {}
 
 static bool isNumericLiteralExpression(const Expr *E) {

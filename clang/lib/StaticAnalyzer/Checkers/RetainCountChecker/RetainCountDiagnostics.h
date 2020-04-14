@@ -39,9 +39,7 @@ public:
   RefCountBug(CheckerNameRef Checker, RefCountBugKind BT);
   StringRef getDescription() const;
 
-  RefCountBugKind getBugType() const {
-    return BT;
-  }
+  RefCountBugKind getBugType() const { return BT; }
 
 private:
   RefCountBugKind BT;

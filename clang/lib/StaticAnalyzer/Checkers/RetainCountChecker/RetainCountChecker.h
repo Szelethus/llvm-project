@@ -364,9 +364,7 @@ public:
     return *DeallocSentTag;
   }
 
-  static const CheckerProgramPointTag &getCastFailTag() {
-    return *CastFailTag;
-  }
+  static const CheckerProgramPointTag &getCastFailTag() { return *CastFailTag; }
 
 private:
   /// Perform the necessary checks and state adjustments at the end of the
