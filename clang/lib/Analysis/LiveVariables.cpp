@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/Analysis/Analyses/LiveVariables.h"
+#include "clang/AST/Expr.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/Analysis/AnalysisDeclContext.h"
@@ -209,6 +210,24 @@ static void AddLiveExpr(llvm::ImmutableSet<const Expr *> &Set,
   Set = F.add(Set, LookThroughExpr(E));
 }
 
+static void RemoveLiveExpr(llvm::ImmutableSet<const Expr *> &Set,
+                           llvm::ImmutableSet<const Expr *>::Factory &F,
+                           const Expr *E) {
+  Set = F.remove(Set, E);
+}
+
+static void RemoveLiveDecl(llvm::ImmutableSet<const VarDecl *> &Set,
+                           llvm::ImmutableSet<const VarDecl *>::Factory &F,
+                           const VarDecl *D) {
+  Set = F.remove(Set, D);
+}
+
+static void RemoveBinding(llvm::ImmutableSet<const BindingDecl *> &Set,
+                          llvm::ImmutableSet<const BindingDecl *>::Factory &F,
+                          const BindingDecl *D) {
+  Set = F.remove(Set, D);
+}
+
 void TransferFunctions::Visit(Stmt *S) {
   if (observer)
     observer->observeStmt(S, currentBlock, val);
@@ -216,7 +235,7 @@ void TransferFunctions::Visit(Stmt *S) {
   StmtVisitor<TransferFunctions>::Visit(S);
 
   if (const auto *E = dyn_cast<Expr>(S)) {
-    val.liveExprs = LV.SSetFact.remove(val.liveExprs, E);
+    RemoveLiveExpr(val.liveExprs, LV.SSetFact, E);
   }
 
   // Mark all children expressions live.
@@ -342,15 +361,14 @@ void TransferFunctions::VisitBinaryOperator(BinaryOperator *B) {
       const Decl* D = DR->getDecl();
       bool Killed = false;
 
-      if (const BindingDecl* BD = dyn_cast<BindingDecl>(D)) {
+      if (const BindingDecl *BD = dyn_cast<BindingDecl>(D)) {
         Killed = !BD->getType()->isReferenceType();
         if (Killed)
-          val.liveBindings = LV.BSetFact.remove(val.liveBindings, BD);
+          RemoveBinding(val.liveBindings, LV.BSetFact, BD);
       } else if (const auto *VD = dyn_cast<VarDecl>(D)) {
         Killed = writeShouldKill(VD);
         if (Killed)
-          val.liveDecls = LV.DSetFact.remove(val.liveDecls, VD);
-
+          RemoveLiveDecl(val.liveDecls, LV.DSetFact, VD);
       }
 
       if (Killed && observer)
@@ -384,10 +402,10 @@ void TransferFunctions::VisitDeclStmt(DeclStmt *DS) {
   for (const auto *DI : DS->decls()) {
     if (const auto *DD = dyn_cast<DecompositionDecl>(DI)) {
       for (const auto *BD : DD->bindings())
-        val.liveBindings = LV.BSetFact.remove(val.liveBindings, BD);
+        RemoveBinding(val.liveBindings, LV.BSetFact, BD);
     } else if (const auto *VD = dyn_cast<VarDecl>(DI)) {
       if (!isAlwaysAlive(VD))
-        val.liveDecls = LV.DSetFact.remove(val.liveDecls, VD);
+        RemoveLiveDecl(val.liveDecls, LV.DSetFact, VD);
     }
   }
 }
@@ -406,7 +424,7 @@ void TransferFunctions::VisitObjCForCollectionStmt(ObjCForCollectionStmt *OS) {
   }
 
   if (VD) {
-    val.liveDecls = LV.DSetFact.remove(val.liveDecls, VD);
+    RemoveLiveDecl(val.liveDecls, LV.DSetFact, VD);
     if (observer && DR)
       observer->observerKill(DR);
   }
