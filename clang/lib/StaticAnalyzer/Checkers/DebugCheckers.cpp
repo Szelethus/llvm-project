@@ -136,7 +136,7 @@ public:
   void checkASTCodeBody(const Decl *D, AnalysisManager& Mgr,
                         BugReporter &BR) const {
     if (LiveVariables *L = Mgr.getAnalysis<RelaxedLiveVariables>(D))
-      L->dumpStmtLiveness(Mgr.getSourceManager());
+      L->dumpExprLiveness(Mgr.getSourceManager());
   }
 };
 }
