@@ -2,8 +2,10 @@
 // RUN:   -analyzer-checker=core \
 // RUN:   -analyzer-checker=debug.DumpLiveVars \
 // RUN: 2>&1 | FileCheck %s
-//
+
 // expected-no-diagnostics
+
+
 
 namespace PR18159 {
 class B {
@@ -30,6 +32,7 @@ int test() { // B13 (ENTRY)
     if (p != 0 && // B10 -> B9 B6
 
         getBool() && // B9 -> B8 B6
+
         foo().m && // B8 -> B7 B6
 
         getBool() // B7 -> B6
@@ -106,5 +109,41 @@ int test() { // B13 (ENTRY)
 // CHECK-EMPTY:
 // CHECK-NEXT: [ B13 (live variables at block exit) ]
 
-
 } // namespace PR18159
+
+
+// https://en.wikipedia.org/wiki/Live_variable_analysis
+namespace wiki_example {
+
+int f(int a, int b, int c, int d) { // B4 (ENTRY)
+
+  a = 3; // B3
+  b = 5; // B3
+  d = 4; // B3
+  int x = 100; // B3
+  if (a > b) { // B3
+
+    c = a + b; // B2
+    d = 2; // B2
+
+  }
+  c = 4; // B1
+  return b * d + c; // B1
+} // B0 (EXIT)
+
+// CHECK: [ B0 (live variables at block exit) ]
+// CHECK-EMPTY:
+// CHECK-NEXT: [ B1 (live variables at block exit) ]
+// CHECK-EMPTY:
+// CHECK-NEXT: [ B2 (live variables at block exit) ]
+// CHECK-NEXT:  b {{.*}}
+// CHECK-NEXT:  d {{.*}}
+// CHECK-EMPTY:
+// CHECK-NEXT: [ B3 (live variables at block exit) ]
+// CHECK-NEXT:  a {{.*}}
+// CHECK-NEXT:  b {{.*}}
+// CHECK-NEXT:  d {{.*}}
+// CHECK-EMPTY:
+// CHECr-NEXT: [ B4 (live variables at block exit) ]
+
+} // namespace wiki_example
