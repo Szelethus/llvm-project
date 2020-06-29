@@ -16,6 +16,7 @@
 #include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Analysis/CFG.h"
 #include "clang/Analysis/FlowSensitive/DataflowWorklist.h"
+#include "clang/Lex/Lexer.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -628,7 +629,11 @@ void LiveVariablesImpl::dumpExprLiveness(const SourceManager &M) {
                  << " (live statements at block exit) ]\n";
     for (const Expr *E : blocksEndToLiveness[B].liveExprs) {
       llvm::errs() << "\n";
-      E->dump();
+      // E->dump();
+
+      llvm::errs() << Lexer::getSourceText(
+          CharSourceRange::getTokenRange({E->getBeginLoc(), E->getEndLoc()}), M,
+          analysisContext.getASTContext().getLangOpts());
     }
     llvm::errs() << "\n";
   }

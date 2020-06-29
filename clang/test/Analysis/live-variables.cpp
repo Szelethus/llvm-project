@@ -112,7 +112,7 @@ int test() { // B13 (ENTRY)
 } // namespace PR18159
 
 
-// https://en.wikipedia.org/wiki/Live_variable_analysis
+// https://en.wikipedia.org/wiki/Live_variable_analysis, second example
 namespace wiki_example {
 
 int f(int a, int b, int c, int d) { // B4 (ENTRY)
@@ -144,6 +144,6 @@ int f(int a, int b, int c, int d) { // B4 (ENTRY)
 // CHECK-NEXT:  b {{.*}}
 // CHECK-NEXT:  d {{.*}}
 // CHECK-EMPTY:
-// CHECr-NEXT: [ B4 (live variables at block exit) ]
+// CHECK-NEXT: [ B4 (live variables at block exit) ]
 
 } // namespace wiki_example
