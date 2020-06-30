@@ -5,8 +5,6 @@
 
 // expected-no-diagnostics
 
-
-
 namespace PR18159 {
 class B {
 public:
@@ -15,37 +13,67 @@ public:
 };
 B foo();
 int getBool();
+int getBool2();
 int *getPtr();
 
-int test() { // B13 (ENTRY)
-
-  int r = 0; // B12
-  for (int x = 0; // B12
-
-      x < 10; // B11 -> B10 B1
-
-      x++) { // B2 -> B11
-
+int test() {
+  int r = 0;
+  for (int x = 0; x < 10; x++) {
     // Liveness info is not computed correctly due to the following expression.
     // This happens due to CFG being special cased for short circuit operators.
-    int *p = getPtr(); // B10
-    if (p != 0 && // B10 -> B9 B6
-
-        getBool() && // B9 -> B8 B6
-
-        foo().m && // B8 -> B7 B6
-
-        getBool() // B7 -> B6
-
-        ) // B6 (entire condition) -> B5 B4 (B5 is a temporary dtor block)
-
-        { // B4 (branch) -> B3 B2
-
-      r = *p; // B3 -> B11
+    int *p = getPtr();
+    if (p != 0 && getBool() && foo().m && getBool2()) {
+      r = *p;
     }
   }
-  return r; // B1
-} // B0 (EXIT)
+  return r;
+}
+
+//  [B13 (ENTRY)]
+//    |
+//    V
+//  [B12]
+// int r = 0
+// int x = 0
+//  ^    \                    [B1]
+//  |     -----------------> return r -------> [B0 (EXIT)]
+//  |              \
+//  |               V
+//  |              [B11]
+// [B2]           x < 10
+// x++              |
+//  ^               V
+//  |              [B10]
+//  |             int *p = getPtr()
+//  |       ----- p != 0
+//  |      /        |
+//  |     |         V
+//  |     |        [B9]
+//  |     | ----- getBool()
+//  |     |/        |
+//  |     |         V
+//  |     |        [B8]
+//  |     | ----- foo().m
+//  |     |/        |
+//  |     |         V
+//  |     |        [B7]
+//  |     | ----- getBool2()
+//  |     |/        |
+//  |     |         V
+//  |     |        [B6]
+//  |     | ----- (temp dtor of B8)
+//  |     |/        |
+//  |     |         V
+//  |     |        [B5]
+//  |     | ----- ~B()
+//  |     |/
+//  |     V
+//  |\   [B4]
+//  | - if (B7)
+//  |     |
+//  |     V
+//   \   [B3]
+//    - r = *p
 
 // CHECK: [ B0 (live variables at block exit) ]
 // CHECK-EMPTY:
