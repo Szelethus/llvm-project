@@ -327,6 +327,12 @@ static bool writeShouldKill(const VarDecl *VD) {
 }
 
 void TransferFunctions::VisitBinaryOperator(BinaryOperator *B) {
+//  llvm::errs() << "bin\n";
+            if (B->getOpcode() == BO_Assign)
+              if (const auto *DR =
+                    dyn_cast<DeclRefExpr>(B->getLHS()->IgnoreParens())) {
+                LV.inAssignment[DR] = 1;
+              }
   if (B->isAssignmentOp()) {
     if (!LV.killAtAssign)
       return;
@@ -365,6 +371,7 @@ void TransferFunctions::VisitBlockExpr(BlockExpr *BE) {
 }
 
 void TransferFunctions::VisitDeclRefExpr(DeclRefExpr *DR) {
+//  llvm::errs() << "declrefexpr\n";
   const Decl* D = DR->getDecl();
   bool InAssignment = LV.inAssignment[DR];
   if (const auto *BD = dyn_cast<BindingDecl>(D)) {
@@ -476,6 +483,9 @@ LiveVariablesImpl::runOnBlock(const CFGBlock *block,
       continue;
 
     const Stmt *S = elem.castAs<CFGStmt>().getStmt();
+    //llvm::errs() << "====\n";
+    //S->dump();
+    //llvm::errs() << "====\n";
     TF.Visit(const_cast<Stmt*>(S));
     stmtsToLiveness[S] = val;
   }
@@ -530,10 +540,10 @@ LiveVariables::computeLiveness(AnalysisDeclContext &AC, bool killAtAssign) {
           const Stmt* stmt = cs->getStmt();
           if (const auto *BO = dyn_cast<BinaryOperator>(stmt)) {
             if (BO->getOpcode() == BO_Assign) {
-              if (const auto *DR =
-                    dyn_cast<DeclRefExpr>(BO->getLHS()->IgnoreParens())) {
-                LV->inAssignment[DR] = 1;
-              }
+              //if (const auto *DR =
+              //      dyn_cast<DeclRefExpr>(BO->getLHS()->IgnoreParens())) {
+              //  LV->inAssignment[DR] = 1;
+              //}
             }
           }
         }
@@ -567,6 +577,11 @@ LiveVariables::computeLiveness(AnalysisDeclContext &AC, bool killAtAssign) {
     // Enqueue the value to the predecessors.
     worklist.enqueuePredecessors(block);
   }
+  llvm::errs() << "----------------\n";
+  for (const auto &Pair : LV->inAssignment) {
+    Pair.getFirst()->dump(); llvm::errs() << '\n';
+  }
+  llvm::errs() << "----------------\n";
 
   return std::unique_ptr<LiveVariables>(new LiveVariables(LV));
 }
