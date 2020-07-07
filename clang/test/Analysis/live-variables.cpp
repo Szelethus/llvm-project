@@ -175,11 +175,3 @@ int f(int a, int b, int c, int d) { // B4 (ENTRY)
 // CHECK-NEXT: [ B4 (live variables at block exit) ]
 
 } // namespace wiki_example
-
-void clang_analyzer_eval(bool);
-
-void test_lambda_refcapture() {
-  int a = 6;
-  [&](int &a) { a = 42; }(a);
-  clang_analyzer_eval(a == 42); // expected-warning{{TRUE}}
-}

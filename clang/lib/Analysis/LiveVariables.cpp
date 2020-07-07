@@ -577,11 +577,11 @@ LiveVariables::computeLiveness(AnalysisDeclContext &AC, bool killAtAssign) {
     // Enqueue the value to the predecessors.
     worklist.enqueuePredecessors(block);
   }
-  //llvm::errs() << "----------------\n";
-  //for (const auto &Pair : LV->inAssignment) {
-  //  Pair.getFirst()->dump(); llvm::errs() << '\n';
-  //}
-  //llvm::errs() << "----------------\n";
+  llvm::errs() << "----------------\n";
+  for (const auto &Pair : LV->inAssignment) {
+    Pair.getFirst()->dump(); llvm::errs() << '\n';
+  }
+  llvm::errs() << "----------------\n";
 
   return std::unique_ptr<LiveVariables>(new LiveVariables(LV));
 }
@@ -644,11 +644,7 @@ void LiveVariablesImpl::dumpExprLiveness(const SourceManager &M) {
                  << " (live statements at block exit) ]\n";
     for (const Expr *E : blocksEndToLiveness[B].liveExprs) {
       llvm::errs() << "\n";
-      // E->dump();
-
-      llvm::errs() << Lexer::getSourceText(
-          CharSourceRange::getTokenRange({E->getBeginLoc(), E->getEndLoc()}), M,
-          analysisContext.getASTContext().getLangOpts());
+      E->dump();
     }
     llvm::errs() << "\n";
   }
