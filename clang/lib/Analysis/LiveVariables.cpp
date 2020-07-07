@@ -577,11 +577,11 @@ LiveVariables::computeLiveness(AnalysisDeclContext &AC, bool killAtAssign) {
     // Enqueue the value to the predecessors.
     worklist.enqueuePredecessors(block);
   }
-  llvm::errs() << "----------------\n";
-  for (const auto &Pair : LV->inAssignment) {
-    Pair.getFirst()->dump(); llvm::errs() << '\n';
-  }
-  llvm::errs() << "----------------\n";
+  //llvm::errs() << "----------------\n";
+  //for (const auto &Pair : LV->inAssignment) {
+  //  Pair.getFirst()->dump(); llvm::errs() << '\n';
+  //}
+  //llvm::errs() << "----------------\n";
 
   return std::unique_ptr<LiveVariables>(new LiveVariables(LV));
 }
