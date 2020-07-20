@@ -328,7 +328,7 @@ static bool writeShouldKill(const VarDecl *VD) {
 void TransferFunctions::VisitBinaryOperator(BinaryOperator *B) {
     if (LV.killAtAssign && B->getOpcode() == BO_Assign) {
       if (const auto *DR = dyn_cast<DeclRefExpr>(B->getLHS()->IgnoreParens())) {
-        LV.inAssignment[DR] = 1;
+        //LV.inAssignment[DR] = 1;
       }
     }
 
@@ -371,8 +371,8 @@ void TransferFunctions::VisitBlockExpr(BlockExpr *BE) {
 void TransferFunctions::VisitDeclRefExpr(DeclRefExpr *DR) {
   const Decl* D = DR->getDecl();
   bool InAssignment = LV.inAssignment[DR];
-  DR->dump();
-  llvm::errs() << InAssignment << '\n';
+  //DR->dump();
+  //llvm::errs() << InAssignment << '\n';
   if (const auto *BD = dyn_cast<BindingDecl>(D)) {
     if (!InAssignment)
       val.liveBindings = LV.BSetFact.add(val.liveBindings, BD);
