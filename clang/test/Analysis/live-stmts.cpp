@@ -7,6 +7,17 @@ int coin();
 int testThatDumperWorks(int x, int y, int z) {
   return x ? y : z;
 }
+
+// [B5 (ENTRY)]
+//    |
+//    V
+// [B4 (x)] ? [B2 (y)] : [B3 (z)]
+//                \        /
+//                 ---|----
+//                    V
+//                   [B1] --> [B0 (EXIT)]
+//                  return
+
 // CHECK: [ B0 (live statements at block exit) ]
 // CHECK-EMPTY:
 // CHECK-EMPTY:
@@ -165,3 +176,23 @@ void testForBodyExpression(bool flag) {
 // CHECK-EMPTY:
 // CHECK-EMPTY:
 
+void clang_analyzer_eval(bool);
+
+void test_lambda_refcapture() {
+  int a = 6;
+  [&](int &a) { a = 42; }(a);
+  clang_analyzer_eval(a == 42); // expected-warning{{TRUE}}
+}
+
+// CHECK: [ B0 (live statements at block exit) ]
+// CHECK-EMPTY:
+// CHECK-EMPTY:
+// CHECK-NEXT: [ B1 (live statements at block exit) ]
+// CHECK-EMPTY:
+// CHECK-EMPTY:
+// CHECK-NEXT: [ B2 (live statements at block exit) ]
+// CHECK-EMPTY:
+// CHECK-NEXT: CompoundStmt {{.*}}
+// CHECK-NEXT: `-BinaryOperator {{.*}} 'int' lvalue '='
+// CHECK-NEXT:   |-DeclRefExpr {{.*}} 'int' lvalue ParmVar {{.*}} 'a' 'int &'
+// CHECK-NEXT:   `-IntegerLiteral {{.*}} 'int' 42
