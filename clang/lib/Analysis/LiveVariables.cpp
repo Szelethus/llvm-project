@@ -516,7 +516,7 @@ LiveVariables::computeLiveness(AnalysisDeclContext &AC, bool killAtAssign) {
   llvm::BitVector everAnalyzedBlock(cfg->getNumBlockIDs());
 
   // FIXME: we should enqueue using post order.
-  for (const CFGBlock *B : cfg->nodes()) {
+  for (const CFGBlock *B : cfg->const_reverse_nodes()) {
     worklist.enqueueBlock(B);
   }
 
