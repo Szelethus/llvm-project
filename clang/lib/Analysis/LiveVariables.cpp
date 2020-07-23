@@ -207,12 +207,18 @@ static const Expr *LookThroughExpr(const Expr *E) {
 static void AddLiveExpr(llvm::ImmutableSet<const Expr *> &Set,
                         llvm::ImmutableSet<const Expr *>::Factory &F,
                         const Expr *E) {
+  llvm::errs() << "Removing :\n";
+  E->dump();
+  llvm::errs() << "---------------\n\n";
   Set = F.add(Set, LookThroughExpr(E));
 }
 
 static void RemoveLiveExpr(llvm::ImmutableSet<const Expr *> &Set,
                            llvm::ImmutableSet<const Expr *>::Factory &F,
                            const Expr *E) {
+  llvm::errs() << "Adding :\n";
+  E->dump();
+  llvm::errs() << "---------------\n\n";
   Set = F.remove(Set, E);
 }
 
@@ -234,9 +240,8 @@ void TransferFunctions::Visit(Stmt *S) {
 
   StmtVisitor<TransferFunctions>::Visit(S);
 
-  if (const auto *E = dyn_cast<Expr>(S)) {
+  if (const auto *E = dyn_cast<Expr>(S))
     RemoveLiveExpr(val.liveExprs, LV.SSetFact, E);
-  }
 
   // Mark all children expressions live.
 
