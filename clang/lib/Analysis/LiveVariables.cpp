@@ -481,6 +481,7 @@ LiveVariables::LivenessValues
 LiveVariablesImpl::runOnBlock(const CFGBlock *block,
                               LiveVariables::LivenessValues val,
                               LiveVariables::Observer *obs) {
+  llvm::errs() << "BLOCK VISITED: " << block->getBlockID() << "\n\n";
 
   TransferFunctions TF(*this, val, obs, block);
 
@@ -489,8 +490,7 @@ LiveVariablesImpl::runOnBlock(const CFGBlock *block,
     TF.Visit(const_cast<Stmt*>(term));
 
   // Apply the transfer function for all Stmts in the block.
-  for (CFGBlock::const_reverse_iterator it = block->rbegin(),
-       ei = block->rend(); it != ei; ++it) {
+  for (CFGBlock::ConstCFGElementRef it : block->rrefs()) {
     const CFGElement &elem = *it;
 
     if (Optional<CFGAutomaticObjDtor> Dtor =
@@ -501,8 +501,10 @@ LiveVariablesImpl::runOnBlock(const CFGBlock *block,
 
     if (!elem.getAs<CFGStmt>())
       continue;
+    llvm::errs() << "INDEX: " << it.getIndexInBlock() << '\n';
 
     const Stmt *S = elem.castAs<CFGStmt>().getStmt();
+    S->dump();
     TF.Visit(const_cast<Stmt*>(S));
     stmtsToLiveness[S] = val;
   }
