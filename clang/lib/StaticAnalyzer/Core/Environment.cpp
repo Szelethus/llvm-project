@@ -188,6 +188,7 @@ EnvironmentManager::removeDeadBindings(Environment Env,
     const SVal &X = I.getData();
 
     const Expr *E = dyn_cast<Expr>(BlkExpr.getStmt());
+    assert(E);
     if (!E)
       continue;
 

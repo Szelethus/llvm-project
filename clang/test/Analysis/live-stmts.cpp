@@ -5,7 +5,11 @@ int coin();
 
 
 int testThatDumperWorks(int x, int y, int z) {
-  return x ? y : z;
+  int a;
+  if (coin()) {
+    a = x ? y : z;
+  }
+  return a;
 }
 
 // [B5 (ENTRY)]

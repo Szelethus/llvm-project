@@ -207,7 +207,7 @@ static const Expr *LookThroughExpr(const Expr *E) {
 static void AddLiveExpr(llvm::ImmutableSet<const Expr *> &Set,
                         llvm::ImmutableSet<const Expr *>::Factory &F,
                         const Expr *E) {
-  llvm::errs() << "Removing :\n";
+  llvm::errs() << "Adding :\n";
   E->dump();
   llvm::errs() << "---------------\n\n";
   Set = F.add(Set, LookThroughExpr(E));
@@ -216,7 +216,7 @@ static void AddLiveExpr(llvm::ImmutableSet<const Expr *> &Set,
 static void RemoveLiveExpr(llvm::ImmutableSet<const Expr *> &Set,
                            llvm::ImmutableSet<const Expr *>::Factory &F,
                            const Expr *E) {
-  llvm::errs() << "Adding :\n";
+  llvm::errs() << "Removing :\n";
   E->dump();
   llvm::errs() << "---------------\n\n";
   Set = F.remove(Set, E);
