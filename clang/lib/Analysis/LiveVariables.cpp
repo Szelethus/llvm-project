@@ -222,13 +222,25 @@ static void RemoveLiveExpr(llvm::ImmutableSet<const Expr *> &Set,
   Set = F.remove(Set, E);
 }
 
+static void AddLiveDecl(llvm::ImmutableSet<const VarDecl *> &Set,
+                           llvm::ImmutableSet<const VarDecl *>::Factory &F,
+                           const VarDecl *D) {
+  Set = F.add(Set, D);
+}
+
 static void RemoveLiveDecl(llvm::ImmutableSet<const VarDecl *> &Set,
                            llvm::ImmutableSet<const VarDecl *>::Factory &F,
                            const VarDecl *D) {
   Set = F.remove(Set, D);
 }
 
-static void RemoveBinding(llvm::ImmutableSet<const BindingDecl *> &Set,
+static void AddLiveBinding(llvm::ImmutableSet<const BindingDecl *> &Set,
+                          llvm::ImmutableSet<const BindingDecl *>::Factory &F,
+                          const BindingDecl *D) {
+  Set = F.add(Set, D);
+}
+
+static void RemoveLiveBinding(llvm::ImmutableSet<const BindingDecl *> &Set,
                           llvm::ImmutableSet<const BindingDecl *>::Factory &F,
                           const BindingDecl *D) {
   Set = F.remove(Set, D);
@@ -265,8 +277,8 @@ void TransferFunctions::Visit(Stmt *S) {
       // In calls to super, include the implicit "self" pointer as being live.
       ObjCMessageExpr *CE = cast<ObjCMessageExpr>(S);
       if (CE->getReceiverKind() == ObjCMessageExpr::SuperInstance)
-        val.liveDecls = LV.DSetFact.add(val.liveDecls,
-                                        LV.analysisContext.getSelfDecl());
+        AddLiveDecl(val.liveDecls, LV.DSetFact,
+                    LV.analysisContext.getSelfDecl());
       break;
     }
     case Stmt::DeclStmtClass: {
@@ -287,7 +299,7 @@ void TransferFunctions::Visit(Stmt *S) {
       if (OpaqueValueExpr *OV = dyn_cast<OpaqueValueExpr>(child))
         child = OV->getSourceExpr();
       child = child->IgnoreParens();
-      val.liveExprs = LV.SSetFact.add(val.liveExprs, child);
+      AddLiveExpr(val.liveExprs, LV.SSetFact, child);
       return;
     }
 
@@ -369,7 +381,7 @@ void TransferFunctions::VisitBinaryOperator(BinaryOperator *B) {
       if (const BindingDecl *BD = dyn_cast<BindingDecl>(D)) {
         Killed = !BD->getType()->isReferenceType();
         if (Killed)
-          RemoveBinding(val.liveBindings, LV.BSetFact, BD);
+          RemoveLiveBinding(val.liveBindings, LV.BSetFact, BD);
       } else if (const auto *VD = dyn_cast<VarDecl>(D)) {
         Killed = writeShouldKill(VD);
         if (Killed)
@@ -387,7 +399,7 @@ void TransferFunctions::VisitBlockExpr(BlockExpr *BE) {
        LV.analysisContext.getReferencedBlockVars(BE->getBlockDecl())) {
     if (isAlwaysAlive(VD))
       continue;
-    val.liveDecls = LV.DSetFact.add(val.liveDecls, VD);
+    AddLiveDecl(val.liveDecls, LV.DSetFact, VD);
   }
 }
 
@@ -396,10 +408,10 @@ void TransferFunctions::VisitDeclRefExpr(DeclRefExpr *DR) {
   bool InAssignment = LV.inAssignment[DR];
   if (const auto *BD = dyn_cast<BindingDecl>(D)) {
     if (!InAssignment)
-      val.liveBindings = LV.BSetFact.add(val.liveBindings, BD);
+      AddLiveBinding(val.liveBindings, LV.BSetFact, BD);
   } else if (const auto *VD = dyn_cast<VarDecl>(D)) {
     if (!InAssignment && !isAlwaysAlive(VD))
-      val.liveDecls = LV.DSetFact.add(val.liveDecls, VD);
+      AddLiveDecl(val.liveDecls, LV.DSetFact, VD);
   }
 }
 
@@ -407,7 +419,7 @@ void TransferFunctions::VisitDeclStmt(DeclStmt *DS) {
   for (const auto *DI : DS->decls()) {
     if (const auto *DD = dyn_cast<DecompositionDecl>(DI)) {
       for (const auto *BD : DD->bindings())
-        RemoveBinding(val.liveBindings, LV.BSetFact, BD);
+        RemoveLiveBinding(val.liveBindings, LV.BSetFact, BD);
     } else if (const auto *VD = dyn_cast<VarDecl>(DI)) {
       if (!isAlwaysAlive(VD))
         RemoveLiveDecl(val.liveDecls, LV.DSetFact, VD);
@@ -447,7 +459,7 @@ VisitUnaryExprOrTypeTraitExpr(UnaryExprOrTypeTraitExpr *UE)
   const Expr *subEx = UE->getArgumentExpr();
   if (subEx->getType()->isVariableArrayType()) {
     assert(subEx->isLValue());
-    val.liveExprs = LV.SSetFact.add(val.liveExprs, subEx->IgnoreParens());
+    AddLiveExpr(val.liveExprs, LV.SSetFact, subEx->IgnoreParens());
   }
 }
 
@@ -495,7 +507,7 @@ LiveVariablesImpl::runOnBlock(const CFGBlock *block,
 
     if (Optional<CFGAutomaticObjDtor> Dtor =
             elem.getAs<CFGAutomaticObjDtor>()) {
-      val.liveDecls = DSetFact.add(val.liveDecls, Dtor->getVarDecl());
+      AddLiveDecl(val.liveDecls, DSetFact, Dtor->getVarDecl());
       continue;
     }
 
