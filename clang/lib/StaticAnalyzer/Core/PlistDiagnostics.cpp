@@ -12,6 +12,7 @@
 
 #include "clang/Analysis/PathDiagnostic.h"
 #include "clang/Basic/FileManager.h"
+#include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/PlistSupport.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/Version.h"
@@ -23,10 +24,13 @@
 #include "clang/StaticAnalyzer/Core/AnalyzerOptions.h"
 #include "clang/StaticAnalyzer/Core/IssueHash.h"
 #include "clang/StaticAnalyzer/Core/PathDiagnosticConsumers.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace clang;
 using namespace ento;
@@ -38,55 +42,53 @@ using namespace markup;
 //===----------------------------------------------------------------------===//
 
 namespace {
-  class PlistDiagnostics : public PathDiagnosticConsumer {
-    const std::string OutputFile;
-    const Preprocessor &PP;
-    const cross_tu::CrossTranslationUnitContext &CTU;
-    AnalyzerOptions &AnOpts;
-    const bool SupportsCrossFileDiagnostics;
-  public:
-    PlistDiagnostics(AnalyzerOptions &AnalyzerOpts,
-                     const std::string &OutputFile, const Preprocessor &PP,
-                     const cross_tu::CrossTranslationUnitContext &CTU,
-                     bool supportsMultipleFiles);
+class PlistDiagnostics : public PathDiagnosticConsumer {
+  const std::string OutputFile;
+  const Preprocessor &PP;
+  const cross_tu::CrossTranslationUnitContext &CTU;
+  AnalyzerOptions &AnOpts;
+  const bool SupportsCrossFileDiagnostics;
 
-    ~PlistDiagnostics() override {}
+public:
+  PlistDiagnostics(AnalyzerOptions &AnalyzerOpts, const std::string &OutputFile,
+                   const Preprocessor &PP,
+                   const cross_tu::CrossTranslationUnitContext &CTU,
+                   bool supportsMultipleFiles);
 
-    void FlushDiagnosticsImpl(std::vector<const PathDiagnostic *> &Diags,
-                              FilesMade *filesMade) override;
+  ~PlistDiagnostics() override {}
 
-    StringRef getName() const override {
-      return "PlistDiagnostics";
-    }
+  void FlushDiagnosticsImpl(std::vector<const PathDiagnostic *> &Diags,
+                            FilesMade *filesMade) override;
 
-    PathGenerationScheme getGenerationScheme() const override {
-      return Extensive;
-    }
-    bool supportsLogicalOpControlFlow() const override { return true; }
-    bool supportsCrossFileDiagnostics() const override {
-      return SupportsCrossFileDiagnostics;
-    }
-  };
+  StringRef getName() const override { return "PlistDiagnostics"; }
+
+  PathGenerationScheme getGenerationScheme() const override {
+    return Extensive;
+  }
+  bool supportsLogicalOpControlFlow() const override { return true; }
+  bool supportsCrossFileDiagnostics() const override {
+    return SupportsCrossFileDiagnostics;
+  }
+};
 } // end anonymous namespace
 
 namespace {
 
 /// A helper class for emitting a single report.
 class PlistPrinter {
-  const FIDMap& FM;
+  const FIDMap &FM;
   AnalyzerOptions &AnOpts;
   const Preprocessor &PP;
   const cross_tu::CrossTranslationUnitContext &CTU;
   llvm::SmallVector<const PathDiagnosticMacroPiece *, 0> MacroPieces;
 
 public:
-  PlistPrinter(const FIDMap& FM, AnalyzerOptions &AnOpts,
+  PlistPrinter(const FIDMap &FM, AnalyzerOptions &AnOpts,
                const Preprocessor &PP,
                const cross_tu::CrossTranslationUnitContext &CTU)
-    : FM(FM), AnOpts(AnOpts), PP(PP), CTU(CTU) {
-  }
+      : FM(FM), AnOpts(AnOpts), PP(PP), CTU(CTU) {}
 
-  void ReportDiag(raw_ostream &o, const PathDiagnosticPiece& P) {
+  void ReportDiag(raw_ostream &o, const PathDiagnosticPiece &P) {
     ReportPiece(o, P, /*indent*/ 4, /*depth*/ 0, /*includeControlFlow*/ true);
 
     // Don't emit a warning about an unused private field.
@@ -106,28 +108,26 @@ private:
                    unsigned indent, unsigned depth, bool includeControlFlow,
                    bool isKeyEvent = false) {
     switch (P.getKind()) {
-      case PathDiagnosticPiece::ControlFlow:
-        if (includeControlFlow)
-          ReportControlFlow(o, cast<PathDiagnosticControlFlowPiece>(P), indent);
-        break;
-      case PathDiagnosticPiece::Call:
-        ReportCall(o, cast<PathDiagnosticCallPiece>(P), indent,
-                   depth);
-        break;
-      case PathDiagnosticPiece::Event:
-        ReportEvent(o, cast<PathDiagnosticEventPiece>(P), indent, depth,
-                    isKeyEvent);
-        break;
-      case PathDiagnosticPiece::Macro:
-        ReportMacroSubPieces(o, cast<PathDiagnosticMacroPiece>(P), indent,
-                             depth);
-        break;
-      case PathDiagnosticPiece::Note:
-        ReportNote(o, cast<PathDiagnosticNotePiece>(P), indent);
-        break;
-      case PathDiagnosticPiece::PopUp:
-        ReportPopUp(o, cast<PathDiagnosticPopUpPiece>(P), indent);
-        break;
+    case PathDiagnosticPiece::ControlFlow:
+      if (includeControlFlow)
+        ReportControlFlow(o, cast<PathDiagnosticControlFlowPiece>(P), indent);
+      break;
+    case PathDiagnosticPiece::Call:
+      ReportCall(o, cast<PathDiagnosticCallPiece>(P), indent, depth);
+      break;
+    case PathDiagnosticPiece::Event:
+      ReportEvent(o, cast<PathDiagnosticEventPiece>(P), indent, depth,
+                  isKeyEvent);
+      break;
+    case PathDiagnosticPiece::Macro:
+      ReportMacroSubPieces(o, cast<PathDiagnosticMacroPiece>(P), indent, depth);
+      break;
+    case PathDiagnosticPiece::Note:
+      ReportNote(o, cast<PathDiagnosticNotePiece>(P), indent);
+      break;
+    case PathDiagnosticPiece::PopUp:
+      ReportPopUp(o, cast<PathDiagnosticPopUpPiece>(P), indent);
+      break;
     }
   }
 
@@ -137,15 +137,15 @@ private:
   void EmitFixits(raw_ostream &o, ArrayRef<FixItHint> fixits, unsigned indent);
 
   void ReportControlFlow(raw_ostream &o,
-                         const PathDiagnosticControlFlowPiece& P,
+                         const PathDiagnosticControlFlowPiece &P,
                          unsigned indent);
-  void ReportEvent(raw_ostream &o, const PathDiagnosticEventPiece& P,
+  void ReportEvent(raw_ostream &o, const PathDiagnosticEventPiece &P,
                    unsigned indent, unsigned depth, bool isKeyEvent = false);
   void ReportCall(raw_ostream &o, const PathDiagnosticCallPiece &P,
                   unsigned indent, unsigned depth);
-  void ReportMacroSubPieces(raw_ostream &o, const PathDiagnosticMacroPiece& P,
+  void ReportMacroSubPieces(raw_ostream &o, const PathDiagnosticMacroPiece &P,
                             unsigned indent, unsigned depth);
-  void ReportNote(raw_ostream &o, const PathDiagnosticNotePiece& P,
+  void ReportNote(raw_ostream &o, const PathDiagnosticNotePiece &P,
                   unsigned indent);
 
   void ReportPopUp(raw_ostream &o, const PathDiagnosticPopUpPiece &P,
@@ -160,22 +160,20 @@ struct ExpansionInfo {
   std::string MacroName;
   std::string Expansion;
   ExpansionInfo(std::string N, std::string E)
-    : MacroName(std::move(N)), Expansion(std::move(E)) {}
+      : MacroName(std::move(N)), Expansion(std::move(E)) {}
 };
 
 } // end of anonymous namespace
 
-static void printBugPath(llvm::raw_ostream &o, const FIDMap& FM,
+static void printBugPath(llvm::raw_ostream &o, const FIDMap &FM,
                          AnalyzerOptions &AnOpts, const Preprocessor &PP,
                          const cross_tu::CrossTranslationUnitContext &CTU,
                          const PathPieces &Path);
 
 /// Print coverage information to output stream {@code o}.
 /// May modify the used list of files {@code Fids} by inserting new ones.
-static void printCoverage(const PathDiagnostic *D,
-                          unsigned InputIndentLevel,
-                          SmallVectorImpl<FileID> &Fids,
-                          FIDMap &FM,
+static void printCoverage(const PathDiagnostic *D, unsigned InputIndentLevel,
+                          SmallVectorImpl<FileID> &Fids, FIDMap &FM,
                           llvm::raw_fd_ostream &o);
 
 static ExpansionInfo
@@ -202,8 +200,8 @@ void PlistPrinter::EmitRanges(raw_ostream &o,
 
   for (auto &R : Ranges)
     EmitRange(o, SM,
-              Lexer::getAsCharRange(SM.getExpansionRange(R), SM, LangOpts),
-              FM, indent + 1);
+              Lexer::getAsCharRange(SM.getExpansionRange(R), SM, LangOpts), FM,
+              indent + 1);
   --indent;
   Indent(o, indent) << "</array>\n";
 }
@@ -240,8 +238,8 @@ void PlistPrinter::EmitFixits(raw_ostream &o, ArrayRef<FixItHint> fixits,
     assert(!fixit.BeforePreviousInsertions && "Not implemented yet!");
     Indent(o, indent) << " <dict>\n";
     Indent(o, indent) << "  <key>remove_range</key>\n";
-    EmitRange(o, SM, Lexer::getAsCharRange(fixit.RemoveRange, SM, LangOpts),
-              FM, indent + 2);
+    EmitRange(o, SM, Lexer::getAsCharRange(fixit.RemoveRange, SM, LangOpts), FM,
+              indent + 2);
     Indent(o, indent) << "  <key>insert_string</key>";
     EmitString(o, fixit.CodeToInsert);
     o << "\n";
@@ -251,7 +249,7 @@ void PlistPrinter::EmitFixits(raw_ostream &o, ArrayRef<FixItHint> fixits,
 }
 
 void PlistPrinter::ReportControlFlow(raw_ostream &o,
-                                     const PathDiagnosticControlFlowPiece& P,
+                                     const PathDiagnosticControlFlowPiece &P,
                                      unsigned indent) {
 
   const SourceManager &SM = PP.getSourceManager();
@@ -267,14 +265,15 @@ void PlistPrinter::ReportControlFlow(raw_ostream &o,
   ++indent;
   Indent(o, indent) << "<array>\n";
   ++indent;
-  for (PathDiagnosticControlFlowPiece::const_iterator I=P.begin(), E=P.end();
-       I!=E; ++I) {
+  for (PathDiagnosticControlFlowPiece::const_iterator I = P.begin(),
+                                                      E = P.end();
+       I != E; ++I) {
     Indent(o, indent) << "<dict>\n";
     ++indent;
 
-    // Make the ranges of the start and end point self-consistent with adjacent edges
-    // by forcing to use only the beginning of the range.  This simplifies the layout
-    // logic for clients.
+    // Make the ranges of the start and end point self-consistent with adjacent
+    // edges by forcing to use only the beginning of the range.  This simplifies
+    // the layout logic for clients.
     Indent(o, indent) << "<key>start</key>\n";
     SourceRange StartEdge(
         SM.getExpansionLoc(I->getStart().asRange().getBegin()));
@@ -307,7 +306,8 @@ void PlistPrinter::ReportControlFlow(raw_ostream &o,
   Indent(o, indent) << "</dict>\n";
 }
 
-void PlistPrinter::ReportEvent(raw_ostream &o, const PathDiagnosticEventPiece& P,
+void PlistPrinter::ReportEvent(raw_ostream &o,
+                               const PathDiagnosticEventPiece &P,
                                unsigned indent, unsigned depth,
                                bool isKeyEvent) {
 
@@ -344,17 +344,16 @@ void PlistPrinter::ReportEvent(raw_ostream &o, const PathDiagnosticEventPiece& P
 
   // Finish up.
   --indent;
-  Indent(o, indent); o << "</dict>\n";
+  Indent(o, indent);
+  o << "</dict>\n";
 }
 
 void PlistPrinter::ReportCall(raw_ostream &o, const PathDiagnosticCallPiece &P,
-                              unsigned indent,
-                              unsigned depth) {
+                              unsigned indent, unsigned depth) {
 
   if (auto callEnter = P.getCallEnterEvent())
     ReportPiece(o, *callEnter, indent, depth, /*includeControlFlow*/ true,
                 P.isLastInMainSourceFile());
-
 
   ++depth;
 
@@ -362,7 +361,8 @@ void PlistPrinter::ReportCall(raw_ostream &o, const PathDiagnosticCallPiece &P,
     ReportPiece(o, *callEnterWithinCaller, indent, depth,
                 /*includeControlFlow*/ true);
 
-  for (PathPieces::const_iterator I = P.path.begin(), E = P.path.end();I!=E;++I)
+  for (PathPieces::const_iterator I = P.path.begin(), E = P.path.end(); I != E;
+       ++I)
     ReportPiece(o, **I, indent, depth, /*includeControlFlow*/ true);
 
   --depth;
@@ -375,7 +375,7 @@ void PlistPrinter::ReportCall(raw_ostream &o, const PathDiagnosticCallPiece &P,
 }
 
 void PlistPrinter::ReportMacroSubPieces(raw_ostream &o,
-                                        const PathDiagnosticMacroPiece& P,
+                                        const PathDiagnosticMacroPiece &P,
                                         unsigned indent, unsigned depth) {
   MacroPieces.push_back(&P);
 
@@ -423,7 +423,7 @@ void PlistPrinter::ReportMacroExpansions(raw_ostream &o, unsigned indent) {
   }
 }
 
-void PlistPrinter::ReportNote(raw_ostream &o, const PathDiagnosticNotePiece& P,
+void PlistPrinter::ReportNote(raw_ostream &o, const PathDiagnosticNotePiece &P,
                               unsigned indent) {
 
   const SourceManager &SM = PP.getSourceManager();
@@ -449,7 +449,8 @@ void PlistPrinter::ReportNote(raw_ostream &o, const PathDiagnosticNotePiece& P,
 
   // Finish up.
   --indent;
-  Indent(o, indent); o << "</dict>\n";
+  Indent(o, indent);
+  o << "</dict>\n";
 }
 
 void PlistPrinter::ReportPopUp(raw_ostream &o,
@@ -489,10 +490,8 @@ void PlistPrinter::ReportPopUp(raw_ostream &o,
 
 /// Print coverage information to output stream {@code o}.
 /// May modify the used list of files {@code Fids} by inserting new ones.
-static void printCoverage(const PathDiagnostic *D,
-                          unsigned InputIndentLevel,
-                          SmallVectorImpl<FileID> &Fids,
-                          FIDMap &FM,
+static void printCoverage(const PathDiagnostic *D, unsigned InputIndentLevel,
+                          SmallVectorImpl<FileID> &Fids, FIDMap &FM,
                           llvm::raw_fd_ostream &o) {
   unsigned IndentLevel = InputIndentLevel;
 
@@ -520,7 +519,7 @@ static void printCoverage(const PathDiagnostic *D,
   assert(IndentLevel == InputIndentLevel);
 }
 
-static void printBugPath(llvm::raw_ostream &o, const FIDMap& FM,
+static void printBugPath(llvm::raw_ostream &o, const FIDMap &FM,
                          AnalyzerOptions &AnOpts, const Preprocessor &PP,
                          const cross_tu::CrossTranslationUnitContext &CTU,
                          const PathPieces &Path) {
@@ -609,13 +608,12 @@ void ento::createPlistMultiFileDiagnosticConsumer(
 }
 
 void PlistDiagnostics::FlushDiagnosticsImpl(
-                                    std::vector<const PathDiagnostic *> &Diags,
-                                    FilesMade *filesMade) {
+    std::vector<const PathDiagnostic *> &Diags, FilesMade *filesMade) {
   // Build up a set of FIDs that we use by scanning the locations and
   // ranges of the diagnostics.
   FIDMap FM;
   SmallVector<FileID, 10> Fids;
-  const SourceManager& SM = PP.getSourceManager();
+  const SourceManager &SM = PP.getSourceManager();
   const LangOptions &LangOpts = PP.getLangOpts();
 
   auto AddPieceFID = [&FM, &Fids, &SM](const PathDiagnosticPiece &Piece) {
@@ -670,14 +668,15 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
   //  - "clang_version", the string representation of clang version
   //  - "files", an <array> mapping from FIDs to file names
   //  - "diagnostics", an <array> containing the path diagnostics
-  o << "<dict>\n" <<
-       " <key>clang_version</key>\n";
+  o << "<dict>\n"
+    << " <key>clang_version</key>\n";
   EmitString(o, getClangFullVersion()) << '\n';
   o << " <key>diagnostics</key>\n"
        " <array>\n";
 
-  for (std::vector<const PathDiagnostic*>::iterator DI=Diags.begin(),
-       DE = Diags.end(); DI!=DE; ++DI) {
+  for (std::vector<const PathDiagnostic *>::iterator DI = Diags.begin(),
+                                                     DE = Diags.end();
+       DI != DE; ++DI) {
 
     o << "  <dict>\n";
 
@@ -698,8 +697,8 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
     o << "   <key>issue_hash_content_of_line_in_context</key>";
     PathDiagnosticLocation UPDLoc = D->getUniqueingLoc();
     FullSourceLoc L(SM.getExpansionLoc(UPDLoc.isValid()
-                                            ? UPDLoc.asLocation()
-                                            : D->getLocation().asLocation()),
+                                           ? UPDLoc.asLocation()
+                                           : D->getLocation().asLocation()),
                     SM);
     const Decl *DeclWithIssue = D->getDeclWithIssue();
     EmitString(o, GetIssueHash(SM, L, D->getCheckerName(), D->getBugType(),
@@ -713,20 +712,20 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
       if (const NamedDecl *ND = dyn_cast<NamedDecl>(DeclWithIssue)) {
         StringRef declKind;
         switch (ND->getKind()) {
-          case Decl::CXXRecord:
-            declKind = "C++ class";
-            break;
-          case Decl::CXXMethod:
-            declKind = "C++ method";
-            break;
-          case Decl::ObjCMethod:
-            declKind = "Objective-C method";
-            break;
-          case Decl::Function:
-            declKind = "function";
-            break;
-          default:
-            break;
+        case Decl::CXXRecord:
+          declKind = "C++ class";
+          break;
+        case Decl::CXXMethod:
+          declKind = "C++ method";
+          break;
+        case Decl::ObjCMethod:
+          declKind = "Objective-C method";
+          break;
+        case Decl::Function:
+          declKind = "function";
+          break;
+        default:
+          break;
         }
         if (!declKind.empty()) {
           const std::string &declName = ND->getDeclName().getAsString();
@@ -754,14 +753,13 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
               << L.getExpansionLineNumber() - UFunL.getExpansionLineNumber()
               << "</string>\n";
 
-          // Otherwise, use the location on which the bug is reported.
+            // Otherwise, use the location on which the bug is reported.
           } else {
             FullSourceLoc FunL(SM.getExpansionLoc(Body->getBeginLoc()), SM);
             o << "  <key>issue_hash_function_offset</key><string>"
               << L.getExpansionLineNumber() - FunL.getExpansionLineNumber()
               << "</string>\n";
           }
-
         }
       }
     }
@@ -776,14 +774,15 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
       PDFileEntry::ConsumerFiles *files = filesMade->getFiles(*D);
       if (files) {
         for (PDFileEntry::ConsumerFiles::const_iterator CI = files->begin(),
-                CE = files->end(); CI != CE; ++CI) {
+                                                        CE = files->end();
+             CI != CE; ++CI) {
           StringRef newName = CI->first;
           if (newName != lastName) {
             if (!lastName.empty()) {
               o << "  </array>\n";
             }
             lastName = newName;
-            o <<  "  <key>" << lastName << "_files</key>\n";
+            o << "  <key>" << lastName << "_files</key>\n";
             o << "  <array>\n";
           }
           o << "   <string>" << CI->second << "</string>\n";
@@ -824,41 +823,80 @@ void PlistDiagnostics::FlushDiagnosticsImpl(
 //===----------------------------------------------------------------------===//
 
 namespace {
+using ExpArgTokensTy = llvm::SmallVector<Token, 2>;
 
-using ExpArgTokens = llvm::SmallVector<Token, 2>;
+// A single mapping from a macro parameter to its argument.
+using ParamToArgTokens = std::pair<const IdentifierInfo *, ExpArgTokensTy>;
+} // namespace 
 
-/// Maps unexpanded macro arguments to expanded arguments. A macro argument may
-/// need to expanded further when it is nested inside another macro.
-class MacroArgMap : public std::map<const IdentifierInfo *, ExpArgTokens> {
-public:
-  void expandFromPrevMacro(const MacroArgMap &Super);
-};
+static bool operator<(const ParamToArgTokens Lhs, const ParamToArgTokens Rhs) {
+  return Lhs.first < Rhs.first;
+}
 
-struct MacroNameAndArgs {
-  std::string Name;
-  const MacroInfo *MI = nullptr;
-  MacroArgMap Args;
+LLVM_DUMP_METHOD static void dumpExpArgTokensToStream(llvm::raw_ostream &Out,
+                                               const Preprocessor &PP,
+                                               const ExpArgTokensTy &Toks);
 
-  MacroNameAndArgs(std::string N, const MacroInfo *MI, MacroArgMap M)
-    : Name(std::move(N)), MI(MI), Args(std::move(M)) {}
-};
+LLVM_DUMP_METHOD static void dumpExpArgTokens(const Preprocessor &PP,
+                                       const ExpArgTokensTy &Toks) {
+  dumpExpArgTokensToStream(llvm::errs(), PP, Toks);
+}
 
-class TokenPrinter {
-  llvm::raw_ostream &OS;
-  const Preprocessor &PP;
+namespace {
+  /// Maps unexpanded macro arguments to expanded arguments. A macro argument
+  /// may need to expanded further when it is nested inside another macro.
+  class MacroArgMap : public std::vector<ParamToArgTokens> {
+  public:
+    void expandFromPrevMacro(MacroArgMap &Super);
+    
+    iterator find(const IdentifierInfo *II) {
+      return llvm::find_if(*this, [II](const ParamToArgTokens &Pair) {
+          return Pair.first == II;
+        });
+    }
 
-  Token PrevTok, PrevPrevTok;
-  TokenConcatenation ConcatInfo;
+    ExpArgTokensTy at(const IdentifierInfo *II) {
+      assert(contains(II));
+      return find(II)->second;
+    }
+    
+    bool contains(const IdentifierInfo *II) {
+      return find(II) != end();
+    }
 
-public:
-  TokenPrinter(llvm::raw_ostream &OS, const Preprocessor &PP)
-    : OS(OS), PP(PP), ConcatInfo(PP) {
-    PrevTok.setKind(tok::unknown);
-    PrevPrevTok.setKind(tok::unknown);
-  }
+    LLVM_DUMP_METHOD void dump(const Preprocessor &PP) const {
+      dumpToStream(llvm::errs(), PP);
+    }
 
-  void printToken(const Token &Tok);
-};
+    LLVM_DUMP_METHOD void dumpToStream(llvm::raw_ostream &Out,
+                                       const Preprocessor &PP) const;
+  };
+
+  struct MacroNameAndArgs {
+    std::string Name;
+    const MacroInfo *MI = nullptr;
+    MacroArgMap Args;
+
+    MacroNameAndArgs(std::string N, const MacroInfo *MI, MacroArgMap M)
+        : Name(std::move(N)), MI(MI), Args(std::move(M)) {}
+  };
+
+  class TokenPrinter {
+    llvm::raw_ostream &OS;
+    const Preprocessor &PP;
+
+    Token PrevTok, PrevPrevTok;
+    TokenConcatenation ConcatInfo;
+
+  public:
+    TokenPrinter(llvm::raw_ostream &OS, const Preprocessor &PP)
+        : OS(OS), PP(PP), ConcatInfo(PP) {
+      PrevTok.setKind(tok::unknown);
+      PrevPrevTok.setKind(tok::unknown);
+    }
+
+    void printToken(const Token &Tok);
+  };
 
 } // end of anonymous namespace
 
@@ -888,10 +926,8 @@ public:
 /// #define f(y) x
 /// #define x f(x)
 static std::string getMacroNameAndPrintExpansion(
-    TokenPrinter &Printer,
-    SourceLocation MacroLoc,
-    const Preprocessor &PP,
-    const MacroArgMap &PrevArgs,
+    TokenPrinter &Printer, SourceLocation MacroLoc, const Preprocessor &PP,
+    MacroArgMap &PrevArgs,
     llvm::SmallPtrSet<IdentifierInfo *, 8> &AlreadyProcessedTokens);
 
 /// Retrieves the name of the macro and what it's arguments expand into
@@ -920,9 +956,9 @@ static MacroNameAndArgs getMacroNameAndArgs(SourceLocation ExpanLoc,
                                             const Preprocessor &PP);
 
 /// Retrieves the ')' token that matches '(' \p It points to.
-static MacroInfo::tokens_iterator getMatchingRParen(
-    MacroInfo::tokens_iterator It,
-    MacroInfo::tokens_iterator End);
+static MacroInfo::tokens_iterator
+getMatchingRParen(MacroInfo::tokens_iterator It,
+                  MacroInfo::tokens_iterator End);
 
 /// Retrieves the macro info for \p II refers to at \p Loc. This is important
 /// because macros can be redefined or undefined.
@@ -948,24 +984,23 @@ getExpandedMacro(SourceLocation MacroLoc, const Preprocessor &PP,
   llvm::SmallString<200> ExpansionBuf;
   llvm::raw_svector_ostream OS(ExpansionBuf);
   TokenPrinter Printer(OS, *PPToUse);
-  llvm::SmallPtrSet<IdentifierInfo*, 8> AlreadyProcessedTokens;
+  llvm::SmallPtrSet<IdentifierInfo *, 8> AlreadyProcessedTokens;
+  MacroArgMap Tmp;
 
   std::string MacroName = getMacroNameAndPrintExpansion(
-      Printer, MacroLoc, *PPToUse, MacroArgMap{}, AlreadyProcessedTokens);
+      Printer, MacroLoc, *PPToUse, Tmp, AlreadyProcessedTokens);
   return {MacroName, std::string(OS.str())};
 }
 
 static std::string getMacroNameAndPrintExpansion(
-    TokenPrinter &Printer,
-    SourceLocation MacroLoc,
-    const Preprocessor &PP,
-    const MacroArgMap &PrevArgs,
+    TokenPrinter &Printer, SourceLocation MacroLoc, const Preprocessor &PP,
+    MacroArgMap &PrevArgs,
     llvm::SmallPtrSet<IdentifierInfo *, 8> &AlreadyProcessedTokens) {
 
   const SourceManager &SM = PP.getSourceManager();
 
   MacroNameAndArgs Info = getMacroNameAndArgs(SM.getExpansionLoc(MacroLoc), PP);
-  IdentifierInfo* IDInfo = PP.getIdentifierInfo(Info.Name);
+  IdentifierInfo *IDInfo = PP.getIdentifierInfo(Info.Name);
 
   // TODO: If the macro definition contains another symbol then this function is
   // called recursively. In case this symbol is the one being defined, it will
@@ -994,8 +1029,7 @@ static std::string getMacroNameAndPrintExpansion(
     }
 
     const auto *II = T.getIdentifierInfo();
-    assert(II &&
-          "This token is an identifier but has no IdentifierInfo!");
+    assert(II && "This token is an identifier but has no IdentifierInfo!");
 
     // If this token is a macro that should be expanded inside the current
     // macro.
@@ -1013,7 +1047,10 @@ static std::string getMacroNameAndPrintExpansion(
     }
 
     // If this token is the current macro's argument, we should expand it.
-    auto ArgMapIt = Info.Args.find(II);
+    auto ArgMapIt =
+        llvm::find_if(Info.Args, [II](const ParamToArgTokens &Pair) {
+          return Pair.first == II;
+        });
     if (ArgMapIt != Info.Args.end()) {
       for (MacroInfo::tokens_iterator ArgIt = ArgMapIt->second.begin(),
                                       ArgEnd = ArgMapIt->second.end();
@@ -1092,7 +1129,7 @@ static MacroNameAndArgs getMacroNameAndArgs(SourceLocation ExpanLoc,
   // directive history (or anything for that matter) from another TU.
   // TODO: assert when we're not running with CTU.
   if (!MI)
-    return { MacroName, MI, {} };
+    return {MacroName, MI, {}};
 
   // Acquire the macro's arguments.
   //
@@ -1103,7 +1140,7 @@ static MacroNameAndArgs getMacroNameAndArgs(SourceLocation ExpanLoc,
   // which point we start lexing the next argument or finish.
   ArrayRef<const IdentifierInfo *> MacroArgs = MI->params();
   if (MacroArgs.empty())
-    return { MacroName, MI, {} };
+    return {MacroName, MI, {}};
 
   RawLexer.LexFromRawLexer(TheTok);
   // When this is a token which expands to another macro function then its
@@ -1115,7 +1152,7 @@ static MacroNameAndArgs getMacroNameAndArgs(SourceLocation ExpanLoc,
   //               ^
   //               This is not a tok::l_paren, but foo is a function.
   if (TheTok.isNot(tok::l_paren))
-    return { MacroName, MI, {} };
+    return {MacroName, MI, {}};
 
   MacroArgMap Args;
 
@@ -1135,7 +1172,7 @@ static MacroNameAndArgs getMacroNameAndArgs(SourceLocation ExpanLoc,
   const IdentifierInfo *__VA_ARGS__II = PP.getIdentifierInfo("__VA_ARGS__");
 
   for (const IdentifierInfo *UnexpArgII : MacroArgs) {
-    MacroArgMap::mapped_type ExpandedArgTokens;
+    ExpArgTokensTy ExpandedArgTokens;
 
     // One could also simply not supply a single argument to __VA_ARGS__ -- this
     // results in a preprocessor warning, but is not an error:
@@ -1145,6 +1182,19 @@ static MacroNameAndArgs getMacroNameAndArgs(SourceLocation ExpanLoc,
     //   int *ptr;
     //   VARIADIC(ptr); // Note that there are no commas, this isn't just an
     //                  // empty parameter -- there are no parameters for '...'.
+
+    auto WasLastArgVariadic = [&__VA_ARGS__II](const IdentifierInfo *UnexpArgII,
+                                               const MacroArgMap &Args) {
+      if (!Args.empty()) {
+        for (Token Tok : Args.back().second) {
+          if (Tok.is(tok::raw_identifier) &&
+              Tok.getIdentifierInfo() == __VA_ARGS__II)
+            return true;
+        }
+      }
+      return UnexpArgII == __VA_ARGS__II;
+    };
+
     // In any other case, ParenthesesDepth mustn't be 0 here.
     if (ParenthesesDepth != 0) {
 
@@ -1152,7 +1202,9 @@ static MacroNameAndArgs getMacroNameAndArgs(SourceLocation ExpanLoc,
       RawLexer.LexFromRawLexer(TheTok);
 
       while (!(ParenthesesDepth == 1 &&
-              (UnexpArgII == __VA_ARGS__II ? false : TheTok.is(tok::comma)))) {
+               (WasLastArgVariadic(UnexpArgII, Args)
+                    ? false
+                    : TheTok.is(tok::comma)))) {
         assert(TheTok.isNot(tok::eof) &&
                "EOF encountered while looking for expanded macro args!");
 
@@ -1172,22 +1224,26 @@ static MacroNameAndArgs getMacroNameAndArgs(SourceLocation ExpanLoc,
         RawLexer.LexFromRawLexer(TheTok);
       }
     } else {
-      assert(UnexpArgII == __VA_ARGS__II);
+      llvm::errs() << UnexpArgII->getName() << " -> ";
+      dumpExpArgTokens(PP, ExpandedArgTokens);
+      llvm::errs() << '\n';
+      llvm::errs() << PP.getSpelling(TheTok) << '\n';
+      assert(WasLastArgVariadic(UnexpArgII, Args));
     }
 
-    Args.emplace(UnexpArgII, std::move(ExpandedArgTokens));
+    Args.emplace_back(UnexpArgII, std::move(ExpandedArgTokens));
   }
 
   assert(TheTok.is(tok::r_paren) &&
          "Expanded macro argument acquisition failed! After the end of the loop"
          " this token should be ')'!");
 
-  return { MacroName, MI, Args };
+  return {MacroName, MI, Args};
 }
 
-static MacroInfo::tokens_iterator getMatchingRParen(
-    MacroInfo::tokens_iterator It,
-    MacroInfo::tokens_iterator End) {
+static MacroInfo::tokens_iterator
+getMatchingRParen(MacroInfo::tokens_iterator It,
+                  MacroInfo::tokens_iterator End) {
 
   assert(It->is(tok::l_paren) && "This token should be '('!");
 
@@ -1222,10 +1278,10 @@ static const MacroInfo *getMacroInfoForLocation(const Preprocessor &PP,
   return MD->findDirectiveAtLoc(Loc, SM).getMacroInfo();
 }
 
-void MacroArgMap::expandFromPrevMacro(const MacroArgMap &Super) {
+void MacroArgMap::expandFromPrevMacro(MacroArgMap &Super) {
 
-  for (value_type &Pair : *this) {
-    ExpArgTokens &CurrExpArgTokens = Pair.second;
+  for (ParamToArgTokens &Pair : *this) {
+    ExpArgTokensTy &CurrExpArgTokens = Pair.second;
 
     // For each token in the expanded macro argument.
     auto It = CurrExpArgTokens.begin();
@@ -1239,19 +1295,36 @@ void MacroArgMap::expandFromPrevMacro(const MacroArgMap &Super) {
       assert(II);
 
       // Is this an argument that "Super" expands further?
-      if (!Super.count(II)) {
+      if (!Super.contains(II)) {
         ++It;
         continue;
       }
 
-      const ExpArgTokens &SuperExpArgTokens = Super.at(II);
+      const ExpArgTokensTy &SuperExpArgTokens = Super.at(II);
 
-      It = CurrExpArgTokens.insert(
-          It, SuperExpArgTokens.begin(), SuperExpArgTokens.end());
+      It = CurrExpArgTokens.insert(It, SuperExpArgTokens.begin(),
+                                   SuperExpArgTokens.end());
       std::advance(It, SuperExpArgTokens.size());
       It = CurrExpArgTokens.erase(It);
     }
   }
+}
+
+void MacroArgMap::dumpToStream(llvm::raw_ostream &Out,
+                               const Preprocessor &PP) const {
+  for (const std::pair<const IdentifierInfo *, ExpArgTokensTy> &Pair : *this) {
+    Out << Pair.first->getName() << " -> ";
+    dumpExpArgTokensToStream(Out, PP, Pair.second);
+    Out << '\n';
+  }
+}
+
+static void dumpExpArgTokensToStream(llvm::raw_ostream &Out,
+                                     const Preprocessor &PP,
+                                     const ExpArgTokensTy &Toks) {
+  TokenPrinter Printer(Out, PP);
+  for (Token Tok : Toks)
+    Printer.printToken(Tok);
 }
 
 void TokenPrinter::printToken(const Token &Tok) {
@@ -1259,8 +1332,8 @@ void TokenPrinter::printToken(const Token &Tok) {
   if (PrevTok.isNot(tok::unknown)) {
     // If the tokens were already space separated, or if they must be to avoid
     // them being implicitly pasted, add a space between them.
-    if(Tok.hasLeadingSpace() || ConcatInfo.AvoidConcat(PrevPrevTok, PrevTok,
-                                                       Tok)) {
+    if (Tok.hasLeadingSpace() ||
+        ConcatInfo.AvoidConcat(PrevPrevTok, PrevTok, Tok)) {
       // AvoidConcat doesn't check for ##, don't print a space around it.
       if (PrevTok.isNot(tok::hashhash) && Tok.isNot(tok::hashhash)) {
         OS << ' ';
