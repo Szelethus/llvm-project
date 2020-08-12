@@ -830,11 +830,11 @@ using ArgTokensTy = llvm::SmallVector<Token, 2>;
 } // end of anonymous namespace
 
 LLVM_DUMP_METHOD static void dumpArgTokensToStream(llvm::raw_ostream &Out,
-                                                      const Preprocessor &PP,
-                                                      const ArgTokensTy &Toks);
+                                                   const Preprocessor &PP,
+                                                   const ArgTokensTy &Toks);
 
 LLVM_DUMP_METHOD static void dumpArgTokens(const Preprocessor &PP,
-                                              const ArgTokensTy &Toks) {
+                                           const ArgTokensTy &Toks) {
   dumpArgTokensToStream(llvm::errs(), PP, Toks);
 }
 
@@ -933,7 +933,8 @@ static std::string getMacroNameAndPrintExpansion(
 /// When \p ExpanLoc references "SET_TO_NULL(a)" within the definition of
 /// "NOT_SUSPICOUS", the macro name "SET_TO_NULL" and the MacroArgMap map
 /// { (x, a) } will be returned.
-static MacroExpansionInfo getMacroExpansionInfo(SourceLocation ExpanLoc,
+static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMap,
+    SourceLocation ExpanLoc,
                                                 const Preprocessor &PP);
 
 /// Retrieves the ')' token that matches '(' \p It points to.
@@ -969,6 +970,7 @@ getExpandedMacro(SourceLocation MacroLoc, const Preprocessor &PP,
 
   std::string MacroName = getMacroNameAndPrintExpansion(
       Printer, MacroLoc, *PPToUse, MacroParamMap{}, AlreadyProcessedTokens);
+  llvm::errs() << OS.str() << '\n';
   return {MacroName, std::string(OS.str())};
 }
 
@@ -980,7 +982,7 @@ static std::string getMacroNameAndPrintExpansion(
   const SourceManager &SM = PP.getSourceManager();
 
   MacroExpansionInfo MExpInfo =
-      getMacroExpansionInfo(SM.getExpansionLoc(MacroLoc), PP);
+      getMacroExpansionInfo(PrevParamMap, SM.getExpansionLoc(MacroLoc), PP);
   IdentifierInfo *MacroNameII = PP.getIdentifierInfo(MExpInfo.Name);
 
   // TODO: If the macro definition contains another symbol then this function is
@@ -1077,7 +1079,8 @@ static std::string getMacroNameAndPrintExpansion(
   return MExpInfo.Name;
 }
 
-static MacroExpansionInfo getMacroExpansionInfo(SourceLocation ExpanLoc,
+static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMap,
+    SourceLocation ExpanLoc,
                                                 const Preprocessor &PP) {
 
   const SourceManager &SM = PP.getSourceManager();
@@ -1193,12 +1196,35 @@ static MacroExpansionInfo getMacroExpansionInfo(SourceLocation ExpanLoc,
       // FIXME: Handle when multiple parameters map to a single argument.
       // Currently, we only handle when multiple arguments map to the same
       // parameter.
-      assert(CurrParamII == __VA_ARGS__II &&
-             "No more macro arguments are found, but the current parameter "
-             "isn't __VA_ARGS__!");
+      //
+      for (Token TheTok : PrevParamMap.at(__VA_ARGS__II)) {
+        int ParenthesesDepth = 0;
+        if(ParenthesesDepth == 0 && TheTok.is(tok::comma)) {
+            assert(TheTok.isNot(tok::eof) &&
+                   "EOF encountered while looking for expanded macro args!");
+
+            if (TheTok.is(tok::l_paren))
+              ++ParenthesesDepth;
+
+            if (TheTok.is(tok::r_paren))
+              --ParenthesesDepth;
+            assert(ParenthesesDepth >= 0);
+
+            if (TheTok.is(tok::raw_identifier)) {
+              PP.LookUpIdentifierInfo(TheTok);
+              assert(TheTok.getIdentifierInfo() != __VA_ARGS__II);
+            }
+
+            ArgTokens.push_back(TheTok);
+          }
+          //assert(CurrParamII == __VA_ARGS__II &&
+          //       "No more macro arguments are found, but the current parameter "
+          //       "isn't __VA_ARGS__!");
+      }
     }
 
     ParamMap.emplace(CurrParamII, std::move(ArgTokens));
+    PrevParamMap.dump(PP);
   }
 
   assert(TheTok.is(tok::r_paren) &&
