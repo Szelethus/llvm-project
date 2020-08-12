@@ -27,6 +27,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/Casting.h"
+#include <memory>
 
 using namespace clang;
 using namespace ento;
@@ -879,6 +880,40 @@ public:
   void printToken(const Token &Tok);
 };
 
+class TokenStream {
+public:
+  TokenStream(SourceLocation ExpanLoc, const SourceManager &SM,
+              const LangOptions &LangOpts)
+      : ExpanLoc(ExpanLoc) {
+    std::pair<FileID, unsigned> LocInfo = SM.getDecomposedLoc(ExpanLoc);
+    const llvm::MemoryBuffer *MB = SM.getBuffer(LocInfo.first);
+    const char *MacroNameTokenPos = MB->getBufferStart() + LocInfo.second;
+
+    RawLexer.reset(new Lexer(SM.getLocForStartOfFile(LocInfo.first), LangOpts,
+                             MB->getBufferStart(), MacroNameTokenPos,
+                             MB->getBufferEnd()));
+  }
+
+  void next(Token &Result) {
+    if (CurrTokenIt == TokenRange.end()) {
+      RawLexer->LexFromRawLexer(Result);
+      return;
+    }
+    Result = *CurrTokenIt;
+    CurrTokenIt++;
+  }
+
+  void injextRange(const ArgTokensTy &Range) {
+    TokenRange = Range;
+    CurrTokenIt = TokenRange.begin();
+  }
+
+  std::unique_ptr<Lexer> RawLexer;
+  ArgTokensTy TokenRange;
+  ArgTokensTy::iterator CurrTokenIt = TokenRange.begin();
+  SourceLocation ExpanLoc;
+};
+
 } // end of anonymous namespace
 
 /// The implementation method of getMacroExpansion: It prints the expansion of
@@ -933,7 +968,8 @@ static std::string getMacroNameAndPrintExpansion(
 /// When \p ExpanLoc references "SET_TO_NULL(a)" within the definition of
 /// "NOT_SUSPICOUS", the macro name "SET_TO_NULL" and the MacroArgMap map
 /// { (x, a) } will be returned.
-static MacroExpansionInfo getMacroExpansionInfo(SourceLocation ExpanLoc,
+static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMap,
+    SourceLocation ExpanLoc,
                                                 const Preprocessor &PP);
 
 /// Retrieves the ')' token that matches '(' \p It points to.
@@ -969,6 +1005,7 @@ getExpandedMacro(SourceLocation MacroLoc, const Preprocessor &PP,
 
   std::string MacroName = getMacroNameAndPrintExpansion(
       Printer, MacroLoc, *PPToUse, MacroParamMap{}, AlreadyProcessedTokens);
+  llvm::errs() << OS.str() << '\n';
   return {MacroName, std::string(OS.str())};
 }
 
@@ -980,7 +1017,7 @@ static std::string getMacroNameAndPrintExpansion(
   const SourceManager &SM = PP.getSourceManager();
 
   MacroExpansionInfo MExpInfo =
-      getMacroExpansionInfo(SM.getExpansionLoc(MacroLoc), PP);
+      getMacroExpansionInfo(PrevParamMap, SM.getExpansionLoc(MacroLoc), PP);
   IdentifierInfo *MacroNameII = PP.getIdentifierInfo(MExpInfo.Name);
 
   // TODO: If the macro definition contains another symbol then this function is
@@ -1077,7 +1114,8 @@ static std::string getMacroNameAndPrintExpansion(
   return MExpInfo.Name;
 }
 
-static MacroExpansionInfo getMacroExpansionInfo(SourceLocation ExpanLoc,
+static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMap,
+    SourceLocation ExpanLoc,
                                                 const Preprocessor &PP) {
 
   const SourceManager &SM = PP.getSourceManager();
@@ -1085,16 +1123,11 @@ static MacroExpansionInfo getMacroExpansionInfo(SourceLocation ExpanLoc,
 
   // First, we create a Lexer to lex *at the expansion location* the tokens
   // referring to the macro's name and its arguments.
-  std::pair<FileID, unsigned> LocInfo = SM.getDecomposedLoc(ExpanLoc);
-  const llvm::MemoryBuffer *MB = SM.getBuffer(LocInfo.first);
-  const char *MacroNameTokenPos = MB->getBufferStart() + LocInfo.second;
-
-  Lexer RawLexer(SM.getLocForStartOfFile(LocInfo.first), LangOpts,
-                 MB->getBufferStart(), MacroNameTokenPos, MB->getBufferEnd());
+  TokenStream TStream(ExpanLoc, SM, LangOpts);
 
   // Acquire the macro's name.
   Token TheTok;
-  RawLexer.LexFromRawLexer(TheTok);
+  TStream.next(TheTok);
 
   std::string MacroName = PP.getSpelling(TheTok);
 
@@ -1122,7 +1155,7 @@ static MacroExpansionInfo getMacroExpansionInfo(SourceLocation ExpanLoc,
   if (MacroParams.empty())
     return { MacroName, MI, {} };
 
-  RawLexer.LexFromRawLexer(TheTok);
+  TStream.next(TheTok);
   // When this is a token which expands to another macro function then its
   // parentheses are not at its expansion locaiton. For example:
   //
@@ -1166,7 +1199,7 @@ static MacroExpansionInfo getMacroExpansionInfo(SourceLocation ExpanLoc,
     if (ParenthesesDepth != 0) {
 
       // Lex the first token of the next macro parameter.
-      RawLexer.LexFromRawLexer(TheTok);
+      TStream.next(TheTok);
 
       while (
           !(ParenthesesDepth == 1 &&
@@ -1183,16 +1216,20 @@ static MacroExpansionInfo getMacroExpansionInfo(SourceLocation ExpanLoc,
         if (ParenthesesDepth == 0)
           break;
 
-        if (TheTok.is(tok::raw_identifier))
+        if (TheTok.is(tok::raw_identifier)) {
           PP.LookUpIdentifierInfo(TheTok);
+          if (TheTok.getIdentifierInfo() == __VA_ARGS__II) {
+            TStream.injextRange(
+                const_cast<MacroParamMap &>(PrevParamMap)[__VA_ARGS__II]);
+            TStream.next(TheTok);
+            continue;
+          }
+        }
 
         ArgTokens.push_back(TheTok);
-        RawLexer.LexFromRawLexer(TheTok);
+        TStream.next(TheTok);
       }
     } else {
-      // FIXME: Handle when multiple parameters map to a single argument.
-      // Currently, we only handle when multiple arguments map to the same
-      // parameter.
       assert(CurrParamII == __VA_ARGS__II &&
              "No more macro arguments are found, but the current parameter "
              "isn't __VA_ARGS__!");
