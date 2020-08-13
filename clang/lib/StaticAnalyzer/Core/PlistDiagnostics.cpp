@@ -1186,8 +1186,37 @@ static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMa
         if (ParenthesesDepth == 0)
           break;
 
-        if (TheTok.is(tok::raw_identifier))
+        if (TheTok.is(tok::raw_identifier)) {
           PP.LookUpIdentifierInfo(TheTok);
+          if (TheTok.getIdentifierInfo() == __VA_ARGS__II) {
+            int ParenthesesDepth = 0;
+            for (Token TheTok :
+                 const_cast<MacroParamMap &>(PrevParamMap)[__VA_ARGS__II]) {
+              if (ParenthesesDepth == 0 && TheTok.isNot(tok::comma)) {
+                assert(
+                    TheTok.isNot(tok::eof) &&
+                    "EOF encountered while looking for expanded macro args!");
+
+                if (TheTok.is(tok::l_paren))
+                  ++ParenthesesDepth;
+
+                if (TheTok.is(tok::r_paren))
+                  --ParenthesesDepth;
+                assert(ParenthesesDepth >= 0);
+
+                if (TheTok.is(tok::raw_identifier)) {
+                  PP.LookUpIdentifierInfo(TheTok);
+                  assert(TheTok.getIdentifierInfo() != __VA_ARGS__II);
+                }
+
+                ArgTokens.push_back(TheTok);
+              }
+              // assert(CurrParamII == __VA_ARGS__II &&
+              //       "No more macro arguments are found, but the current
+              //       parameter " "isn't __VA_ARGS__!");
+            }
+          }
+        }
 
         ArgTokens.push_back(TheTok);
         RawLexer.LexFromRawLexer(TheTok);
@@ -1197,34 +1226,11 @@ static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMa
       // Currently, we only handle when multiple arguments map to the same
       // parameter.
       //
-      for (Token TheTok : PrevParamMap.at(__VA_ARGS__II)) {
-        int ParenthesesDepth = 0;
-        if(ParenthesesDepth == 0 && TheTok.is(tok::comma)) {
-            assert(TheTok.isNot(tok::eof) &&
-                   "EOF encountered while looking for expanded macro args!");
-
-            if (TheTok.is(tok::l_paren))
-              ++ParenthesesDepth;
-
-            if (TheTok.is(tok::r_paren))
-              --ParenthesesDepth;
-            assert(ParenthesesDepth >= 0);
-
-            if (TheTok.is(tok::raw_identifier)) {
-              PP.LookUpIdentifierInfo(TheTok);
-              assert(TheTok.getIdentifierInfo() != __VA_ARGS__II);
-            }
-
-            ArgTokens.push_back(TheTok);
-          }
-          //assert(CurrParamII == __VA_ARGS__II &&
-          //       "No more macro arguments are found, but the current parameter "
-          //       "isn't __VA_ARGS__!");
-      }
     }
 
     ParamMap.emplace(CurrParamII, std::move(ArgTokens));
     PrevParamMap.dump(PP);
+    ParamMap.dump(PP);
   }
 
   assert(TheTok.is(tok::r_paren) &&
