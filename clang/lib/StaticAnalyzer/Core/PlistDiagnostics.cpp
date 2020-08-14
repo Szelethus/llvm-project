@@ -27,6 +27,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/Casting.h"
+#include <memory>
 
 using namespace clang;
 using namespace ento;
@@ -879,6 +880,40 @@ public:
   void printToken(const Token &Tok);
 };
 
+class TokenStream {
+public:
+  TokenStream(SourceLocation ExpanLoc, const SourceManager &SM,
+              const LangOptions &LangOpts)
+      : ExpanLoc(ExpanLoc) {
+    std::pair<FileID, unsigned> LocInfo = SM.getDecomposedLoc(ExpanLoc);
+    const llvm::MemoryBuffer *MB = SM.getBuffer(LocInfo.first);
+    const char *MacroNameTokenPos = MB->getBufferStart() + LocInfo.second;
+
+    RawLexer.reset(new Lexer(SM.getLocForStartOfFile(LocInfo.first), LangOpts,
+                             MB->getBufferStart(), MacroNameTokenPos,
+                             MB->getBufferEnd()));
+  }
+
+  void next(Token &Result) {
+    if (CurrTokenIt == TokenRange.end()) {
+      RawLexer->LexFromRawLexer(Result);
+      return;
+    }
+    Result = *CurrTokenIt;
+    CurrTokenIt++;
+  }
+
+  void injextRange(const ArgTokensTy &Range) {
+    TokenRange = Range;
+    CurrTokenIt = TokenRange.begin();
+  }
+
+  std::unique_ptr<Lexer> RawLexer;
+  ArgTokensTy TokenRange;
+  ArgTokensTy::iterator CurrTokenIt = TokenRange.begin();
+  SourceLocation ExpanLoc;
+};
+
 } // end of anonymous namespace
 
 /// The implementation method of getMacroExpansion: It prints the expansion of
@@ -1088,16 +1123,11 @@ static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMa
 
   // First, we create a Lexer to lex *at the expansion location* the tokens
   // referring to the macro's name and its arguments.
-  std::pair<FileID, unsigned> LocInfo = SM.getDecomposedLoc(ExpanLoc);
-  const llvm::MemoryBuffer *MB = SM.getBuffer(LocInfo.first);
-  const char *MacroNameTokenPos = MB->getBufferStart() + LocInfo.second;
-
-  Lexer RawLexer(SM.getLocForStartOfFile(LocInfo.first), LangOpts,
-                 MB->getBufferStart(), MacroNameTokenPos, MB->getBufferEnd());
+  TokenStream TStream(ExpanLoc, SM, LangOpts);
 
   // Acquire the macro's name.
   Token TheTok;
-  RawLexer.LexFromRawLexer(TheTok);
+  TStream.next(TheTok);
 
   std::string MacroName = PP.getSpelling(TheTok);
 
@@ -1125,7 +1155,7 @@ static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMa
   if (MacroParams.empty())
     return { MacroName, MI, {} };
 
-  RawLexer.LexFromRawLexer(TheTok);
+  TStream.next(TheTok);
   // When this is a token which expands to another macro function then its
   // parentheses are not at its expansion locaiton. For example:
   //
@@ -1169,7 +1199,7 @@ static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMa
     if (ParenthesesDepth != 0) {
 
       // Lex the first token of the next macro parameter.
-      RawLexer.LexFromRawLexer(TheTok);
+      TStream.next(TheTok);
 
       while (
           !(ParenthesesDepth == 1 &&
@@ -1188,38 +1218,13 @@ static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMa
 
         if (TheTok.is(tok::raw_identifier)) {
           PP.LookUpIdentifierInfo(TheTok);
-          if (TheTok.getIdentifierInfo() == __VA_ARGS__II) {
-            int ParenthesesDepth = 0;
-            for (Token TheTok :
-                 const_cast<MacroParamMap &>(PrevParamMap)[__VA_ARGS__II]) {
-              if (ParenthesesDepth == 0 && TheTok.isNot(tok::comma)) {
-                assert(
-                    TheTok.isNot(tok::eof) &&
-                    "EOF encountered while looking for expanded macro args!");
-
-                if (TheTok.is(tok::l_paren))
-                  ++ParenthesesDepth;
-
-                if (TheTok.is(tok::r_paren))
-                  --ParenthesesDepth;
-                assert(ParenthesesDepth >= 0);
-
-                if (TheTok.is(tok::raw_identifier)) {
-                  PP.LookUpIdentifierInfo(TheTok);
-                  assert(TheTok.getIdentifierInfo() != __VA_ARGS__II);
-                }
-
-                ArgTokens.push_back(TheTok);
-              }
-              // assert(CurrParamII == __VA_ARGS__II &&
-              //       "No more macro arguments are found, but the current
-              //       parameter " "isn't __VA_ARGS__!");
-            }
-          }
+          if (TheTok.getIdentifierInfo() == __VA_ARGS__II)
+            TStream.injextRange(
+                const_cast<MacroParamMap &>(PrevParamMap)[__VA_ARGS__II]);
         }
 
         ArgTokens.push_back(TheTok);
-        RawLexer.LexFromRawLexer(TheTok);
+        TStream.next(TheTok);
       }
     } else {
       // FIXME: Handle when multiple parameters map to a single argument.
