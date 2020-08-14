@@ -1218,9 +1218,12 @@ static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMa
 
         if (TheTok.is(tok::raw_identifier)) {
           PP.LookUpIdentifierInfo(TheTok);
-          if (TheTok.getIdentifierInfo() == __VA_ARGS__II)
+          if (TheTok.getIdentifierInfo() == __VA_ARGS__II) {
             TStream.injextRange(
                 const_cast<MacroParamMap &>(PrevParamMap)[__VA_ARGS__II]);
+            TStream.next(TheTok);
+            continue;
+          }
         }
 
         ArgTokens.push_back(TheTok);
@@ -1234,8 +1237,6 @@ static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMa
     }
 
     ParamMap.emplace(CurrParamII, std::move(ArgTokens));
-    PrevParamMap.dump(PP);
-    ParamMap.dump(PP);
   }
 
   assert(TheTok.is(tok::r_paren) &&
