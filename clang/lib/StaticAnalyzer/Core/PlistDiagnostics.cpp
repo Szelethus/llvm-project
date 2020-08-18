@@ -880,6 +880,10 @@ public:
   void printToken(const Token &Tok);
 };
 
+/// Wrapper around a Lexer object that can lex tokens one-by-one. Optionally,
+/// one can "inject" a range of tokens into the stream, in which case the next
+/// token is retrieved from the next element of the range, until the end of the
+/// range is reached.
 class TokenStream {
 public:
   TokenStream(SourceLocation ExpanLoc, const SourceManager &SM,
@@ -1005,7 +1009,6 @@ getExpandedMacro(SourceLocation MacroLoc, const Preprocessor &PP,
 
   std::string MacroName = getMacroNameAndPrintExpansion(
       Printer, MacroLoc, *PPToUse, MacroParamMap{}, AlreadyProcessedTokens);
-  llvm::errs() << OS.str() << '\n';
   return {MacroName, std::string(OS.str())};
 }
 
@@ -1332,6 +1335,9 @@ static void dumpArgTokensToStream(llvm::raw_ostream &Out,
 }
 
 void TokenPrinter::printToken(const Token &Tok) {
+  // TODO: Handle the case where hash and hashhash occurs right before
+  // __VA_ARGS__.
+
   // If this is the first token to be printed, don't print space.
   if (PrevTok.isNot(tok::unknown)) {
     // If the tokens were already space separated, or if they must be to avoid
