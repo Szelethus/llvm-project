@@ -830,11 +830,11 @@ using ArgTokensTy = llvm::SmallVector<Token, 2>;
 } // end of anonymous namespace
 
 LLVM_DUMP_METHOD static void dumpArgTokensToStream(llvm::raw_ostream &Out,
-                                                      const Preprocessor &PP,
-                                                      const ArgTokensTy &Toks);
+                                                   const Preprocessor &PP,
+                                                   const ArgTokensTy &Toks);
 
 LLVM_DUMP_METHOD static void dumpArgTokens(const Preprocessor &PP,
-                                              const ArgTokensTy &Toks) {
+                                           const ArgTokensTy &Toks) {
   dumpArgTokensToStream(llvm::errs(), PP, Toks);
 }
 
@@ -1287,8 +1287,8 @@ void MacroParamMap::dumpToStream(llvm::raw_ostream &Out,
 }
 
 static void dumpArgTokensToStream(llvm::raw_ostream &Out,
-                                     const Preprocessor &PP,
-                                     const ArgTokensTy &Toks) {
+                                  const Preprocessor &PP,
+                                  const ArgTokensTy &Toks) {
   TokenPrinter Printer(Out, PP);
   for (Token Tok : Toks)
     Printer.printToken(Tok);
