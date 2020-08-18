@@ -494,17 +494,19 @@ void variadicCFunction(int &x, const char *str, ...);
 
 void concatVA_ARGS(void) {
   int x = 1;
-  CONCAT_VA_ARGS(x, "You need to construct", " additional pylons.", 9);
+  CONCAT_VA_ARGS(x, "You need to construct additional pylons.", 'c', 9);
   (void)(10 / x); // expected-warning{{Division by zero}}
 }
 // CHECK: <key>name</key><string>CONCAT_VA_ARGS</string>
-// CHECK-NEXT: <key>expansion</key><string>variadicCFunction(x, &quot;You need to construct additional pylons.&quot;,);x = 0;</string>
+// CHECK-NEXT: <key>expansion</key><string>variadicCFunction(x, &quot;You need to construct additional pylons.&quot;,&apos;c&apos;, 9);x = 0;</string>
 
 void concatVA_ARGSEmpty(void) {
   int x = 1;
   CONCAT_VA_ARGS(x, "You need to construct");
   (void)(10 / x); // expected-warning{{Division by zero}}
 }
+// CHECK: <key>name</key><string>CONCAT_VA_ARGS</string>
+// CHECK-NEXT: <key>expansion</key><string>variadicCFunction(x, &quot;You need to construct&quot;,);x = 0;</string>
 
 
 #define STRINGIFIED_VA_ARGS(i, fmt, ...) variadicCFunction(i, fmt, #__VA_ARGS__); \
@@ -512,15 +514,18 @@ void concatVA_ARGSEmpty(void) {
 
 void stringifyVA_ARGS(void) {
   int x = 1;
-  STRINGIFIED_VA_ARGS(x, "Additional supply ", "depots required.", 10);
+  STRINGIFIED_VA_ARGS(x, "Additional supply depots required.", 'a', 10);
   (void)(10 / x); // expected-warning{{Division by zero}}
 }
+
+// CHECK: <key>name</key><string>STRINGIFIED_VA_ARGS</string>
+// CHECK-NEXT: <key>expansion</key><string>variadicCFunction(x, &quot;Additional supply depots required.&quot;,  &quot;&apos;a&apos;&quot;, 10);x = 0;</string>
 
 void stringifyVA_ARGSEmpty(void) {
   int x = 1;
-  STRINGIFIED_VA_ARGS(x, "Additional supply ");
+  STRINGIFIED_VA_ARGS(x, "Additional supply depots required.");
   (void)(10 / x); // expected-warning{{Division by zero}}
 }
 
-// CHECK: <key>name</key><string>DISPATCH</string>
-// CHECK-NEXT: <key>expansion</key><string>foo(x, &quot;Additional supply depots required.&quot;);x = 0;;</string>
+// CHECK: <key>name</key><string>STRINGIFIED_VA_ARGS</string>
+// CHECK-NEXT: <key>expansion</key><string>variadicCFunction(x, &quot;Additional supply depots required.&quot;, &quot;)&quot;;x = 0;</string>
