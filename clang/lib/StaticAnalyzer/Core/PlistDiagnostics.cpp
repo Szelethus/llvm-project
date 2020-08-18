@@ -1230,10 +1230,9 @@ static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMa
         TStream.next(TheTok);
       }
     } else {
-      // FIXME: Handle when multiple parameters map to a single argument.
-      // Currently, we only handle when multiple arguments map to the same
-      // parameter.
-      //
+      assert(CurrParamII == __VA_ARGS__II &&
+             "No more macro arguments are found, but the current parameter "
+             "isn't __VA_ARGS__!");
     }
 
     ParamMap.emplace(CurrParamII, std::move(ArgTokens));
