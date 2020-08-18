@@ -475,7 +475,8 @@ void useZeroApplier2() { (void)(1 / bar()); } // expected-warning{{Division by z
 
 void foo(int &x, const char *str);
 
-#define PARAMS_RESOLVE_TO_VA_ARGS(i, fmt) foo(i, fmt); \
+#define PARAMS_RESOLVE_TO_VA_ARGS(i, fmt) \
+  foo(i, fmt);                            \
   i = 0;
 #define DISPATCH(...) PARAMS_RESOLVE_TO_VA_ARGS(__VA_ARGS__);
 
@@ -489,7 +490,8 @@ void mulitpleParamsResolveToVA_ARGS(void) {
 
 void variadicCFunction(int &x, const char *str, ...);
 
-#define CONCAT_VA_ARGS(i, fmt, ...) variadicCFunction(i, fmt, ##__VA_ARGS__); \
+#define CONCAT_VA_ARGS(i, fmt, ...)         \
+  variadicCFunction(i, fmt, ##__VA_ARGS__); \
   i = 0;
 
 void concatVA_ARGS(void) {
@@ -508,8 +510,8 @@ void concatVA_ARGSEmpty(void) {
 // CHECK: <key>name</key><string>CONCAT_VA_ARGS</string>
 // CHECK-NEXT: <key>expansion</key><string>variadicCFunction(x, &quot;You need to construct&quot;,);x = 0;</string>
 
-
-#define STRINGIFIED_VA_ARGS(i, fmt, ...) variadicCFunction(i, fmt, #__VA_ARGS__); \
+#define STRINGIFIED_VA_ARGS(i, fmt, ...)   \
+  variadicCFunction(i, fmt, #__VA_ARGS__); \
   i = 0;
 
 void stringifyVA_ARGS(void) {

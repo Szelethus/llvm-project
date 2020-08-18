@@ -968,9 +968,9 @@ static std::string getMacroNameAndPrintExpansion(
 /// When \p ExpanLoc references "SET_TO_NULL(a)" within the definition of
 /// "NOT_SUSPICOUS", the macro name "SET_TO_NULL" and the MacroArgMap map
 /// { (x, a) } will be returned.
-static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMap,
-    SourceLocation ExpanLoc,
-                                                const Preprocessor &PP);
+static MacroExpansionInfo
+getMacroExpansionInfo(const MacroParamMap &PrevParamMap,
+                      SourceLocation ExpanLoc, const Preprocessor &PP);
 
 /// Retrieves the ')' token that matches '(' \p It points to.
 static MacroInfo::tokens_iterator getMatchingRParen(
@@ -1114,9 +1114,9 @@ static std::string getMacroNameAndPrintExpansion(
   return MExpInfo.Name;
 }
 
-static MacroExpansionInfo getMacroExpansionInfo(const MacroParamMap &PrevParamMap,
-    SourceLocation ExpanLoc,
-                                                const Preprocessor &PP) {
+static MacroExpansionInfo
+getMacroExpansionInfo(const MacroParamMap &PrevParamMap,
+                      SourceLocation ExpanLoc, const Preprocessor &PP) {
 
   const SourceManager &SM = PP.getSourceManager();
   const LangOptions &LangOpts = PP.getLangOpts();
