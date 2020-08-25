@@ -1,5 +1,3 @@
-// RUN: %clang_analyze_cc1 -std=c++14 -analyzer-checker=core -verify %s
-//
 // RUN: %clang_analyze_cc1 -std=c++14 -analyzer-checker=core %s  \
 // RUN:   -analyzer-output=plist -o %t.plist \
 // RUN:   -analyzer-config expand-macros=true
@@ -529,3 +527,19 @@ void stringifyVA_ARGSEmpty(void) {
 
 // CHECK: <key>name</key><string>STRINGIFIED_VA_ARGS</string>
 // CHECK-NEXT: <key>expansion</key><string>variadicCFunction(x, &quot;Additional supply depots required.&quot;, &quot;)&quot;;x = 0;</string>
+
+namespace pr44493 {
+#define log(args...) \
+  do {               \
+    args \
+  } while (0)
+
+int main(int argc, char** argv) {
+  log("arg");
+  log("arg", "arg2");
+
+  int a;
+  a & 0xffc00000;
+  return 0;
+}
+} // namespace pr44493
