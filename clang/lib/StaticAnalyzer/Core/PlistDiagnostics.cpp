@@ -880,22 +880,24 @@ public:
   void printToken(const Token &Tok);
 };
 
-/// Wrapper around a Lexer object that can lex tokens one-by-one. Optionally,
-/// one can "inject" a range of tokens into the stream, in which case the next
-/// token is retrieved from the next element of the range, until the end of the
-/// range is reached.
+/// Wrapper around a Lexer object that can lex tokens one-by-one. Its possible
+/// to "inject" a range of tokens into the stream, in which case the next token
+/// is retrieved from the next element of the range, until the end of the range
+/// is reached.
 class TokenStream {
 public:
   TokenStream(SourceLocation ExpanLoc, const SourceManager &SM,
               const LangOptions &LangOpts)
       : ExpanLoc(ExpanLoc) {
-    std::pair<FileID, unsigned> LocInfo = SM.getDecomposedLoc(ExpanLoc);
-    const llvm::MemoryBuffer *MB = SM.getBuffer(LocInfo.first);
-    const char *MacroNameTokenPos = MB->getBufferStart() + LocInfo.second;
+    FileID File;
+    unsigned Offset;
+    std::tie(File, Offset) = SM.getDecomposedLoc(ExpanLoc);
+    const llvm::MemoryBuffer *MB = SM.getBuffer(File);
+    const char *MacroNameTokenPos = MB->getBufferStart() + Offset;
 
-    RawLexer.reset(new Lexer(SM.getLocForStartOfFile(LocInfo.first), LangOpts,
-                             MB->getBufferStart(), MacroNameTokenPos,
-                             MB->getBufferEnd()));
+    RawLexer = std::make_unique<Lexer>(SM.getLocForStartOfFile(File), LangOpts,
+                                       MB->getBufferStart(), MacroNameTokenPos,
+                                       MB->getBufferEnd());
   }
 
   void next(Token &Result) {
@@ -907,7 +909,7 @@ public:
     CurrTokenIt++;
   }
 
-  void injextRange(const ArgTokensTy &Range) {
+  void injectRange(const ArgTokensTy &Range) {
     TokenRange = Range;
     CurrTokenIt = TokenRange.begin();
   }
@@ -1222,8 +1224,7 @@ getMacroExpansionInfo(const MacroParamMap &PrevParamMap,
         if (TheTok.is(tok::raw_identifier)) {
           PP.LookUpIdentifierInfo(TheTok);
           if (TheTok.getIdentifierInfo() == __VA_ARGS__II) {
-            TStream.injextRange(
-                const_cast<MacroParamMap &>(PrevParamMap)[__VA_ARGS__II]);
+            TStream.injectRange(PrevParamMap.at(__VA_ARGS__II));
             TStream.next(TheTok);
             continue;
           }
@@ -1335,8 +1336,14 @@ static void dumpArgTokensToStream(llvm::raw_ostream &Out,
 }
 
 void TokenPrinter::printToken(const Token &Tok) {
-  // TODO: Handle the case where hash and hashhash occurs right before
+  // TODO: Handle GNU extensions where hash and hashhash occurs right before
   // __VA_ARGS__.
+  // cppreference.com: "some compilers offer an extension that allows ## to
+  // appear after a comma and before __VA_ARGS__, in which case the ## does
+  // nothing when the variable arguments are present, but removes the comma when
+  // the variable arguments are not present: this makes it possible to define
+  // macros such as fprintf (stderr, format, ##__VA_ARGS__)"
+  // FIXME: Handle named variadic macro parameters (also a GNU extension).
 
   // If this is the first token to be printed, don't print space.
   if (PrevTok.isNot(tok::unknown)) {

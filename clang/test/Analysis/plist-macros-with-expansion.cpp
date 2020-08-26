@@ -503,9 +503,9 @@ void concatVA_ARGSEmpty(void) {
   CONCAT_VA_ARGS(x, "You need to construct");
   (void)(10 / x); // expected-warning{{Division by zero}}
 }
+// FIXME: The comma shouldn't be present after the last argument.
 // CHECK: <key>name</key><string>CONCAT_VA_ARGS</string>
 // CHECK-NEXT: <key>expansion</key><string>variadicCFunction(x, &quot;You need to construct&quot;,);x = 0;</string>
-
 
 #define STRINGIFIED_VA_ARGS(i, fmt, ...) variadicCFunction(i, fmt, #__VA_ARGS__); \
   i = 0;
@@ -516,6 +516,7 @@ void stringifyVA_ARGS(void) {
   (void)(10 / x); // expected-warning{{Division by zero}}
 }
 
+// FIXME: Stringify and escape __VA_ARGS__ correctly.
 // CHECK: <key>name</key><string>STRINGIFIED_VA_ARGS</string>
 // CHECK-NEXT: <key>expansion</key><string>variadicCFunction(x, &quot;Additional supply depots required.&quot;,  &quot;&apos;a&apos;&quot;, 10);x = 0;</string>
 
@@ -525,21 +526,6 @@ void stringifyVA_ARGSEmpty(void) {
   (void)(10 / x); // expected-warning{{Division by zero}}
 }
 
+// FIXME: Stringify and escape __VA_ARGS__ correctly.
 // CHECK: <key>name</key><string>STRINGIFIED_VA_ARGS</string>
 // CHECK-NEXT: <key>expansion</key><string>variadicCFunction(x, &quot;Additional supply depots required.&quot;, &quot;)&quot;;x = 0;</string>
-
-namespace pr44493 {
-#define log(args...) \
-  do {               \
-    args \
-  } while (0)
-
-int main(int argc, char** argv) {
-  log("arg");
-  log("arg", "arg2");
-
-  int a;
-  a & 0xffc00000;
-  return 0;
-}
-} // namespace pr44493
