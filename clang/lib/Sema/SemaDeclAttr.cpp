@@ -14,6 +14,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTMutationListener.h"
 #include "clang/AST/CXXInheritance.h"
+#include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
@@ -2211,6 +2212,46 @@ static void handleAnalyzerNoReturnAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   }
 
   D->addAttr(::new (S.Context) AnalyzerNoReturnAttr(S.Context, AL));
+}
+
+static void handleWithinRangeAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  // checks for the 2nd argument
+  auto *PVD = cast<ParmVarDecl>(D);
+  if (!PVD->getType().getCanonicalType()->isIntegralType(S.getASTContext())) {
+    S.Diag(D->getLocation(), S.getDiagnostics().getCustomDiagID(
+                                 clang::DiagnosticsEngine::Error,
+                                 "within range on non-integral parameter"));
+    return;
+  }
+  Expr *IdxExpr = AL.getArgAsExpr(0);
+  uint32_t Low;
+  if (!checkUInt32Argument(S, AL, IdxExpr, Low))
+    return;
+  IdxExpr = AL.getArgAsExpr(1);
+  uint32_t High;
+  if (!checkUInt32Argument(S, AL, IdxExpr, High))
+    return;
+  D->addAttr(::new (S.Context) WithinRangeAttr(S.Context, AL, Low, High));
+}
+
+static void handleOutOfRangeAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  auto *PVD = cast<ParmVarDecl>(D);
+  if (!PVD->getType().getCanonicalType()->isIntegralType(S.getASTContext())) {
+    S.Diag(D->getLocation(), S.getDiagnostics().getCustomDiagID(
+                                 clang::DiagnosticsEngine::Error,
+                                 "out of range on non-integral parameter"));
+    return;
+  }
+  // checks for the 2nd argument
+  Expr *IdxExpr = AL.getArgAsExpr(0);
+  uint32_t Low;
+  if (!checkUInt32Argument(S, AL, IdxExpr, Low))
+    return;
+  IdxExpr = AL.getArgAsExpr(1);
+  uint32_t High;
+  if (!checkUInt32Argument(S, AL, IdxExpr, High))
+    return;
+  D->addAttr(::new (S.Context) OutOfRangeAttr(S.Context, AL, Low, High));
 }
 
 // PS3 PPU-specific.
@@ -8233,6 +8274,12 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case ParsedAttr::AT_AnalyzerNoReturn:
     handleAnalyzerNoReturnAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_WithinRange:
+    handleWithinRangeAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_OutOfRange:
+    handleOutOfRangeAttr(S, D, AL);
     break;
   case ParsedAttr::AT_TLSModel:
     handleTLSModelAttr(S, D, AL);
