@@ -1993,8 +1993,10 @@ PathDiagnosticBuilder::generate(const PathDiagnosticConsumer *PDC) const {
   // See whether we need to silence the checker/package.
   // FIXME: This will not work if the report was emitted with an incorrect tag.
   for (const std::string &CheckerOrPackage : Opts.SilencedCheckersAndPackages) {
-    if (ErrorTag.startswith(CheckerOrPackage))
+    if (ErrorTag.startswith(CheckerOrPackage)) {
+      llvm::errs() << "Silenced: " << ErrorTag << '\n';
       return nullptr;
+    }
   }
 
   if (!PDC->shouldGenerateDiagnostics())
