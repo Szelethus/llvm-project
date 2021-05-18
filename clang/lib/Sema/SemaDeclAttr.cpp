@@ -2104,6 +2104,19 @@ static void handleAnalyzerNoReturnAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   D->addAttr(::new (S.Context) AnalyzerNoReturnAttr(S.Context, AL));
 }
 
+static void handleWithinRangeAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  // checks for the 2nd argument
+  Expr *IdxExpr = AL.getArgAsExpr(0);
+  uint32_t Low;
+  if (!checkUInt32Argument(S, AL, IdxExpr, Low))
+    return;
+  IdxExpr = AL.getArgAsExpr(0);
+  uint32_t High;
+  if (!checkUInt32Argument(S, AL, IdxExpr, High))
+    return;
+  D->addAttr(::new (S.Context) WithinRangeAttr(S.Context, AL, Low, High));
+}
+
 // PS3 PPU-specific.
 static void handleVecReturnAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   /*
@@ -7765,6 +7778,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case ParsedAttr::AT_AnalyzerNoReturn:
     handleAnalyzerNoReturnAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_WithinRange:
+    handleWithinRangeAttr(S, D, AL);
     break;
   case ParsedAttr::AT_TLSModel:
     handleTLSModelAttr(S, D, AL);

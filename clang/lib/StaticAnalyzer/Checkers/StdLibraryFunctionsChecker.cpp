@@ -49,6 +49,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/Attr.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -929,11 +930,17 @@ StdLibraryFunctionsChecker::findFunctionSummary(const FunctionDecl *FD,
   if (!FD)
     return None;
 
+  llvm::errs() << "fnname: " << FD->getName() << '\n';
+
   initFunctionSummaries(C);
 
   auto FSMI = FunctionSummaryMap.find(FD->getCanonicalDecl());
-  if (FSMI == FunctionSummaryMap.end())
+  if (FSMI == FunctionSummaryMap.end()) {
+    for (auto arg : FD->parameters())
+      if (auto Attr = arg->getAttr<WithinRangeAttr>())
+        llvm::errs() << "Found!\n";
     return None;
+  }
   return FSMI->second;
 }
 
