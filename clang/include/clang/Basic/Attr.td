@@ -768,7 +768,7 @@ def AnalyzerNoReturn : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
-def WithinRange : InheritablParameAttr {
+def WithinRange : InheritableParamAttr {
   let Spellings = [Clang<"within_range">];
   let Args = [IntArgument<"low">, IntArgument<"high">];
   // let Subjects = SubjectList<[Friend]>; Not Working
