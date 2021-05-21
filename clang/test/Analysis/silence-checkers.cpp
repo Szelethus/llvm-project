@@ -11,7 +11,7 @@
 // RUN:   -analyzer-checker=cplusplus.NewDelete\
 // RUN:   -analyzer-config silence-checkers="unix"
 
-// RUN: %clang_analyze_cc1 -verify %s \
+// RUN: %clang_analyze_cc1 -verify="deadstore-silenced" %s \
 // RUN:   -analyzer-checker=core \
 // RUN:   -analyzer-checker=apiModeling \
 // RUN:   -analyzer-checker=deadcode \
@@ -44,6 +44,8 @@ void test_delete_ZERO_SIZE_PTR() {
   delete Ptr; // no-silence-warning{{Argument to 'delete' is a constant address (16), which is not memory allocated by 'new' [cplusplus.NewDelete]}}
               // unix-silenced-warning@-1{{Argument to 'delete' is a constant address (16), which is not memory allocated by 'new' [cplusplus.NewDelete]}}
 }
+
+// deadstore-silenced-no-diagnostics
 
 int foo() {
   int x = 42;
