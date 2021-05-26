@@ -14,11 +14,13 @@
 #include "clang/AST/AST.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/ASTContext.h"
+#include "clang/AST/Decl.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/SourceManager.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
@@ -177,6 +179,40 @@ std::unique_ptr<ASTConsumer> clang::CreateASTDeclNodeLister() {
 }
 
 //===----------------------------------------------------------------------===//
+// IntVectorDumper
+//===----------------------------------------------------------------------===//
+
+namespace {
+  class IntVectorDumper : public ASTConsumer {
+    ASTContext *Context;
+  public:
+    void Initialize(ASTContext &Context) override {
+      this->Context = &Context;
+    }
+
+    bool HandleTopLevelDecl(DeclGroupRef D) override {
+      for (DeclGroupRef::iterator I = D.begin(), E = D.end(); I != E; ++I)
+        HandleTopLevelSingleDecl(*I);
+      return true;
+    }
+
+    void HandleTopLevelSingleDecl(Decl *D);
+  };
+} // namespace
+
+void IntVectorDumper::HandleTopLevelSingleDecl(Decl *D) {
+  if (isa<FunctionDecl>(D) || isa<ObjCMethodDecl>(D)) {
+    auto *ND = cast<NamedDecl>(D);
+
+    llvm::outs() << ND->getDeclName() << '\n';
+  }
+}
+
+std::unique_ptr<ASTConsumer> clang::CreateIntVectorDumper() {
+  return std::make_unique<IntVectorDumper>();
+}
+
+//===----------------------------------------------------------------------===//
 /// ASTViewer - AST Visualization
 
 namespace {
@@ -195,7 +231,7 @@ namespace {
 
     void HandleTopLevelSingleDecl(Decl *D);
   };
-}
+} // namespace
 
 void ASTViewer::HandleTopLevelSingleDecl(Decl *D) {
   if (isa<FunctionDecl>(D) || isa<ObjCMethodDecl>(D)) {

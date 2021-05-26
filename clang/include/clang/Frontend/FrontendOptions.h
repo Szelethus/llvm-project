@@ -129,6 +129,9 @@ enum ActionKind {
   /// Dump template instantiations
   TemplightDump,
 
+  /// Dump int vector.
+  IntVectorDump,
+
   /// Run migrator.
   MigrateSource,
 

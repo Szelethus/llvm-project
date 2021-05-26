@@ -19,6 +19,7 @@
 #include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
+#include "clang/Frontend/FrontendOptions.h"
 #include "clang/Frontend/FrontendPluginRegistry.h"
 #include "clang/Frontend/Utils.h"
 #include "clang/FrontendTool/Utils.h"
@@ -72,6 +73,7 @@ CreateFrontendBaseAction(CompilerInstance &CI) {
   case ModuleFileInfo:         return std::make_unique<DumpModuleInfoAction>();
   case VerifyPCH:              return std::make_unique<VerifyPCHAction>();
   case TemplightDump:          return std::make_unique<TemplightDumpAction>();
+  case IntVectorDump:          return std::make_unique<IntVectorDumpAction>();
 
   case PluginAction: {
     for (const FrontendPluginRegistry::entry &Plugin :

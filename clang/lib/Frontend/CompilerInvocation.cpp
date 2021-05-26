@@ -2383,6 +2383,7 @@ static const auto &getFrontendActionTable() {
       {frontend::PrintPreamble, OPT_print_preamble},
       {frontend::PrintPreprocessedInput, OPT_E},
       {frontend::TemplightDump, OPT_templight_dump},
+      {frontend::IntVectorDump, OPT_int_vector_dump},
       {frontend::RewriteMacros, OPT_rewrite_macros},
       {frontend::RewriteObjC, OPT_rewrite_objc},
       {frontend::RewriteTest, OPT_rewrite_test},
@@ -4064,6 +4065,7 @@ static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {
   case frontend::RewriteTest:
   case frontend::RunAnalysis:
   case frontend::TemplightDump:
+  case frontend::IntVectorDump:
   case frontend::MigrateSource:
     return false;
 

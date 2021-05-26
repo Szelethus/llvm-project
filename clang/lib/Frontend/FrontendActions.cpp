@@ -396,6 +396,15 @@ template <> struct MappingTraits<TemplightEntry> {
 } // namespace yaml
 } // namespace llvm
 
+std::unique_ptr<ASTConsumer>
+IntVectorDumpAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
+  return CreateIntVectorDumper();
+}
+
+void IntVectorDumpAction::ExecuteAction() {
+  ASTFrontendAction::ExecuteAction();
+}
+
 namespace {
 class DefaultTemplateInstCallback : public TemplateInstantiationCallback {
   using CodeSynthesisContext = Sema::CodeSynthesisContext;
