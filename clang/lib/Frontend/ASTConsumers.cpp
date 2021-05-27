@@ -192,7 +192,13 @@ namespace {
 struct FunctionInfo {
   NamedDecl *ND = nullptr;
 
-  enum class InfoKind { ForCount = 0, IfCount = 1, NewCount = 2, END };
+  enum class InfoKind {
+    ForCount = 0,
+    IfCount = 1,
+    NewCount = 2,
+    DeleteCount = 3,
+    END
+  };
 
   llvm::SmallVector<int, 32> Infos;
 
@@ -204,6 +210,8 @@ struct FunctionInfo {
       return "IfStmt count";
     case InfoKind::NewCount:
       return "CXXNewExpr count";
+    case InfoKind::DeleteCount:
+      return "CXXDeleteCount count";
     case InfoKind::END:
       llvm_unreachable("");
     }
@@ -277,6 +285,11 @@ public:
 
   bool VisitCXXNewExpr(CXXNewExpr *N) {
     ++Info.getCountMutable<InfoKind::NewCount>();
+    return true;
+  }
+
+  bool VisitCXXNewExpr(CXXDeleteExpr *D) {
+    ++Info.getCountMutable<InfoKind::DeleteCount>();
     return true;
   }
 };
