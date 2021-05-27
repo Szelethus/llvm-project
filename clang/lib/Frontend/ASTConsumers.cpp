@@ -190,7 +190,7 @@ namespace {
 struct FunctionInfo {
   NamedDecl *ND = nullptr;
 
-  enum class InfoKind { ForCount = 0, END };
+  enum class InfoKind { ForCount = 0, IfCount = 1, END };
 
   llvm::SmallVector<int, 32> Infos;
 
@@ -198,6 +198,8 @@ struct FunctionInfo {
     switch (k) {
     case InfoKind::ForCount:
       return "ForStmt count";
+    case InfoKind::IfCount:
+      return "IfStmt count";
     case InfoKind::END:
       llvm_unreachable("");
     }
@@ -214,17 +216,17 @@ struct FunctionInfo {
   }
 
   static void dumpColumnNames() {
-    llvm::errs() << "Function name,";
+    llvm::outs() << "Function name,";
     for (size_t I = 0; I < static_cast<int>(InfoKind::END); ++I)
-      llvm::errs() << infoKindToString(static_cast<InfoKind>(I)) << ',';
-    llvm::errs() << '\n';
+      llvm::outs() << infoKindToString(static_cast<InfoKind>(I)) << ',';
+    llvm::outs() << '\n';
   }
  
   void dump() const {
-    llvm::errs() << ND->getDeclName() << ',';
+    llvm::outs() << ND->getDeclName() << ',';
     for (size_t I = 0; I < Infos.size(); ++I)
-      llvm::errs() << Infos[I] << ',';
-    llvm::errs() << '\n';
+      llvm::outs() << Infos[I] << ',';
+    llvm::outs() << '\n';
   }
 
   FunctionInfo() = default;
@@ -261,6 +263,11 @@ public:
 
   bool VisitForStmt(ForStmt *FS) {
     ++Info.getCountMutable<InfoKind::ForCount>();
+    return true;
+  }
+
+  bool VisitIfStmt(IfStmt *IF) {
+    ++Info.getCountMutable<InfoKind::IfCount>();
     return true;
   }
 };
