@@ -16,9 +16,11 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTFwd.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/ExprCXX.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/RecordLayout.h"
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/AST/StmtCXX.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/SourceManager.h"
 #include "llvm/ADT/DenseMap.h"
@@ -190,7 +192,7 @@ namespace {
 struct FunctionInfo {
   NamedDecl *ND = nullptr;
 
-  enum class InfoKind { ForCount = 0, IfCount = 1, END };
+  enum class InfoKind { ForCount = 0, IfCount = 1, NewCount = 2, END };
 
   llvm::SmallVector<int, 32> Infos;
 
@@ -200,6 +202,8 @@ struct FunctionInfo {
       return "ForStmt count";
     case InfoKind::IfCount:
       return "IfStmt count";
+    case InfoKind::NewCount:
+      return "CXXNewExpr count";
     case InfoKind::END:
       llvm_unreachable("");
     }
@@ -268,6 +272,11 @@ public:
 
   bool VisitIfStmt(IfStmt *IF) {
     ++Info.getCountMutable<InfoKind::IfCount>();
+    return true;
+  }
+
+  bool VisitCXXNewExpr(CXXNewExpr *N) {
+    ++Info.getCountMutable<InfoKind::NewCount>();
     return true;
   }
 };

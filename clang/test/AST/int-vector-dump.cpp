@@ -10,7 +10,9 @@ void g() {
   f();
   if(int())
     ;
+  int *i = new int;
 }
 
-// CHECK: f
-// CHECK: g
+// CHECK: Function name,ForStmt count,IfStmt count,CXXNewExpr count,
+// CHECK: f,1,0,0,
+// CHECK: g,0,1,1,
