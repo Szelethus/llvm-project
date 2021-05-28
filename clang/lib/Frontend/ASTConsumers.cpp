@@ -24,6 +24,7 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/SourceManager.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -227,18 +228,26 @@ struct FunctionInfo {
     return Infos[static_cast<int>(K)];
   }
 
-  static void dumpColumnNames() {
-    llvm::outs() << "Function name,";
+  static void dumpColumnNamesToStream(llvm::raw_ostream &out) {
+    llvm::SmallString<200> Str;
+    llvm::raw_svector_ostream OS(Str);
+    OS << "Function name,";
     for (size_t I = 0; I < static_cast<int>(InfoKind::END); ++I)
-      llvm::outs() << infoKindToString(static_cast<InfoKind>(I)) << ',';
-    llvm::outs() << '\n';
+      OS << infoKindToString(static_cast<InfoKind>(I)) << ',';
+    Str.pop_back();
+    OS << '\n';
+    out << Str;
   }
  
-  void dump() const {
-    llvm::outs() << ND->getDeclName() << ',';
+  void dumpToStream(llvm::raw_ostream &out) const {
+    llvm::SmallString<200> Str;
+    llvm::raw_svector_ostream OS(Str);
+    OS << ND->getDeclName() << ',';
     for (size_t I = 0; I < Infos.size(); ++I)
-      llvm::outs() << Infos[I] << ',';
-    llvm::outs() << '\n';
+      OS << Infos[I] << ',';
+    Str.pop_back();
+    OS << '\n';
+    out << Str;
   }
 
   FunctionInfo() = default;
@@ -251,7 +260,7 @@ class IntVectorDumper : public ASTConsumer {
   llvm::SmallVector<FunctionInfo, 20> FunctionInfos;
 
 public:
-  ~IntVectorDumper() { dump(); }
+  ~IntVectorDumper() { dumpToStream(llvm::outs()); }
   void Initialize(ASTContext &Context) override { this->Context = &Context; }
 
   bool HandleTopLevelDecl(DeclGroupRef D) override {
@@ -260,7 +269,7 @@ public:
     return true;
   }
 
-  void dump() const;
+  void dumpToStream(llvm::raw_ostream &out) const;
 
   void HandleTopLevelSingleDecl(Decl *D);
 };
@@ -304,10 +313,10 @@ void IntVectorDumper::HandleTopLevelSingleDecl(Decl *D) {
   }
 }
 
-void IntVectorDumper::dump() const {
-  FunctionInfo::dumpColumnNames();
+void IntVectorDumper::dumpToStream(llvm::raw_ostream &out) const {
+  FunctionInfo::dumpColumnNamesToStream(out);
   for (const FunctionInfo &FI : FunctionInfos) {
-    FI.dump();
+    FI.dumpToStream(out);
   }
 }
 
