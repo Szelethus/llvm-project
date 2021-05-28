@@ -194,10 +194,9 @@ struct FunctionInfo {
   NamedDecl *ND = nullptr;
 
   enum class InfoKind {
-    ForCount = 0,
-    IfCount = 1,
-    NewCount = 2,
-    DeleteCount = 3,
+#define INTERESTING_AST_ELEMENTS(E) E##Count,
+#include "InterestingASTElements.inc"
+#undef INTERESTING_AST_ELEMENTS
     END
   };
 
@@ -205,14 +204,11 @@ struct FunctionInfo {
 
   static StringRef infoKindToString(InfoKind k) {
     switch (k) {
-    case InfoKind::ForCount:
-      return "ForStmt count";
-    case InfoKind::IfCount:
-      return "IfStmt count";
-    case InfoKind::NewCount:
-      return "CXXNewExpr count";
-    case InfoKind::DeleteCount:
-      return "CXXDeleteCount count";
+#define INTERESTING_AST_ELEMENTS(E)                                            \
+  case InfoKind::E##Count:                                                     \
+    return #E " count";
+#include "InterestingASTElements.inc"
+#undef INTERESTING_AST_ELEMENTS
     case InfoKind::END:
       llvm_unreachable("");
     }
@@ -282,25 +278,13 @@ class DataCollectorVisitor : public RecursiveASTVisitor<DataCollectorVisitor> {
 public:
   DataCollectorVisitor(FunctionInfo &Info) : Info(Info) {}
 
-  bool VisitForStmt(ForStmt *FS) {
-    ++Info.getCountMutable<InfoKind::ForCount>();
-    return true;
+#define INTERESTING_AST_ELEMENTS(E)                                            \
+  bool VisitForStmt(E *) {                                                     \
+    ++Info.getCountMutable<InfoKind::E##Count>();                              \
+    return true;                                                               \
   }
-
-  bool VisitIfStmt(IfStmt *IF) {
-    ++Info.getCountMutable<InfoKind::IfCount>();
-    return true;
-  }
-
-  bool VisitCXXNewExpr(CXXNewExpr *N) {
-    ++Info.getCountMutable<InfoKind::NewCount>();
-    return true;
-  }
-
-  bool VisitCXXNewExpr(CXXDeleteExpr *D) {
-    ++Info.getCountMutable<InfoKind::DeleteCount>();
-    return true;
-  }
+#include "InterestingASTElements.inc"
+#undef INTERESTING_AST_ELEMENTS
 };
 
 void IntVectorDumper::HandleTopLevelSingleDecl(Decl *D) {
