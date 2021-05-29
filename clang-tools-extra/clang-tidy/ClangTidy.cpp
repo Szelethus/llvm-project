@@ -134,11 +134,11 @@ public:
       //auto Diag = Diags.Report(Loc, Diags.getCustomDiagID(Level, "%0 [%1]"))
       //            << Message.Message << Name;
       const SourceManager &SM = Diags.getSourceManager();
-      llvm::outs() << SM.getFilename(Loc) << ','
+      llvm::outs() << "\"" << SM.getFilename(Loc) << "\","
                    << SM.getSpellingLineNumber(Loc) << ','
-                   << SM.getSpellingColumnNumber(Loc) << ','
-                   << Error.DiagnosticName << ',' << Error.Message.Message
-                   << '\n';
+                   << SM.getSpellingColumnNumber(Loc) << ',' << "\""
+                   << Error.DiagnosticName << "\",\"" << Error.Message.Message
+                   << "\"" << '\n';
     }
     for (auto Fix : FixLocations) {
       Diags.Report(Fix.first, Fix.second ? diag::note_fixit_applied
