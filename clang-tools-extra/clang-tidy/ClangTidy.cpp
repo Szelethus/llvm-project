@@ -23,6 +23,7 @@
 #include "clang-tidy-config.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
+#include "clang/Basic/SourceManager.h"
 #include "clang/Format/Format.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -130,56 +131,14 @@ public:
         Level = DiagnosticsEngine::Error;
         WarningsAsErrors++;
       }
-      auto Diag = Diags.Report(Loc, Diags.getCustomDiagID(Level, "%0 [%1]"))
-                  << Message.Message << Name;
-      for (const FileByteRange &FBR : Error.Message.Ranges)
-        Diag << getRange(FBR);
-      // FIXME: explore options to support interactive fix selection.
-      const llvm::StringMap<Replacements> *ChosenFix;
-      if (ApplyFixes != FB_NoFix &&
-          (ChosenFix = getFixIt(Error, ApplyFixes == FB_FixNotes))) {
-        for (const auto &FileAndReplacements : *ChosenFix) {
-          for (const auto &Repl : FileAndReplacements.second) {
-            ++TotalFixes;
-            bool CanBeApplied = false;
-            if (!Repl.isApplicable())
-              continue;
-            SourceLocation FixLoc;
-            SmallString<128> FixAbsoluteFilePath = Repl.getFilePath();
-            Files.makeAbsolutePath(FixAbsoluteFilePath);
-            tooling::Replacement R(FixAbsoluteFilePath, Repl.getOffset(),
-                                   Repl.getLength(), Repl.getReplacementText());
-            Replacements &Replacements = FileReplacements[R.getFilePath()];
-            llvm::Error Err = Replacements.add(R);
-            if (Err) {
-              // FIXME: Implement better conflict handling.
-              llvm::errs() << "Trying to resolve conflict: "
-                           << llvm::toString(std::move(Err)) << "\n";
-              unsigned NewOffset =
-                  Replacements.getShiftedCodePosition(R.getOffset());
-              unsigned NewLength = Replacements.getShiftedCodePosition(
-                                       R.getOffset() + R.getLength()) -
-                                   NewOffset;
-              if (NewLength == R.getLength()) {
-                R = Replacement(R.getFilePath(), NewOffset, NewLength,
-                                R.getReplacementText());
-                Replacements = Replacements.merge(tooling::Replacements(R));
-                CanBeApplied = true;
-                ++AppliedFixes;
-              } else {
-                llvm::errs()
-                    << "Can't resolve conflict, skipping the replacement.\n";
-              }
-            } else {
-              CanBeApplied = true;
-              ++AppliedFixes;
-            }
-            FixLoc = getLocation(FixAbsoluteFilePath, Repl.getOffset());
-            FixLocations.push_back(std::make_pair(FixLoc, CanBeApplied));
-          }
-        }
-      }
-      reportFix(Diag, Error.Message.Fix);
+      //auto Diag = Diags.Report(Loc, Diags.getCustomDiagID(Level, "%0 [%1]"))
+      //            << Message.Message << Name;
+      const SourceManager &SM = Diags.getSourceManager();
+      llvm::outs() << SM.getFilename(Loc) << ','
+                   << SM.getSpellingLineNumber(Loc) << ','
+                   << SM.getSpellingColumnNumber(Loc) << ','
+                   << Error.DiagnosticName << ',' << Error.Message.Message
+                   << '\n';
     }
     for (auto Fix : FixLocations) {
       Diags.Report(Fix.first, Fix.second ? diag::note_fixit_applied
@@ -599,6 +558,9 @@ void handleErrors(llvm::ArrayRef<ClangTidyError> Errors,
   if (!InitialWorkingDir)
     llvm::report_fatal_error("Cannot get current working path.");
 
+  // Check reportDiagnostic (called later in this function) to add new columns.
+  // This is spectacularly crude, but gets the job done for now.
+  llvm::outs() << "Filename,Row,Column,Checker name,Checker message\n";
   for (const ClangTidyError &Error : Errors) {
     if (!Error.BuildDirectory.empty()) {
       // By default, the working directory of file system is the current
