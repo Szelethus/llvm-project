@@ -279,7 +279,7 @@ public:
   DataCollectorVisitor(FunctionInfo &Info) : Info(Info) {}
 
 #define INTERESTING_AST_ELEMENTS(E)                                            \
-  bool VisitForStmt(E *) {                                                     \
+  bool Visit##E(E *) {                                                     \
     ++Info.getCountMutable<InfoKind::E##Count>();                              \
     return true;                                                               \
   }
