@@ -527,6 +527,15 @@ class StdLibraryFunctionsChecker
       return Result;
     }
 
+    bool validateAndSet(const FunctionDecl *FD) {
+      bool Result = validateByConstraints(FD);
+      if (Result) {
+        assert(!this->FD && "FD must not be set more than once");
+        this->FD = FD;
+      }
+      return Result;
+    }
+
   private:
     // Once we know the exact type of the function then do sanity check on all
     // the given constraints.
@@ -957,10 +966,13 @@ StdLibraryFunctionsChecker::findFunctionSummary(const FunctionDecl *FD,
             return IntRangeVector{i0};
           }
         } Range;
-        return Summary(NoEvalCall)
+        llvm::errs() << "Arg number: " << arg->getFunctionScopeIndex() << '\n';
+        auto summ = Summary(NoEvalCall)
             .ArgConstraint(
                 ArgumentCondition(arg->getFunctionScopeIndex(), WithinRange,
                                   Range(Attr->getLow(), Attr->getHigh())));
+        summ.validateAndSet(FD);
+        return summ;
       }
     return None;
   }

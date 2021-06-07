@@ -2110,7 +2110,7 @@ static void handleWithinRangeAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   uint32_t Low;
   if (!checkUInt32Argument(S, AL, IdxExpr, Low))
     return;
-  IdxExpr = AL.getArgAsExpr(0);
+  IdxExpr = AL.getArgAsExpr(1);
   uint32_t High;
   if (!checkUInt32Argument(S, AL, IdxExpr, High))
     return;
