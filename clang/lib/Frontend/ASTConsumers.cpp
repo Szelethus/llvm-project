@@ -194,9 +194,9 @@ struct FunctionInfo {
   NamedDecl *ND = nullptr;
 
   enum class InfoKind {
-#define INTERESTING_AST_ELEMENTS(E) E##Count,
-#include "InterestingASTElements.inc"
-#undef INTERESTING_AST_ELEMENTS
+#define STMT(E, Base) E##Count,
+#include "clang/AST/StmtNodes.inc"
+#undef STMT
     END
   };
 
@@ -204,24 +204,23 @@ struct FunctionInfo {
 
   static StringRef infoKindToString(InfoKind k) {
     switch (k) {
-#define INTERESTING_AST_ELEMENTS(E)                                            \
+#define STMT(E, Base)                                                          \
   case InfoKind::E##Count:                                                     \
     return #E " count";
-#include "InterestingASTElements.inc"
-#undef INTERESTING_AST_ELEMENTS
+#include "clang/AST/StmtNodes.inc"
+#undef STMT
     case InfoKind::END:
       llvm_unreachable("");
     }
     llvm_unreachable("Unknown infokind!");
   }
-  
+
   const ASTContext *ACtx = nullptr;
 
   FunctionInfo(NamedDecl *ND, const ASTContext *ACtx)
       : ND(ND), Infos(static_cast<int>(InfoKind::END), 0), ACtx(ACtx) {}
 
-  template <InfoKind K>
-  int &getCountMutable() {
+  template <InfoKind K> int &getCountMutable() {
     assert(static_cast<int>(K) < Infos.size());
     return Infos[static_cast<int>(K)];
   }
@@ -236,12 +235,11 @@ struct FunctionInfo {
     OS << '\n';
     out << Str;
   }
- 
+
   void dumpToStream(llvm::raw_ostream &out) const {
     llvm::SmallString<200> Str;
     llvm::raw_svector_ostream OS(Str);
-    OS << ACtx->getSourceManager().getFilename(ND->getLocation())
-       << ',';
+    OS << ACtx->getSourceManager().getFilename(ND->getLocation()) << ',';
     OS << ND->getDeclName() << ',';
     for (size_t I = 0; I < Infos.size(); ++I)
       OS << Infos[I] << ',';
@@ -279,16 +277,17 @@ class DataCollectorVisitor : public RecursiveASTVisitor<DataCollectorVisitor> {
   FunctionInfo &Info;
 
   using InfoKind = FunctionInfo::InfoKind;
+
 public:
   DataCollectorVisitor(FunctionInfo &Info) : Info(Info) {}
 
-#define INTERESTING_AST_ELEMENTS(E)                                            \
-  bool Visit##E(E *) {                                                     \
+#define STMT(E, Base)                                                          \
+  bool Visit##E(E *) {                                                         \
     ++Info.getCountMutable<InfoKind::E##Count>();                              \
     return true;                                                               \
   }
-#include "InterestingASTElements.inc"
-#undef INTERESTING_AST_ELEMENTS
+#include "clang/AST/StmtNodes.inc"
+#undef STMT
 };
 
 void IntVectorDumper::HandleTopLevelSingleDecl(Decl *D) {
