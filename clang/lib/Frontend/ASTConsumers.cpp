@@ -197,6 +197,16 @@ struct FunctionInfo {
 #define STMT(E, Base) E##Count,
 #include "clang/AST/StmtNodes.inc"
 #undef STMT
+
+#define ABSTRACT_DECL(TYPE)
+#define DECL(E, Base) E##DeclCount,
+#include "clang/AST/DeclNodes.inc"
+#undef DECL
+#undef ABSTRACT_DECL
+
+#define TYPE(E, Base) E##TypeCount,
+#include "clang/AST/TypeNodes.inc"
+#undef TYPE
     END
   };
 
@@ -209,6 +219,20 @@ struct FunctionInfo {
     return #E " count";
 #include "clang/AST/StmtNodes.inc"
 #undef STMT
+
+#define ABSTRACT_DECL(TYPE)
+#define DECL(E, Base)                                                          \
+  case InfoKind::E##DeclCount:                                                 \
+    return #E "Decl count";
+#include "clang/AST/DeclNodes.inc"
+#undef DECL
+#undef ABSTRACT_DECL
+
+#define TYPE(E, Base)                                                          \
+  case InfoKind::E##TypeCount:                                                 \
+    return #E "Type count";
+#include "clang/AST/TypeNodes.inc"
+#undef TYPE
     case InfoKind::END:
       llvm_unreachable("");
     }
@@ -288,6 +312,24 @@ public:
   }
 #include "clang/AST/StmtNodes.inc"
 #undef STMT
+
+#define ABSTRACT_DECL(TYPE)
+#define DECL(E, Base)                                                          \
+  bool Visit##E##Decl(E##Decl *) {                                             \
+    ++Info.getCountMutable<InfoKind::E##DeclCount>();                          \
+    return true;                                                               \
+  }
+#include "clang/AST/DeclNodes.inc"
+#undef DECL
+#undef ABSTRACT_DECL
+
+#define TYPE(E, Base)                                                          \
+  bool Visit##E##Type(E##Type *) {                                             \
+    ++Info.getCountMutable<InfoKind::E##TypeCount>();                          \
+    return true;                                                               \
+  }
+#include "clang/AST/TypeNodes.inc"
+#undef TYPE
 };
 
 void IntVectorDumper::HandleTopLevelSingleDecl(Decl *D) {

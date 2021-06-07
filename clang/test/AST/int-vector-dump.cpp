@@ -8,6 +8,13 @@ void f() {
 
 void g() {
   f();
+  int a, s, d, f, g, h, j, k, l, y, x, c, v, b, n, m, q, w, e, r, t, z, u, ki, o, p;
+  using hello = int;
+  using bello = int;
+  using sello = int;
+  using fello = int;
+  using rello = int;
+  using jello = int;
   if(int())
     ;
   int *i = new int;
