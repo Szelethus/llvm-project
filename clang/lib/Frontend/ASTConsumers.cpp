@@ -292,6 +292,8 @@ public:
 };
 
 void IntVectorDumper::HandleTopLevelSingleDecl(Decl *D) {
+  if (Context->getSourceManager().isInSystemHeader(D->getLocation()))
+    return;
   if (isa<FunctionDecl>(D) || isa<ObjCMethodDecl>(D)) {
     auto *ND = cast<NamedDecl>(D);
 
