@@ -930,15 +930,38 @@ StdLibraryFunctionsChecker::findFunctionSummary(const FunctionDecl *FD,
   if (!FD)
     return None;
 
-  llvm::errs() << "fnname: " << FD->getName() << '\n';
-
   initFunctionSummaries(C);
 
   auto FSMI = FunctionSummaryMap.find(FD->getCanonicalDecl());
   if (FSMI == FunctionSummaryMap.end()) {
     for (auto arg : FD->parameters())
-      if (auto Attr = arg->getAttr<WithinRangeAttr>())
+      if (auto Attr = arg->getAttr<WithinRangeAttr>()) {
         llvm::errs() << "Found!\n";
+        auto ArgumentCondition = [](ArgNo ArgN, RangeKind Kind,
+                                    IntRangeVector Ranges) {
+          return std::make_shared<RangeConstraint>(ArgN, Kind, Ranges);
+        };
+        struct {
+          auto operator()(RangeInt b, RangeInt e) {
+            return IntRangeVector{std::pair<RangeInt, RangeInt>{b, e}};
+          }
+          auto operator()(RangeInt b, Optional<RangeInt> e) {
+            if (e)
+              return IntRangeVector{std::pair<RangeInt, RangeInt>{b, *e}};
+            return IntRangeVector{};
+          }
+          auto operator()(std::pair<RangeInt, RangeInt> i0,
+                          std::pair<RangeInt, Optional<RangeInt>> i1) {
+            if (i1.second)
+              return IntRangeVector{i0, {i1.first, *(i1.second)}};
+            return IntRangeVector{i0};
+          }
+        } Range;
+        return Summary(NoEvalCall)
+            .ArgConstraint(
+                ArgumentCondition(arg->getFunctionScopeIndex(), WithinRange,
+                                  Range(Attr->getLow(), Attr->getHigh())));
+      }
     return None;
   }
   return FSMI->second;
