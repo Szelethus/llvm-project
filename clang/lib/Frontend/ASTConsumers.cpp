@@ -214,9 +214,11 @@ struct FunctionInfo {
     }
     llvm_unreachable("Unknown infokind!");
   }
+  
+  const ASTContext *ACtx = nullptr;
 
-  FunctionInfo(NamedDecl *ND)
-      : ND(ND), Infos(static_cast<int>(InfoKind::END), 0) {}
+  FunctionInfo(NamedDecl *ND, const ASTContext *ACtx)
+      : ND(ND), Infos(static_cast<int>(InfoKind::END), 0), ACtx(ACtx) {}
 
   template <InfoKind K>
   int &getCountMutable() {
@@ -227,7 +229,7 @@ struct FunctionInfo {
   static void dumpColumnNamesToStream(llvm::raw_ostream &out) {
     llvm::SmallString<200> Str;
     llvm::raw_svector_ostream OS(Str);
-    OS << "Function name,";
+    OS << "File name,Function name,";
     for (size_t I = 0; I < static_cast<int>(InfoKind::END); ++I)
       OS << infoKindToString(static_cast<InfoKind>(I)) << ',';
     Str.pop_back();
@@ -238,6 +240,8 @@ struct FunctionInfo {
   void dumpToStream(llvm::raw_ostream &out) const {
     llvm::SmallString<200> Str;
     llvm::raw_svector_ostream OS(Str);
+    OS << ACtx->getSourceManager().getFilename(ND->getLocation())
+       << ',';
     OS << ND->getDeclName() << ',';
     for (size_t I = 0; I < Infos.size(); ++I)
       OS << Infos[I] << ',';
@@ -291,7 +295,7 @@ void IntVectorDumper::HandleTopLevelSingleDecl(Decl *D) {
   if (isa<FunctionDecl>(D) || isa<ObjCMethodDecl>(D)) {
     auto *ND = cast<NamedDecl>(D);
 
-    FunctionInfos.emplace_back(ND);
+    FunctionInfos.emplace_back(ND, Context);
     DataCollectorVisitor Visitor(FunctionInfos.back());
     Visitor.TraverseDecl(D);
   }
