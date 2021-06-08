@@ -674,20 +674,39 @@ private:
       addToFunctionSummaryMap(Name, Sign, Sum);
   }
 
+  bool addToFunctionSummaryMap(const FunctionDecl *FD, Summary Sum) const {
+    assert(FD);
+    if (Sum.validateAndSet(FD)) {
+      auto Res = FunctionSummaryMap.insert({FD->getCanonicalDecl(), Sum});
+      assert(Res.second && "Function already has a summary set!");
+      (void)Res;
+      if (DisplayLoadedSummaries) {
+        llvm::errs() << "Loaded summary for: ";
+        FD->print(llvm::errs());
+        llvm::errs() << "\n";
+      }
+      return true;
+    }
+    return false;
+  }
+
   // Below are helpers functions to create the summaries.
   static auto ArgumentCondition(ArgNo ArgN, RangeKind Kind,
                                 IntRangeVector Ranges) {
     return std::make_shared<RangeConstraint>(ArgN, Kind, Ranges);
   };
+
   template <typename... ArgsT> static auto BufferSize(ArgsT... Args) {
     return std::make_shared<BufferSizeConstraint>(Args...);
   };
+
   static auto ReturnValueCondition(RangeKind Kind, IntRangeVector Ranges) {
     return std::make_shared<RangeConstraint>(Ret, Kind, Ranges);
   }
   static auto ReturnValueCondition(BinaryOperator::Opcode Op, ArgNo OtherArgN) {
     return std::make_shared<ComparisonConstraint>(Ret, Op, OtherArgN);
   }
+
   static auto Range(RangeInt b, RangeInt e) {
     return IntRangeVector{std::pair<RangeInt, RangeInt>{b, e}};
   }
@@ -702,9 +721,11 @@ private:
       return IntRangeVector{i0, {i1.first, *(i1.second)}};
     return IntRangeVector{i0};
   }
+
   static auto SingleValue(RangeInt v) {
     return IntRangeVector{std::pair<RangeInt, RangeInt>{v, v}};
   };
+
   static auto NotNull(ArgNo ArgN) {
     return std::make_shared<NotNullConstraint>(ArgN);
   };
@@ -1092,37 +1113,21 @@ StdLibraryFunctionsChecker::findFunctionSummary(const FunctionDecl *FD,
   initFunctionSummaries(C);
 
   auto FSMI = FunctionSummaryMap.find(FD->getCanonicalDecl());
+
+  // If this function has relevant attributes, lazily add it to the summary map.
   if (FSMI == FunctionSummaryMap.end()) {
-    for (auto arg : FD->parameters())
-      if (auto Attr = arg->getAttr<WithinRangeAttr>()) {
-        llvm::errs() << "Found!\n";
-        auto ArgumentCondition = [](ArgNo ArgN, RangeKind Kind,
-                                    IntRangeVector Ranges) {
-          return std::make_shared<RangeConstraint>(ArgN, Kind, Ranges);
-        };
-        struct {
-          auto operator()(RangeInt b, RangeInt e) {
-            return IntRangeVector{std::pair<RangeInt, RangeInt>{b, e}};
-          }
-          auto operator()(RangeInt b, Optional<RangeInt> e) {
-            if (e)
-              return IntRangeVector{std::pair<RangeInt, RangeInt>{b, *e}};
-            return IntRangeVector{};
-          }
-          auto operator()(std::pair<RangeInt, RangeInt> i0,
-                          std::pair<RangeInt, Optional<RangeInt>> i1) {
-            if (i1.second)
-              return IntRangeVector{i0, {i1.first, *(i1.second)}};
-            return IntRangeVector{i0};
-          }
-        } Range;
-        auto summ = Summary(NoEvalCall)
-            .ArgConstraint(
-                ArgumentCondition(arg->getFunctionScopeIndex(), WithinRange,
-                                  Range(Attr->getLow(), Attr->getHigh())));
-        summ.validateAndSet(FD);
-        return summ;
+    for (auto *arg : FD->parameters()) {
+      if (auto *Attr = arg->getAttr<WithinRangeAttr>()) {
+        // Summaries are passed around by value, so we have to re-query it
+        // later.
+        addToFunctionSummaryMap(
+            FD, Summary(NoEvalCall)
+                    .ArgConstraint(ArgumentCondition(
+                        arg->getFunctionScopeIndex(), WithinRange,
+                        Range(Attr->getLow(), Attr->getHigh()))));
+        return FunctionSummaryMap.find(FD->getCanonicalDecl())->second;
       }
+    }
     return None;
   }
   return FSMI->second;
