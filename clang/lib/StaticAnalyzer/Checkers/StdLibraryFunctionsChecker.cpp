@@ -994,15 +994,21 @@ void StdLibraryFunctionsChecker::checkPreCall(const CallEvent &Call,
   ProgramStateRef State = C.getState();
 
   ProgramStateRef NewState = State;
+  // We may want to emit several fatal errors -- one for each violated arg
+  // constraint. We can't create more than one (fatal) error node, hence the
+  // placement outside the loop.
+  ExplodedNode *N = C.generateErrorNode(NewState);
+  bool HadErrors = false;
+
   for (const ValueConstraintPtr &Constraint : Summary.getArgConstraints()) {
     ProgramStateRef SuccessSt = Constraint->apply(NewState, Call, Summary, C);
     ProgramStateRef FailureSt =
         Constraint->negate()->apply(NewState, Call, Summary, C);
     // The argument constraint is not satisfied.
     if (FailureSt && !SuccessSt) {
-      if (ExplodedNode *N = C.generateErrorNode(NewState))
+      if (N)
         reportBug(Call, N, Constraint.get(), Summary, C);
-      break;
+      HadErrors = true;
     } else {
       // We will apply the constraint even if we cannot reason about the
       // argument. This means both SuccessSt and FailureSt can be true. If we
@@ -1012,7 +1018,7 @@ void StdLibraryFunctionsChecker::checkPreCall(const CallEvent &Call,
       NewState = SuccessSt;
     }
   }
-  if (NewState && NewState != State)
+  if (HadErrors && NewState && NewState != State)
     C.addTransition(NewState);
 }
 
