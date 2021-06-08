@@ -10,7 +10,7 @@ void foo(int i __attribute__((within_range(13, 99))),
 }
 
 void k() {
-  foo(15, 99); // \
+  foo(5, 99); // \
   // expected-warning{{Function argument constraint is not satisfied}} \
   // expected-note{{The 1st arg should be within the range [13, 99]}}
 }

@@ -751,6 +751,9 @@ public:
   bool ModelPOSIX = false;
 
 private:
+  Optional<Summary> getSummaryFromAttributes(const FunctionDecl *FD,
+                                             CheckerContext &C) const;
+
   Optional<Summary> findFunctionSummary(const FunctionDecl *FD,
                                         CheckerContext &C) const;
   Optional<Summary> findFunctionSummary(const CallEvent &Call,
@@ -1105,6 +1108,31 @@ bool StdLibraryFunctionsChecker::Signature::matches(
 }
 
 Optional<StdLibraryFunctionsChecker::Summary>
+StdLibraryFunctionsChecker::getSummaryFromAttributes(const FunctionDecl *FD,
+                                                     CheckerContext &C) const {
+  bool HadRelevantAttr = false;
+  Summary Summ(NoEvalCall);
+
+  for (auto *arg : FD->parameters()) {
+    if (auto *Attr = arg->getAttr<WithinRangeAttr>()) {
+      Summ = Summ.ArgConstraint(
+          ArgumentCondition(arg->getFunctionScopeIndex(), WithinRange,
+                            Range(Attr->getLow(), Attr->getHigh())));
+      HadRelevantAttr = true;
+    }
+  }
+
+  if (HadRelevantAttr) {
+    // Summaries are passed around by value, so we have to re-query it
+    // later.
+    addToFunctionSummaryMap(FD, Summ);
+    return FunctionSummaryMap.find(FD->getCanonicalDecl())->second;
+  }
+
+  return None;
+}
+
+Optional<StdLibraryFunctionsChecker::Summary>
 StdLibraryFunctionsChecker::findFunctionSummary(const FunctionDecl *FD,
                                                 CheckerContext &C) const {
   if (!FD)
@@ -1114,27 +1142,11 @@ StdLibraryFunctionsChecker::findFunctionSummary(const FunctionDecl *FD,
 
   auto FSMI = FunctionSummaryMap.find(FD->getCanonicalDecl());
 
-  // If this function has relevant attributes, lazily add it to the summary map.
   if (FSMI != FunctionSummaryMap.end())
     return FSMI->second;
 
-  Summary Summ(NoEvalCall);
-  for (auto *arg : FD->parameters()) {
-    if (auto *Attr = arg->getAttr<WithinRangeAttr>()) {
-      llvm::errs() << arg->getFunctionScopeIndex() << "th arg\n";
-      Summ = Summ.ArgConstraint(
-          ArgumentCondition(arg->getFunctionScopeIndex(), WithinRange,
-                            Range(Attr->getLow(), Attr->getHigh())));
-    }
-  }
-  // Summaries are passed around by value, so we have to re-query it
-  // later.
-  addToFunctionSummaryMap(FD, Summ);
-  FSMI = FunctionSummaryMap.find(FD->getCanonicalDecl());
-
-  if (FSMI == FunctionSummaryMap.end())
-    return None;
-  return FSMI->second;
+  // If this function has relevant attributes, lazily add it to the summary map.
+  return getSummaryFromAttributes(FD, C);
 }
 
 Optional<StdLibraryFunctionsChecker::Summary>
