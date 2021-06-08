@@ -51,6 +51,8 @@
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
+#include "clang/AST/DeclTemplate.h"
+#include "clang/Lex/Preprocessor.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -71,9 +73,12 @@ namespace {
 class StdLibraryFunctionsChecker
     : public Checker<check::PreCall, check::PostCall, eval::Call> {
   const ASTContext &ACtx;
+  const Preprocessor &PP;
 
 public:
-  StdLibraryFunctionsChecker(const ASTContext &ACtx) : ACtx(ACtx) {}
+  StdLibraryFunctionsChecker(const ASTContext &ACtx, const Preprocessor &PP) : ACtx(ACtx), PP(PP) {
+
+  }
 
 private:
   class Summary;
@@ -573,173 +578,136 @@ private:
   // Helper methods and fields for forming signatures and summaries begin.
   //===--------------------------------------------------------------------===//
 
-    // Find the type. If not found then the optional is not set.
-    llvm::Optional<QualType> lookupTy(StringRef Name) const {
-      IdentifierInfo &II = ACtx.Idents.get(Name);
-      auto LookupRes = ACtx.getTranslationUnitDecl()->lookup(&II);
-      if (LookupRes.empty())
-        return None;
-
-      // Prioritze typedef declarations.
-      // This is needed in case of C struct typedefs. E.g.:
-      //   typedef struct FILE FILE;
-      // In this case, we have a RecordDecl 'struct FILE' with the name 'FILE'
-      // and we have a TypedefDecl with the name 'FILE'.
-      for (Decl *D : LookupRes)
-        if (auto *TD = dyn_cast<TypedefNameDecl>(D))
-          return ACtx.getTypeDeclType(TD).getCanonicalType();
-
-      // Find the first TypeDecl.
-      // There maybe cases when a function has the same name as a struct.
-      // E.g. in POSIX: `struct stat` and the function `stat()`:
-      //   int stat(const char *restrict path, struct stat *restrict buf);
-      for (Decl *D : LookupRes)
-        if (auto *TD = dyn_cast<TypeDecl>(D))
-          return ACtx.getTypeDeclType(TD).getCanonicalType();
+  // Find the type. If not found then the optional is not set.
+  llvm::Optional<QualType> lookupTy(StringRef Name) const {
+    IdentifierInfo &II = ACtx.Idents.get(Name);
+    auto LookupRes = ACtx.getTranslationUnitDecl()->lookup(&II);
+    if (LookupRes.empty())
       return None;
-    }
+
+    // Prioritze typedef declarations.
+    // This is needed in case of C struct typedefs. E.g.:
+    //   typedef struct FILE FILE;
+    // In this case, we have a RecordDecl 'struct FILE' with the name 'FILE'
+    // and we have a TypedefDecl with the name 'FILE'.
+    for (Decl *D : LookupRes)
+      if (auto *TD = dyn_cast<TypedefNameDecl>(D))
+        return ACtx.getTypeDeclType(TD).getCanonicalType();
+
+    // Find the first TypeDecl.
+    // There maybe cases when a function has the same name as a struct.
+    // E.g. in POSIX: `struct stat` and the function `stat()`:
+    //   int stat(const char *restrict path, struct stat *restrict buf);
+    for (Decl *D : LookupRes)
+      if (auto *TD = dyn_cast<TypeDecl>(D))
+        return ACtx.getTypeDeclType(TD).getCanonicalType();
+    return None;
+  }
 
   // Below are auxiliary classes to handle optional types that we get as a
   // result of the lookup.
-    QualType getRestrictTy(QualType Ty) const {
-      return ACtx.getLangOpts().C99 ? ACtx.getRestrictType(Ty) : Ty;
-    }
-    Optional<QualType> getRestrictTy(Optional<QualType> Ty) const {
-      if (Ty)
-        return getRestrictTy(*Ty);
-      return None;
-    }
-    QualType getPointerTy(QualType Ty) { return ACtx.getPointerType(Ty); }
-    Optional<QualType> getPointerTy(Optional<QualType> Ty) {
-      if (Ty)
-        return getPointerTy(*Ty);
-      return None;
-    }
-    Optional<QualType> getConstTy(Optional<QualType> Ty) {
-      return Ty ? Optional<QualType>(Ty->withConst()) : None;
-    }
-    QualType getConstTy(QualType Ty) { return Ty.withConst(); }
+  QualType getRestrictTy(QualType Ty) const {
+    return ACtx.getLangOpts().C99 ? ACtx.getRestrictType(Ty) : Ty;
+  }
+  Optional<QualType> getRestrictTy(Optional<QualType> Ty) const {
+    if (Ty)
+      return getRestrictTy(*Ty);
+    return None;
+  }
 
-  // These types are useful for writing specifications quickly,
-  // New specifications should probably introduce more types.
-  // Some types are hard to obtain from the AST, eg. "ssize_t".
-  // In such cases it should be possible to provide multiple variants
-  // of function summary for common cases (eg. ssize_t could be int or long
-  // or long long, so three summary variants would be enough).
-  // Of course, function variants are also useful for C++ overloads.
-  const QualType VoidTy = ACtx.VoidTy;
-  const QualType CharTy = ACtx.CharTy;
-  const QualType WCharTy = ACtx.WCharTy;
-  const QualType IntTy = ACtx.IntTy;
-  const QualType UnsignedIntTy = ACtx.UnsignedIntTy;
-  const QualType LongTy = ACtx.LongTy;
-  const QualType SizeTy = ACtx.getSizeType();
+  QualType getPointerTy(QualType Ty) const { return ACtx.getPointerType(Ty); }
+  Optional<QualType> getPointerTy(Optional<QualType> Ty) const {
+    if (Ty)
+      return getPointerTy(*Ty);
+    return None;
+  }
 
-  const QualType VoidPtrTy = getPointerTy(VoidTy); // void *
-  const QualType IntPtrTy = getPointerTy(IntTy);   // int *
-  const QualType UnsignedIntPtrTy =
-      getPointerTy(UnsignedIntTy); // unsigned int *
-  const QualType VoidPtrRestrictTy = getRestrictTy(VoidPtrTy);
-  const QualType ConstVoidPtrTy =
-      getPointerTy(getConstTy(VoidTy));            // const void *
-  const QualType CharPtrTy = getPointerTy(CharTy); // char *
-  const QualType CharPtrRestrictTy = getRestrictTy(CharPtrTy);
-  const QualType ConstCharPtrTy =
-      getPointerTy(getConstTy(CharTy)); // const char *
-  const QualType ConstCharPtrRestrictTy = getRestrictTy(ConstCharPtrTy);
-  const QualType Wchar_tPtrTy = getPointerTy(WCharTy); // wchar_t *
-  const QualType ConstWchar_tPtrTy =
-      getPointerTy(getConstTy(WCharTy)); // const wchar_t *
-  const QualType ConstVoidPtrRestrictTy = getRestrictTy(ConstVoidPtrTy);
-  const QualType SizePtrTy = getPointerTy(SizeTy);
-  const QualType SizePtrRestrictTy = getRestrictTy(SizePtrTy);
+  Optional<QualType> getConstTy(Optional<QualType> Ty) const {
+    return Ty ? Optional<QualType>(Ty->withConst()) : None;
+  }
+  QualType getConstTy(QualType Ty) const { return Ty.withConst(); }
 
   // The platform dependent value of EOF.
   // Try our best to parse this from the Preprocessor, otherwise fallback to -1.
-  const auto EOFv = [&C]() -> RangeInt {
-    if (const llvm::Optional<int> OptInt =
-            tryExpandAsInteger("EOF", C.getPreprocessor()))
+  RangeInt getEOFv() const {
+    if (const llvm::Optional<int> OptInt = tryExpandAsInteger("EOF", PP))
       return *OptInt;
     return -1;
-  }();
+  }
 
   // Auxiliary class to aid adding summaries to the summary map.
   // Add a summary to a FunctionDecl found by lookup. The lookup is performed
-    // by the given Name, and in the global scope. The summary will be attached
-    // to the found FunctionDecl only if the signatures match.
-    //
-    // Returns true if the summary has been added, false otherwise.
-    bool addToFunctionSummaryMap(StringRef Name, Signature Sign, Summary Sum) {
-      if (Sign.isInvalid())
-        return false;
-      IdentifierInfo &II = ACtx.Idents.get(Name);
-      auto LookupRes = ACtx.getTranslationUnitDecl()->lookup(&II);
-      if (LookupRes.empty())
-        return false;
-      for (Decl *D : LookupRes) {
-        if (auto *FD = dyn_cast<FunctionDecl>(D)) {
-          if (Sum.matchesAndSet(Sign, FD)) {
-            auto Res = FunctionSummaryMap.insert({FD->getCanonicalDecl(), Sum});
-            assert(Res.second && "Function already has a summary set!");
-            (void)Res;
-            if (DisplayLoadedSummaries) {
-              llvm::errs() << "Loaded summary for: ";
-              FD->print(llvm::errs());
-              llvm::errs() << "\n";
-            }
-            return true;
+  // by the given Name, and in the global scope. The summary will be attached
+  // to the found FunctionDecl only if the signatures match.
+  //
+  // Returns true if the summary has been added, false otherwise.
+  bool addToFunctionSummaryMap(StringRef Name, Signature Sign,
+                               Summary Sum) const {
+    if (Sign.isInvalid())
+      return false;
+    IdentifierInfo &II = ACtx.Idents.get(Name);
+    auto LookupRes = ACtx.getTranslationUnitDecl()->lookup(&II);
+    if (LookupRes.empty())
+      return false;
+    for (Decl *D : LookupRes) {
+      if (auto *FD = dyn_cast<FunctionDecl>(D)) {
+        if (Sum.matchesAndSet(Sign, FD)) {
+          auto Res = FunctionSummaryMap.insert({FD->getCanonicalDecl(), Sum});
+          assert(Res.second && "Function already has a summary set!");
+          (void)Res;
+          if (DisplayLoadedSummaries) {
+            llvm::errs() << "Loaded summary for: ";
+            FD->print(llvm::errs());
+            llvm::errs() << "\n";
           }
+          return true;
         }
       }
-      return false;
     }
-    // Add the same summary for different names with the Signature explicitly
-    // given.
-    void addToFunctionSummaryMap(std::vector<StringRef> Names, Signature Sign, Summary Sum) {
-      for (StringRef Name : Names)
-        addToFunctionSummaryMap(Name, Sign, Sum);
-    }
+    return false;
+  }
+  // Add the same summary for different names with the Signature explicitly
+  // given.
+  void addToFunctionSummaryMap(std::vector<StringRef> Names, Signature Sign,
+                               Summary Sum) const {
+    for (StringRef Name : Names)
+      addToFunctionSummaryMap(Name, Sign, Sum);
+  }
 
   // Below are helpers functions to create the summaries.
-  auto ArgumentCondition = [](ArgNo ArgN, RangeKind Kind,
-                              IntRangeVector Ranges) {
+  static auto ArgumentCondition(ArgNo ArgN, RangeKind Kind,
+                                IntRangeVector Ranges) {
     return std::make_shared<RangeConstraint>(ArgN, Kind, Ranges);
   };
-  auto BufferSize = [](auto... Args) {
+  template <typename... ArgsT> static auto BufferSize(ArgsT... Args) {
     return std::make_shared<BufferSizeConstraint>(Args...);
   };
-    auto ReturnValueCondition(RangeKind Kind, IntRangeVector Ranges) {
-      return std::make_shared<RangeConstraint>(Ret, Kind, Ranges);
-    }
-    auto ReturnValueCondition(BinaryOperator::Opcode Op, ArgNo OtherArgN) {
-      return std::make_shared<ComparisonConstraint>(Ret, Op, OtherArgN);
-    }
-    auto Range(RangeInt b, RangeInt e) {
-      return IntRangeVector{std::pair<RangeInt, RangeInt>{b, e}};
-    }
-    auto Range(RangeInt b, Optional<RangeInt> e) {
-      if (e)
-        return IntRangeVector{std::pair<RangeInt, RangeInt>{b, *e}};
-      return IntRangeVector{};
-    }
-    auto Range(std::pair<RangeInt, RangeInt> i0,
+  static auto ReturnValueCondition(RangeKind Kind, IntRangeVector Ranges) {
+    return std::make_shared<RangeConstraint>(Ret, Kind, Ranges);
+  }
+  static auto ReturnValueCondition(BinaryOperator::Opcode Op, ArgNo OtherArgN) {
+    return std::make_shared<ComparisonConstraint>(Ret, Op, OtherArgN);
+  }
+  static auto Range(RangeInt b, RangeInt e) {
+    return IntRangeVector{std::pair<RangeInt, RangeInt>{b, e}};
+  }
+  static auto Range(RangeInt b, Optional<RangeInt> e) {
+    if (e)
+      return IntRangeVector{std::pair<RangeInt, RangeInt>{b, *e}};
+    return IntRangeVector{};
+  }
+  static auto Range(std::pair<RangeInt, RangeInt> i0,
                     std::pair<RangeInt, Optional<RangeInt>> i1) {
-      if (i1.second)
-        return IntRangeVector{i0, {i1.first, *(i1.second)}};
-      return IntRangeVector{i0};
-    }
-  auto SingleValue = [](RangeInt v) {
+    if (i1.second)
+      return IntRangeVector{i0, {i1.first, *(i1.second)}};
+    return IntRangeVector{i0};
+  }
+  static auto SingleValue(RangeInt v) {
     return IntRangeVector{std::pair<RangeInt, RangeInt>{v, v}};
   };
-  auto LessThanOrEq = BO_LE;
-  auto NotNull = [&](ArgNo ArgN) {
+  static auto NotNull(ArgNo ArgN) {
     return std::make_shared<NotNullConstraint>(ArgN);
   };
-
-  Optional<QualType> FileTy = lookupTy("FILE");
-  Optional<QualType> FilePtrTy = getPointerTy(FileTy);
-  Optional<QualType> FilePtrRestrictTy = getRestrictTy(FilePtrTy);
-
 
   //===--------------------------------------------------------------------===//
   // Helper methods and fields for forming signatures and summaries end.
@@ -1177,6 +1145,10 @@ void StdLibraryFunctionsChecker::initFunctionSummaries(
   SValBuilder &SVB = C.getSValBuilder();
   BasicValueFactory &BVF = SVB.getBasicValueFactory();
   const ASTContext &ACtx = BVF.getContext();
+  auto LessThanOrEq = BO_LE;
+
+  auto EOFv = getEOFv();
+
   class GetMaxValue {
     BasicValueFactory &BVF;
 
@@ -1193,11 +1165,49 @@ void StdLibraryFunctionsChecker::initFunctionSummaries(
     }
   } getMaxValue(BVF);
 
+  // These types are useful for writing specifications quickly,
+  // New specifications should probably introduce more types.
+  // Some types are hard to obtain from the AST, eg. "ssize_t".
+  // In such cases it should be possible to provide multiple variants
+  // of function summary for common cases (eg. ssize_t could be int or long
+  // or long long, so three summary variants would be enough).
+  // Of course, function variants are also useful for C++ overloads.
+  const QualType VoidTy = ACtx.VoidTy;
+  const QualType CharTy = ACtx.CharTy;
+  const QualType WCharTy = ACtx.WCharTy;
+  const QualType IntTy = ACtx.IntTy;
+  const QualType UnsignedIntTy = ACtx.UnsignedIntTy;
+  const QualType LongTy = ACtx.LongTy;
+  const QualType SizeTy = ACtx.getSizeType();
+
+  const QualType VoidPtrTy = getPointerTy(VoidTy); // void *
+  const QualType IntPtrTy = getPointerTy(IntTy);   // int *
+  const QualType UnsignedIntPtrTy =
+      getPointerTy(UnsignedIntTy); // unsigned int *
+  const QualType VoidPtrRestrictTy = getRestrictTy(VoidPtrTy);
+  const QualType ConstVoidPtrTy =
+      getPointerTy(getConstTy(VoidTy));            // const void *
+  const QualType CharPtrTy = getPointerTy(CharTy); // char *
+  const QualType CharPtrRestrictTy = getRestrictTy(CharPtrTy);
+  const QualType ConstCharPtrTy =
+      getPointerTy(getConstTy(CharTy)); // const char *
+  const QualType ConstCharPtrRestrictTy = getRestrictTy(ConstCharPtrTy);
+  const QualType Wchar_tPtrTy = getPointerTy(WCharTy); // wchar_t *
+  const QualType ConstWchar_tPtrTy =
+      getPointerTy(getConstTy(WCharTy)); // const wchar_t *
+  const QualType ConstVoidPtrRestrictTy = getRestrictTy(ConstVoidPtrTy);
+  const QualType SizePtrTy = getPointerTy(SizeTy);
+  const QualType SizePtrRestrictTy = getRestrictTy(SizePtrTy);
+
   const RangeInt IntMax = BVF.getMaxValue(IntTy).getLimitedValue();
   const RangeInt UnsignedIntMax =
       BVF.getMaxValue(UnsignedIntTy).getLimitedValue();
   const RangeInt LongMax = BVF.getMaxValue(LongTy).getLimitedValue();
   const RangeInt SizeMax = BVF.getMaxValue(SizeTy).getLimitedValue();
+
+  Optional<QualType> FileTy = lookupTy("FILE");
+  Optional<QualType> FilePtrTy = getPointerTy(FileTy);
+  Optional<QualType> FilePtrRestrictTy = getRestrictTy(FilePtrTy);
 
   // Set UCharRangeMax to min of int or uchar maximum value.
   // The C standard states that the arguments of functions like isalpha must
@@ -2662,7 +2672,7 @@ void StdLibraryFunctionsChecker::initFunctionSummaries(
 }
 
 void ento::registerStdCLibraryFunctionsChecker(CheckerManager &mgr) {
-  auto *Checker = mgr.registerChecker<StdLibraryFunctionsChecker>(mgr.getASTContext());
+  auto *Checker = mgr.registerChecker<StdLibraryFunctionsChecker>(mgr.getASTContext(), mgr.getPreprocessor());
   Checker->DisplayLoadedSummaries =
       mgr.getAnalyzerOptions().getCheckerBooleanOption(
           Checker, "DisplayLoadedSummaries");
