@@ -493,7 +493,7 @@ private:
   ///   rules for the given parameter's type, those rules are checked once the
   ///   signature is matched.
   class Summary {
-    const InvalidationKind InvalidationKd;
+    InvalidationKind InvalidationKd;
     Cases CaseConstraints;
     ConstraintSet ArgConstraints;
 
@@ -1115,21 +1115,25 @@ StdLibraryFunctionsChecker::findFunctionSummary(const FunctionDecl *FD,
   auto FSMI = FunctionSummaryMap.find(FD->getCanonicalDecl());
 
   // If this function has relevant attributes, lazily add it to the summary map.
-  if (FSMI == FunctionSummaryMap.end()) {
-    for (auto *arg : FD->parameters()) {
-      if (auto *Attr = arg->getAttr<WithinRangeAttr>()) {
-        // Summaries are passed around by value, so we have to re-query it
-        // later.
-        addToFunctionSummaryMap(
-            FD, Summary(NoEvalCall)
-                    .ArgConstraint(ArgumentCondition(
-                        arg->getFunctionScopeIndex(), WithinRange,
-                        Range(Attr->getLow(), Attr->getHigh()))));
-        return FunctionSummaryMap.find(FD->getCanonicalDecl())->second;
-      }
+  if (FSMI != FunctionSummaryMap.end())
+    return FSMI->second;
+
+  Summary Summ(NoEvalCall);
+  for (auto *arg : FD->parameters()) {
+    if (auto *Attr = arg->getAttr<WithinRangeAttr>()) {
+      llvm::errs() << arg->getFunctionScopeIndex() << "th arg\n";
+      Summ = Summ.ArgConstraint(
+          ArgumentCondition(arg->getFunctionScopeIndex(), WithinRange,
+                            Range(Attr->getLow(), Attr->getHigh())));
     }
-    return None;
   }
+  // Summaries are passed around by value, so we have to re-query it
+  // later.
+  addToFunctionSummaryMap(FD, Summ);
+  FSMI = FunctionSummaryMap.find(FD->getCanonicalDecl());
+
+  if (FSMI == FunctionSummaryMap.end())
+    return None;
   return FSMI->second;
 }
 

@@ -4,12 +4,13 @@
 // RUN:   -analyzer-checker=alpha.unix.StdCLibraryFunctionArgs \
 // RUN:   -analyzer-checker=debug.StdCLibraryFunctionsTester
 
-void foo(int i __attribute__((within_range(13, 99)))) {
+void foo(int i __attribute__((within_range(13, 99))),
+    int j __attribute__((within_range(0, 10)))) {
    i = 12;
 }
 
 void k() {
-  foo(0); // \
+  foo(15, 99); // \
   // expected-warning{{Function argument constraint is not satisfied}} \
   // expected-note{{The 1st arg should be within the range [13, 99]}}
 }
