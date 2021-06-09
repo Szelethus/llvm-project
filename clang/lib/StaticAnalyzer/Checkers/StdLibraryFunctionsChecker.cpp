@@ -1120,6 +1120,12 @@ StdLibraryFunctionsChecker::getSummaryFromAttributes(const FunctionDecl *FD,
                             Range(Attr->getLow(), Attr->getHigh())));
       HadRelevantAttr = true;
     }
+    if (auto *Attr = arg->getAttr<OutOfRangeAttr>()) {
+      Summ = Summ.ArgConstraint(
+          ArgumentCondition(arg->getFunctionScopeIndex(), OutOfRange,
+                            Range(Attr->getLow(), Attr->getHigh())));
+      HadRelevantAttr = true;
+    }
   }
 
   if (HadRelevantAttr) {

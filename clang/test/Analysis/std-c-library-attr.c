@@ -14,3 +14,13 @@ void k() {
   // expected-warning{{Function argument constraint is not satisfied}} \
   // expected-note{{The 1st arg should be within the range [13, 99]}}
 }
+
+void bar(int i __attribute__((out_of_range(13, 99)))) {
+   i = 12;
+}
+
+void g() {
+  bar(13); // \
+  // expected-warning{{Function argument constraint is not satisfied}} \
+  // expected-note{{The 1st arg should be out of the range [13, 99]}}
+}

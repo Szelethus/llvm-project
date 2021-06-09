@@ -776,6 +776,14 @@ def WithinRange : InheritableParamAttr {
   let Documentation = [Undocumented];
 }
 
+def OutOfRange : InheritableParamAttr {
+  let Spellings = [Clang<"out_of_range">];
+  let Args = [IntArgument<"low">, IntArgument<"high">];
+  // let Subjects = SubjectList<[Friend]>; Not Working
+  let Subjects = SubjectList<[ParmVar]>;
+  let Documentation = [Undocumented];
+}
+
 def Annotate : InheritableParamAttr {
   let Spellings = [Clang<"annotate">];
   let Args = [StringArgument<"Annotation">, VariadicExprArgument<"Args">];
