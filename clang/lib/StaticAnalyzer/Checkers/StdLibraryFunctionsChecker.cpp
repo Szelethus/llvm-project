@@ -51,6 +51,7 @@
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
+#include "clang/AST/Attrs.inc"
 #include "clang/AST/DeclTemplate.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
@@ -1125,6 +1126,10 @@ StdLibraryFunctionsChecker::getSummaryFromAttributes(const FunctionDecl *FD,
           ArgumentCondition(arg->getFunctionScopeIndex(), OutOfRange,
                             Range(Attr->getLow(), Attr->getHigh())));
       HadRelevantAttr = true;
+    }
+    if (auto *Attr = arg->getAttr<ConstraintAttr>()) {
+      Attr->getConstraint()->dump();
+      //HadRelevantAttr = true;
     }
   }
 

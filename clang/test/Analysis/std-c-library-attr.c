@@ -24,3 +24,4 @@ void g() {
   // expected-warning{{Function argument constraint is not satisfied}} \
   // expected-note{{The 1st arg should be out of the range [13, 99]}}
 }
+

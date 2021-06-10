@@ -2130,6 +2130,19 @@ static void handleOutOfRangeAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   D->addAttr(::new (S.Context) OutOfRangeAttr(S.Context, AL, Low, High));
 }
 
+static void handleConstraintAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  // checks for the 2nd argument
+  Expr *E = AL.getArgAsExpr(0);
+  if (!E->getType()->isBooleanType()) {
+    S.Diag(D->getLocation(),
+           S.getDiagnostics().getCustomDiagID(clang::DiagnosticsEngine::Error,
+                                              "non-boolean contratint"));
+    return;
+  }
+
+  D->addAttr(::new (S.Context) ConstraintAttr(S.Context, AL, E));
+}
+
 // PS3 PPU-specific.
 static void handleVecReturnAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   /*
@@ -7797,6 +7810,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case ParsedAttr::AT_OutOfRange:
     handleOutOfRangeAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_Constraint:
+    handleConstraintAttr(S, D, AL);
     break;
   case ParsedAttr::AT_TLSModel:
     handleTLSModelAttr(S, D, AL);
