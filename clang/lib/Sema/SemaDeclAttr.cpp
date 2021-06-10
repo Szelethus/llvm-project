@@ -2108,7 +2108,6 @@ static void handleAnalyzerNoReturnAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
 static void handleWithinRangeAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   // checks for the 2nd argument
   auto *PVD = cast<ParmVarDecl>(D);
-  PVD->dump();
   if (!PVD->getType().getCanonicalType()->isIntegralType(S.getASTContext())) {
     S.Diag(D->getLocation(), S.getDiagnostics().getCustomDiagID(
                                  clang::DiagnosticsEngine::Error,
