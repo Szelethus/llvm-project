@@ -332,22 +332,36 @@ public:
 #undef TYPE
 };
 
+struct FunctionVisitor : public RecursiveASTVisitor<FunctionVisitor> {
+  llvm::SmallVector<FunctionInfo, 20> &FunctionInfos;
+  ASTContext &ACtx;
+
+  FunctionVisitor(llvm::SmallVector<FunctionInfo, 20> &FunctionInfos,
+                  ASTContext &ACtx)
+      : FunctionInfos(FunctionInfos), ACtx(ACtx) {}
+
+  bool VisitFunctionDecl(FunctionDecl *FD) {
+    FunctionInfos.emplace_back(FD, &ACtx);
+    DataCollectorVisitor Visitor(FunctionInfos.back());
+    Visitor.TraverseDecl(FD);
+    return true;
+  }
+};
+
 void IntVectorDumper::HandleTopLevelSingleDecl(Decl *D) {
   if (Context->getSourceManager().isInSystemHeader(D->getLocation()))
     return;
-  if (isa<FunctionDecl>(D) || isa<ObjCMethodDecl>(D)) {
-    auto *ND = cast<NamedDecl>(D);
 
-    FunctionInfos.emplace_back(ND, Context);
-    DataCollectorVisitor Visitor(FunctionInfos.back());
-    Visitor.TraverseDecl(D);
-  }
+  FunctionVisitor FV(FunctionInfos, *Context);
+
+  FV.TraverseDecl(D);
 }
 
 void IntVectorDumper::dumpToStream(llvm::raw_ostream &out) const {
   FunctionInfo::dumpColumnNamesToStream(out);
   for (const FunctionInfo &FI : FunctionInfos) {
     FI.dumpToStream(out);
+    out.flush();
   }
 }
 
