@@ -349,9 +349,8 @@ struct FunctionVisitor : public RecursiveASTVisitor<FunctionVisitor> {
 };
 
 void IntVectorDumper::HandleTopLevelSingleDecl(Decl *D) {
-  if (Context->getSourceManager().isInSystemHeader(D->getLocation()))
-    return;
-
+  //if (Context->getSourceManager().isInSystemHeader(D->getLocation()))
+  //  return;
   FunctionVisitor FV(FunctionInfos, *Context);
 
   FV.TraverseDecl(D);
