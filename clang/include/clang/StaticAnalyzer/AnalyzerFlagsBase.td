@@ -33,4 +33,11 @@ class HiddenEnum<bit val> {
 def DontHide : HiddenEnum<0>;
 def Hide : HiddenEnum<1>;
 
+/// A description. May be displayed to the user when clang is invoked with
+/// a '-help'-like command line option.
+class HelpText<string text> { string HelpText = text; }
+class DefaultVal<string val> { string DefaultVal = val; }
 
+class Values<list<string> Vals = []> {
+  list<string> Values = Vals;
+}

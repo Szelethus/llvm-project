@@ -1,37 +1,30 @@
-//class ConfigType<bits<2> val> {
-//  bits<2> Type = val;
-//}
-//def Integer : ConfigType<0>;
-//def String : ConfigType<1>;
-//def Boolean : ConfigType<2>;
+//===--- CheckerBase.td - Checker TableGen classes ------------------------===//
 //
-///// Describes the state of the entry. We wouldn't like to display, for example,
-///// developer only entries for a list meant for end users.
-//class DevelopmentStageEnum<bits<1> val> {
-//  bits<1> Val = val;
-//}
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-///// Alpha entries are under development, might be incomplet, inkorrekt and
-///// unstable.
-//def InAlpha : DevelopmentStageEnum<0>;
+//===----------------------------------------------------------------------===//
 //
-///// Released entries are stable, produce minimal, if any false positives,
-///// and emits reports that explain the occurance of the bug understandably and
-///// thoroughly.
-//def Released : DevelopmentStageEnum<1>;
+//  This file defines the TableGen core definitions for checkers
 //
-///// Marks the entry hidden. Hidden entries won't be displayed in
-///// -analyzer-checker-option-help.
-//class HiddenEnum<bit val> {
-//  bit Val = val;
-//}
-//def DontHide : HiddenEnum<0>;
-//def Hide : HiddenEnum<1>;
+//===----------------------------------------------------------------------===//
 
-class Config {
-  string Name;
+include "../AnalyzerFlagsBase.td"
+
+// Make these individual types.
+class IntegerType : CmdLineOptionTypeEnum<0> {}
+class StringType : CmdLineOptionTypeEnum<1> {}
+class BooleanType : CmdLineOptionTypeEnum<2> {}
+
+class Config<string name> {
+  string Name = name;
+  bits<2> Type = ?;
+  string  HelpText;
+  string  DefaultVal;
+  bits<1> DevelopmentStage;
+  bit     Hidden;
 }
 
-def ShouldIncludeImplicitDtorsInCFG : Config {
-  let Name = "cfg-implicit-dtors";
-}
+def ShouldIncludeImplicitDtorsInCFG : Config<"cfg-implicit-dtors">,
+  BooleanType, HelpText<"yo">, DefaultVal<"
