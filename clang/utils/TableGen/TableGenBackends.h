@@ -71,6 +71,8 @@ void EmitClangDiagsIndexName(llvm::RecordKeeper &Records,
 
 void EmitClangSACheckers(llvm::RecordKeeper &Records, llvm::raw_ostream &OS);
 
+void EmitClangSAConfigs(llvm::RecordKeeper &Records, llvm::raw_ostream &OS);
+
 void EmitClangCommentHTMLTags(llvm::RecordKeeper &Records,
                               llvm::raw_ostream &OS);
 void EmitClangCommentHTMLTagsProperties(llvm::RecordKeeper &Records,
