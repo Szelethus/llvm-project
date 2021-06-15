@@ -4596,29 +4596,18 @@ defm padding_on_unsigned_fixed_point : BoolOption<"f", "padding-on-unsigned-fixe
 // Analyzer Options
 //===----------------------------------------------------------------------===//
 
+let Group = StaticAnalyzer_Group in {
+
 def analysis_UnoptimizedCFG : Flag<["-"], "unoptimized-cfg">,
   HelpText<"Generate unoptimized CFGs for all analyses">,
   MarshallingInfoFlag<AnalyzerOpts<"UnoptimizedCFG">>;
 def analysis_CFGAddImplicitDtors : Flag<["-"], "cfg-add-implicit-dtors">,
   HelpText<"Add C++ implicit destructors to CFGs for all analyses">;
 
-def analyzer_store : Separate<["-"], "analyzer-store">,
-  HelpText<"Source Code Analysis - Abstract Memory Store Models">;
-def analyzer_store_EQ : Joined<["-"], "analyzer-store=">, Alias<analyzer_store>;
-
-def analyzer_constraints : Separate<["-"], "analyzer-constraints">,
-  HelpText<"Source Code Analysis - Symbolic Constraint Engines">;
-def analyzer_constraints_EQ : Joined<["-"], "analyzer-constraints=">,
-  Alias<analyzer_constraints>;
-
 def analyzer_output : Separate<["-"], "analyzer-output">,
   HelpText<"Source Code Analysis - Output Options">;
 def analyzer_output_EQ : Joined<["-"], "analyzer-output=">,
   Alias<analyzer_output>;
-
-def analyzer_purge : Separate<["-"], "analyzer-purge">,
-  HelpText<"Source Code Analysis - Dead Symbol Removal Frequency">;
-def analyzer_purge_EQ : Joined<["-"], "analyzer-purge=">, Alias<analyzer_purge>;
 
 def analyzer_opt_analyze_headers : Flag<["-"], "analyzer-opt-analyze-headers">,
   HelpText<"Force the static analyzer to analyze functions defined in header files">,
@@ -4644,24 +4633,9 @@ def analyzer_dump_egraph : Separate<["-"], "analyzer-dump-egraph">,
   MarshallingInfoString<AnalyzerOpts<"DumpExplodedGraphTo">>;
 def analyzer_dump_egraph_EQ : Joined<["-"], "analyzer-dump-egraph=">, Alias<analyzer_dump_egraph>;
 
-def analyzer_inline_max_stack_depth : Separate<["-"], "analyzer-inline-max-stack-depth">,
-  HelpText<"Bound on stack depth while inlining (4 by default)">,
-  // Cap the stack depth at 4 calls (5 stack frames, base + 4 calls).
-  MarshallingInfoInt<AnalyzerOpts<"InlineMaxStackDepth">, "5">;
-def analyzer_inline_max_stack_depth_EQ : Joined<["-"], "analyzer-inline-max-stack-depth=">,
-  Alias<analyzer_inline_max_stack_depth>;
-
 def analyzer_inlining_mode : Separate<["-"], "analyzer-inlining-mode">,
   HelpText<"Specify the function selection heuristic used during inlining">;
 def analyzer_inlining_mode_EQ : Joined<["-"], "analyzer-inlining-mode=">, Alias<analyzer_inlining_mode>;
-
-def analyzer_disable_retry_exhausted : Flag<["-"], "analyzer-disable-retry-exhausted">,
-  HelpText<"Do not re-analyze paths leading to exhausted nodes with a different strategy (may decrease code coverage)">,
-  MarshallingInfoFlag<AnalyzerOpts<"NoRetryExhausted">>;
-
-def analyzer_max_loop : Separate<["-"], "analyzer-max-loop">,
-  HelpText<"The maximum number of times the analyzer will go through a loop">,
-  MarshallingInfoInt<AnalyzerOpts<"maxBlockVisitOnPath">, "4">;
 def analyzer_stats : Flag<["-"], "analyzer-stats">,
   HelpText<"Print internal analyzer statistics.">,
   MarshallingInfoFlag<AnalyzerOpts<"PrintStats">>;
@@ -4745,6 +4719,41 @@ def analyzer_config_compatibility_mode_EQ : Joined<["-"], "analyzer-config-compa
 def analyzer_werror : Flag<["-"], "analyzer-werror">,
   HelpText<"Emit analyzer results as errors rather than warnings">,
   MarshallingInfoFlag<AnalyzerOpts<"AnalyzerWerror">>;
+
+//===----------------------------------------------------------------------===//
+// Depricated Analyzer Options
+//===----------------------------------------------------------------------===//
+
+def analyzer_store : Separate<["-"], "analyzer-store">,
+  HelpText<"DEPRECATED: ">;
+def analyzer_store_EQ : Joined<["-"], "analyzer-store=">, Alias<analyzer_store>;
+
+def analyzer_constraints : Separate<["-"], "analyzer-constraints">,
+  HelpText<"DEPRECATED: Source Code Analysis - Symbolic Constraint Engines">;
+def analyzer_constraints_EQ : Joined<["-"], "analyzer-constraints=">,
+  Alias<analyzer_constraints>;
+
+def analyzer_purge : Separate<["-"], "analyzer-purge">,
+  HelpText<"DEPRECATED: Source Code Analysis - Dead Symbol Removal Frequency">;
+def analyzer_purge_EQ : Joined<["-"], "analyzer-purge=">, Alias<analyzer_purge>;
+
+def analyzer_inline_max_stack_depth : Separate<["-"], "analyzer-inline-max-stack-depth">,
+  HelpText<"DEPRECATED: Bound on stack depth while inlining (4 by default)">,
+  // Cap the stack depth at 4 calls (5 stack frames, base + 4 calls).
+  MarshallingInfoInt<AnalyzerOpts<"InlineMaxStackDepth">, "5">;
+
+def analyzer_inline_max_stack_depth_EQ : Joined<["-"], "analyzer-inline-max-stack-depth=">,
+  Alias<analyzer_inline_max_stack_depth>;
+
+def analyzer_disable_retry_exhausted : Flag<["-"], "analyzer-disable-retry-exhausted">,
+  HelpText<"DEPRECATED: Do not re-analyze paths leading to exhausted nodes with a different strategy (may decrease code coverage)">,
+  MarshallingInfoFlag<AnalyzerOpts<"NoRetryExhausted">>;
+
+def analyzer_max_loop : Separate<["-"], "analyzer-max-loop">,
+  HelpText<"DEPRECATED: The maximum number of times the analyzer will go through a loop">,
+  MarshallingInfoInt<AnalyzerOpts<"maxBlockVisitOnPath">, "4">;
+
+} // Group = StaticAnalyzer_Group
 
 //===----------------------------------------------------------------------===//
 // Migrator Options
