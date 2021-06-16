@@ -23,12 +23,21 @@ using namespace llvm;
 
 using SortedRecords = llvm::StringMap<const Record *>;
 
-static void printOptionFields(const Record *R, raw_ostream &OS) {
+static void printOptionFields(const Record *R, raw_ostream &OS,
+                              bool IsDefaultValString) {
   OS << R->getName() << ","
      << "\"";
   OS.write_escaped(R->getValueAsString("Name")) << "\",\"";
-  OS.write_escaped(R->getValueAsString("HelpText"))
-      << "\"," << R->getValueAsString("DefaultVal");
+  OS.write_escaped(R->getValueAsString("HelpText")) << "\",";
+  StringRef DefaultVal = R->getValueAsString("DefaultVal");
+
+  if (IsDefaultValString) {
+    if (DefaultVal == "")
+      OS << "\"\"";
+    else
+      OS << "\"" << DefaultVal << "\"";
+  } else
+    OS << DefaultVal;
 }
 
 static SortedRecords getSortedDerivedDefinitions(RecordKeeper &Records,
@@ -64,7 +73,7 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
        getSortedDerivedDefinitions(Records, "BooleanConfig")) {
     const Record *R = Pair.second;
     OS << "BOOLEAN_OPTION(bool,";
-    printOptionFields(R, OS);
+    printOptionFields(R, OS, /*IsDefaultValString*/false);
     OS << ")\n";
   }
   OS << "#endif // BOOLEAN_OPTIONS\n"
@@ -80,7 +89,7 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
        getSortedDerivedDefinitions(Records, "IntegerConfig")) {
     const Record *R = Pair.second;
     OS << "INTEGER_OPTION(int,";
-    printOptionFields(R, OS);
+    printOptionFields(R, OS, /*IsDefaultValString*/false);
     OS << ")\n";
   }
   OS << "#endif // INTEGER_OPTIONS\n"
@@ -96,7 +105,7 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
        getSortedDerivedDefinitions(Records, "StringConfig")) {
     const Record *R = Pair.second;
     OS << "STRING_OPTION(StringRef,";
-    printOptionFields(R, OS);
+    printOptionFields(R, OS, /*IsDefaultValString*/true);
     OS << ")\n";
   }
   OS << "#endif // STRING_OPTIONS\n"
@@ -119,7 +128,8 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
   for (const auto &Pair : getSortedDerivedDefinitions(Records, "EnumConfig")) {
     const Record *R = Pair.second;
     OS << "ENUM_OPTION(" << getEnumName(R) << ",";
-    printOptionFields(R, OS);
+    printOptionFields(R, OS, /*IsDefaultValString*/true);
+    OS << ',';
     if (!R->isValueUnset("Values")) {
       for (const Record *EnumVal : R->getValueAsListOfDefs("Values")) {
         OS << "\"";
@@ -127,7 +137,7 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
         OS << ",\"";
       }
     }
-    OS << "\")\n";
+    OS << ")\n";
   }
   OS << "#endif // ENUM_OPTIONS\n"
         "\n";
