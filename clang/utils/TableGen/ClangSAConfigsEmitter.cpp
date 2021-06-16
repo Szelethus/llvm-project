@@ -108,7 +108,7 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
   //
   // BOOLEAN_OPTION(TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL)
   OS << "\n"
-        "#ifdef STRING_OPTIONS\n";
+        "#ifdef ENUM_OPTIONS\n";
   {
     std::vector<Record *> StringOptions =
         Records.getAllDerivedDefinitions("EnumConfig");
@@ -130,16 +130,36 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
           OS.write_escaped(EnumVal->getValueAsString("CmdFlag"));
           OS << ",\"";
         }
-        OS << ',';
-        for (const Record *EnumVal : Package->getValueAsListOfDefs("Values")) {
-          OS << "\"";
-          OS.write_escaped(EnumVal->getValueAsString("EnumName"));
-          OS << ",\"";
-        }
       }
       OS << "\")\n";
     }
   }
-  OS << "#endif // STRING_OPTIONS\n"
+  OS << "#endif // ENUM_OPTIONS\n"
+        "\n";
+  // Emit boolean options.
+  //
+  // BOOLEAN_OPTION(TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL)
+  OS << "\n"
+        "#ifdef ENUMS\n";
+  {
+    std::vector<Record *> StringOptions =
+        Records.getAllDerivedDefinitions("EnumConfig");
+    SortedRecords SortedIntegerOptions;
+    for (const Record *Package : StringOptions)
+      SortedIntegerOptions[Package->getValueAsString("Name")] = Package;
+
+    for (const auto &Pair : SortedIntegerOptions) {
+      const Record *Package = Pair.second;
+      OS << "enum class " << Package->getName() << "Kind {\n";
+      for (const Record *EnumVal : Package->getValueAsListOfDefs("Values")) {
+        OS << "  ";
+        OS.write_escaped(Package->getValueAsString("EnumPrefix")) << '_';
+        OS.write_escaped(EnumVal->getValueAsString("EnumName"));
+        OS << ",\n";
+      }
+      OS << "}\n\n";
+    }
+  }
+  OS << "#endif // ENUMS\n"
         "\n";
 }
