@@ -18,6 +18,7 @@ class Config<string name, CmdLineOptionTypeEnum type> {
   bits<2> Type = type.Type;
   string  HelpText;
   string  DefaultVal;
+  list<string> Values = ?;
 }
 
 class IntegerConfig<string name> : Config<name, Integer>;
@@ -26,4 +27,18 @@ class StringConfig<string name> : Config<name, String>;
 
 
 def ShouldIncludeImplicitDtorsInCFG : BooleanConfig<"cfg-implicit-dtors">,
-  HelpText<"yo">, DefaultVal<"true">;
+  HelpText<"Whether or not implicit destructors for C++ objects should be "
+           "included in the CFG.">,
+  DefaultVal<"true">;
+
+def AlwaysInlineSize : IntegerConfig<"ipa-always-inline-size">,
+  HelpText<"The size of the functions (in basic blocks), which should be "
+           "considered to be small enough to always inline.">,
+  DefaultVal<"3">;
+
+def CXXMemberInliningMode : StringConfig<"ipa-always-inline-size">,
+  HelpText<"Controls which C++ member functions will be considered for "
+           "inlining.">,
+  Values<["constructors", "destructors", "methods"]>,
+  DefaultVal<"destructors">;
+
