@@ -34,7 +34,7 @@ static void printOptionFields(const Record *R, raw_ostream &OS) {
 static SortedRecords getSortedDerivedDefinitions(RecordKeeper &Records,
                                                  StringRef ClassName) {
   SortedRecords Ret;
-  for (const Record *R : Records.getAllDerivedDefinitions("BooleanConfig"))
+  for (const Record *R : Records.getAllDerivedDefinitions(ClassName))
     Ret[R->getValueAsString("Name")] = R;
   return Ret;
 }
