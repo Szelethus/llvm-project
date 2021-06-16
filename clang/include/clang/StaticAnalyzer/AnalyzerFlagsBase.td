@@ -38,6 +38,3 @@ def Hide : HiddenEnum<1>;
 class HelpText<string text> { string HelpText = text; }
 class DefaultVal<string val> { string DefaultVal = val; }
 
-class Values<list<string> Vals = []> {
-  list<string> Values = Vals;
-}

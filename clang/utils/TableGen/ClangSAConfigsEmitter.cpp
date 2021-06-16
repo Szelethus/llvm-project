@@ -98,6 +98,45 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
       OS.write_escaped(Package->getValueAsString("Name")) << "\",\"";
       OS.write_escaped(Package->getValueAsString("HelpText")) << "\",\"";
       OS.write_escaped(Package->getValueAsString("DefaultVal"));
+      OS << ")\n";
+    }
+  }
+  OS << "#endif // STRING_OPTIONS\n"
+        "\n";
+
+  // Emit boolean options.
+  //
+  // BOOLEAN_OPTION(TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL)
+  OS << "\n"
+        "#ifdef STRING_OPTIONS\n";
+  {
+    std::vector<Record *> StringOptions =
+        Records.getAllDerivedDefinitions("EnumConfig");
+    SortedRecords SortedIntegerOptions;
+    for (const Record *Package : StringOptions)
+      SortedIntegerOptions[Package->getValueAsString("Name")] = Package;
+
+    for (const auto &Pair : SortedIntegerOptions) {
+      const Record *Package = Pair.second;
+      OS << "STRING_OPTION("
+         << "bool," << Package->getName() << ","
+         << "\"";
+      OS.write_escaped(Package->getValueAsString("Name")) << "\",\"";
+      OS.write_escaped(Package->getValueAsString("HelpText")) << "\",\"";
+      OS.write_escaped(Package->getValueAsString("DefaultVal")) << "\",";
+      if (!Package->isValueUnset("Values")) {
+        for (const Record *EnumVal : Package->getValueAsListOfDefs("Values")) {
+          OS << "\"";
+          OS.write_escaped(EnumVal->getValueAsString("CmdFlag"));
+          OS << ",\"";
+        }
+        OS << ',';
+        for (const Record *EnumVal : Package->getValueAsListOfDefs("Values")) {
+          OS << "\"";
+          OS.write_escaped(EnumVal->getValueAsString("EnumName"));
+          OS << ",\"";
+        }
+      }
       OS << "\")\n";
     }
   }

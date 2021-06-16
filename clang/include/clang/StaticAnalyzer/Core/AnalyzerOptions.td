@@ -18,12 +18,48 @@ class Config<string name, CmdLineOptionTypeEnum type> {
   bits<2> Type = type.Type;
   string  HelpText;
   string  DefaultVal;
-  list<string> Values = ?;
+}
+//===----------------------------------------------------------------------===//
+
+class BooleanConfig<string name> : Config<name, Boolean>;
+//===----------------------------------------------------------------------===//
+
+class IntegerConfig<string name> : Config<name, Integer> {
+  list<int> Values = ?;
 }
 
-class IntegerConfig<string name> : Config<name, Integer>;
-class BooleanConfig<string name> : Config<name, Boolean>;
-class StringConfig<string name> : Config<name, String>;
+class IntValues<list<int> Vals> {
+  list<int> Values = Vals;
+}
+//===----------------------------------------------------------------------===//
+
+class StringConfig<string name> : Config<name, String> {
+  bit NeedsNoValidation = 0;
+}
+//===----------------------------------------------------------------------===//
+
+class FileNameConfig<string name> : Config<name, String>;
+
+//===----------------------------------------------------------------------===//
+
+class EnumVal<string cmdFlag, string enumName> {
+  string CmdFlag = cmdFlag;
+  string EnumName = enumName;
+}
+
+class EnumConfig<string name> : Config<name, String> {
+  list<EnumVal> Values;
+  string EnumPrefix;
+}
+
+class EnumValues<list<EnumVal> Vals> {
+  list<EnumVal> Values = Vals;
+}
+
+class EnumPrefix<string enumPrefix> {
+  string EnumPrefix = enumPrefix;
+}
+//===----------------------------------------------------------------------===//
 
 
 def ShouldIncludeImplicitDtorsInCFG : BooleanConfig<"cfg-implicit-dtors">,
@@ -36,9 +72,21 @@ def AlwaysInlineSize : IntegerConfig<"ipa-always-inline-size">,
            "considered to be small enough to always inline.">,
   DefaultVal<"3">;
 
-def CXXMemberInliningMode : StringConfig<"ipa-always-inline-size">,
+def RawSilencedCheckersAndPackages : StringConfig<"silence-checkers">,
+  HelpText<"A semicolon separated list of checker and package names to "
+           "silence. Silenced checkers will not emit reports, but the modeling "
+           "remain enabled.">,
+  DefaultVal<"">;
+
+def CXXMemberInliningMode : EnumConfig<"c++-inlining">,
   HelpText<"Controls which C++ member functions will be considered for "
            "inlining.">,
-  Values<["constructors", "destructors", "methods"]>,
+  EnumPrefix<"CIMK">,
+  EnumValues<[
+    EnumVal<"none", "None">,
+    EnumVal<"constructors", "Constructors">,
+    EnumVal<"destructors", "Destructors">,
+    EnumVal<"methods", "Memberfunctions">
+  ]>,
   DefaultVal<"destructors">;
 
