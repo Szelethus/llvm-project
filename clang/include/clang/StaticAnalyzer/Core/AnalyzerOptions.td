@@ -1,4 +1,4 @@
-//===--- CheckerBase.td - Checker TableGen classes ------------------------===//
+//===--- AnalyzerOptions.td - Analyzer configs ----------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,7 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//  This file defines the TableGen core definitions for checkers
+//  This file defines the analyzer options avaible with -analyzer-config.
+//  TODO: Copy documentation from AnalyzerOptions.def before deleting it.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,6 +20,8 @@ class Config<string name, CmdLineOptionTypeEnum type> {
   string  HelpText;
   string  DefaultVal;
 }
+
+class DefaultVal<string val> { string DefaultVal = val; }
 //===----------------------------------------------------------------------===//
 
 class BooleanConfig<string name> : Config<name, Boolean>;
@@ -39,7 +42,6 @@ class StringConfig<string name> : Config<name, String> {
 //===----------------------------------------------------------------------===//
 
 class FileNameConfig<string name> : Config<name, String>;
-
 //===----------------------------------------------------------------------===//
 
 class EnumVal<string cmdFlag, string enumName> {

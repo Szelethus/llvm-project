@@ -12,6 +12,29 @@
 
 include "../AnalyzerFlagsBase.td"
 
+/// Describes the state of the entry. We wouldn't like to display, for example,
+/// developer only entries for a list meant for end users.
+class DevelopmentStageEnum<bits<1> val> {
+  bits<1> Val = val;
+}
+
+/// Alpha entries are under development, might be incomplet, inkorrekt and
+/// unstable.
+def InAlpha : DevelopmentStageEnum<0>;
+
+/// Released entries are stable, produce minimal, if any false positives,
+/// and emits reports that explain the occurance of the bug understandably and
+/// thoroughly.
+def Released : DevelopmentStageEnum<1>;
+
+/// Marks the entry hidden. Hidden entries won't be displayed in
+/// -analyzer-checker-option-help.
+class HiddenEnum<bit val> {
+  bit Val = val;
+}
+def DontHide : HiddenEnum<0>;
+def Hide : HiddenEnum<1>;
+
 /// Describes an option for a checker or a package.
 class CmdLineOption<CmdLineOptionTypeEnum type, string cmdFlag, string desc,
                     string defaultVal, DevelopmentStageEnum stage,
