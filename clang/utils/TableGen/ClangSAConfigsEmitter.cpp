@@ -1,4 +1,4 @@
-//=- ClangSACheckersEmitter.cpp - Generate Clang SA checkers tables -*- C++ -*-
+//==- ClangSAConfigsEmitter.cpp - Generate Clang SA config tables -*- C++ -*-
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -51,6 +51,13 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
   // Emit boolean options.
   //
   // BOOLEAN_OPTION(TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL)
+  // - TYPE: Type of the option in class AnalyzerOptions.
+  // - FIELD_NAME: Name of the field in class AnalyzerOptions.
+  // - CMDFLAG: Name of the flag to be specified on the command line. For
+  //            specifics, check clang -cc1 -analyzer-config-help.
+  // - HELPTEXT: Text displayed under -analyzer-config-help.
+  // - DEFAULTVAL: Default value of the option if its not specified in the
+  //               command line.
   OS << "\n"
         "#ifdef BOOLEAN_OPTIONS\n";
   for (const auto &Pair :
@@ -63,9 +70,10 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
   OS << "#endif // BOOLEAN_OPTIONS\n"
         "\n";
 
-  // Emit boolean options.
+  // Emit integer options.
   //
-  // BOOLEAN_OPTION(TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL)
+  // INTEGER_OPTIONS(TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL)
+  // Check the comments around BOOLEAN_OPTION for description of the parameters.
   OS << "\n"
         "#ifdef INTEGER_OPTIONS\n";
   for (const auto &Pair :
@@ -78,9 +86,10 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
   OS << "#endif // INTEGER_OPTIONS\n"
         "\n";
 
-  // Emit boolean options.
+  // Emit string options.
   //
-  // BOOLEAN_OPTION(TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL)
+  // STRING_OPTIONS(TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL)
+  // Check the comments around BOOLEAN_OPTION for description of the parameters.
   OS << "\n"
         "#ifdef STRING_OPTIONS\n";
   for (const auto &Pair :
@@ -93,9 +102,18 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
   OS << "#endif // STRING_OPTIONS\n"
         "\n";
 
-  // Emit boolean options.
+  // Emit enum options. These are string options can only take a select fe
+  // values, and are parsed into enums.
   //
-  // BOOLEAN_OPTION(TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL)
+  // ENUM_OPTIONS(
+  //   TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL, VALUES)
+  //
+  // Check the comments around BOOLEAN_OPTION for description of the first few
+  // parameters.
+  // - VALUES: A string that lists all options that can be specified on the
+  //           command line. Each value is separated with a comma (its still one
+  //           big string!). They correspond with enum values with the same
+  //           index (see ENUMS below).
   OS << "\n"
         "#ifdef ENUM_OPTIONS\n";
   for (const auto &Pair : getSortedDerivedDefinitions(Records, "EnumConfig")) {
@@ -114,19 +132,28 @@ void clang::EmitClangSAConfigs(RecordKeeper &Records, raw_ostream &OS) {
   OS << "#endif // ENUM_OPTIONS\n"
         "\n";
 
-  // Emit boolean options.
+  // Emit enum classes corresponding with the enum options.
   //
-  // BOOLEAN_OPTION(TYPE, FIELD_NAME, CMDFLAG, HELPTEXT, DEFAULTVAL)
+  // enum class <option name>Kind {
+  //   <first enum value> = 0,
+  //   ...
+  //   <nth enum value> = n - 1
+  // };
+  //
+  // Enum values are equal with the index of the command line option in VALUES
+  // in ENUM_OPTIONS.
   OS << "\n"
         "#ifdef ENUMS\n";
   for (const auto &Pair : getSortedDerivedDefinitions(Records, "EnumConfig")) {
 
     const Record *R = Pair.second;
     OS << "enum class " << getEnumName(R) << "{\n";
+    int Counter = 0;
     for (const Record *EnumVal : R->getValueAsListOfDefs("Values")) {
       OS << "  ";
       OS.write_escaped(R->getValueAsString("EnumPrefix")) << '_';
-      OS.write_escaped(EnumVal->getValueAsString("EnumName"));
+      OS.write_escaped(EnumVal->getValueAsString("EnumName"))
+          << " = " << Counter++;
       OS << ",\n";
     }
     OS << "}\n\n";
