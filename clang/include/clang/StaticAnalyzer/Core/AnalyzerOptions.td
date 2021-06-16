@@ -12,19 +12,18 @@
 
 include "../AnalyzerFlagsBase.td"
 
-// Make these individual types.
-class IntegerType : CmdLineOptionTypeEnum<0> {}
-class StringType : CmdLineOptionTypeEnum<1> {}
-class BooleanType : CmdLineOptionTypeEnum<2> {}
 
-class Config<string name> {
+class Config<string name, CmdLineOptionTypeEnum type> {
   string Name = name;
-  bits<2> Type = ?;
+  bits<2> Type = type.Type;
   string  HelpText;
   string  DefaultVal;
-  bits<1> DevelopmentStage;
-  bit     Hidden;
 }
 
-def ShouldIncludeImplicitDtorsInCFG : Config<"cfg-implicit-dtors">,
-  BooleanType, HelpText<"yo">, DefaultVal<"
+class IntegerConfig<string name> : Config<name, Integer>;
+class BooleanConfig<string name> : Config<name, Boolean>;
+class StringConfig<string name> : Config<name, String>;
+
+
+def ShouldIncludeImplicitDtorsInCFG : BooleanConfig<"cfg-implicit-dtors">,
+  HelpText<"yo">, DefaultVal<"true">;
