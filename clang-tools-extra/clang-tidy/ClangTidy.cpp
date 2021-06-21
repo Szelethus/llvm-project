@@ -27,6 +27,7 @@
 #include "clang/Format/Format.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/FrontendActions.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
 #include "clang/Frontend/MultiplexConsumer.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
@@ -43,6 +44,7 @@
 #include "llvm/Support/Process.h"
 #include <algorithm>
 #include <utility>
+#include <fstream>
 
 #if CLANG_TIDY_ENABLE_STATIC_ANALYZER
 #include "clang/Analysis/PathDiagnostic.h"
@@ -115,7 +117,8 @@ public:
 
   SourceManager &getSourceManager() { return SourceMgr; }
 
-  void reportDiagnostic(const ClangTidyError &Error) {
+  void reportDiagnostic(const ClangTidyError &Error, StringRef File) {
+    std::fstream fs(File.str(), std::ios_base::app);
     const tooling::DiagnosticMessage &Message = Error.Message;
     SourceLocation Loc = getLocation(Message.FilePath, Message.FileOffset);
     // Contains a pair for each attempted fix: location and whether the fix was
@@ -134,7 +137,7 @@ public:
       //auto Diag = Diags.Report(Loc, Diags.getCustomDiagID(Level, "%0 [%1]"))
       //            << Message.Message << Name;
       const SourceManager &SM = Diags.getSourceManager();
-      llvm::outs() << "\"" << SM.getFilename(Loc) << "\","
+      fs << "\"" << SM.getFilename(Loc).str() << "\","
                    << SM.getSpellingLineNumber(Loc) << ','
                    << SM.getSpellingColumnNumber(Loc) << ',' << "\""
                    << Error.DiagnosticName << "\",\"" << Error.Message.Message
@@ -542,8 +545,18 @@ runClangTidy(clang::tidy::ClangTidyContext &Context,
     ClangTidyASTConsumerFactory ConsumerFactory;
   };
 
+  class ActionFactory2 : public FrontendActionFactory {
+  public:
+    ActionFactory2() = default;
+    std::unique_ptr<FrontendAction> create() override {
+      return std::make_unique<IntVectorDumpAction>();
+    }
+  };
+
   ActionFactory Factory(Context, std::move(BaseFS));
   Tool.run(&Factory);
+  //ActionFactory2 Factory2;
+  //Tool.run(&Factory2);
   return DiagConsumer.take();
 }
 
@@ -560,7 +573,13 @@ void handleErrors(llvm::ArrayRef<ClangTidyError> Errors,
 
   // Check reportDiagnostic (called later in this function) to add new columns.
   // This is spectacularly crude, but gets the job done for now.
-  llvm::outs() << "Filename,Row,Column,Checker name,Checker message\n";
+  std::string File = InitialWorkingDir.get() + "/MI_output/" +
+                     Context.getCurrentFile().rsplit("/").second.str() + "_output_tidy_output.csv";
+  llvm::errs() << File << '\n';
+  std::fstream fs(File, std::ios_base::app);
+  assert(!fs.fail());
+  fs << "Filename,Row,Column,Checker name,Checker message\n";
+  fs.close();
   for (const ClangTidyError &Error : Errors) {
     if (!Error.BuildDirectory.empty()) {
       // By default, the working directory of file system is the current
@@ -569,7 +588,7 @@ void handleErrors(llvm::ArrayRef<ClangTidyError> Errors,
       // Change the directory to the one used during the analysis.
       FileSystem.setCurrentWorkingDirectory(Error.BuildDirectory);
     }
-    Reporter.reportDiagnostic(Error);
+    Reporter.reportDiagnostic(Error, File);
     // Return to the initial directory to correctly resolve next Error.
     FileSystem.setCurrentWorkingDirectory(InitialWorkingDir.get());
   }
