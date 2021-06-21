@@ -216,7 +216,11 @@ protected:
 };
 
 class IntVectorDumpAction : public ASTFrontendAction {
+public:
+  IntVectorDumpAction(StringRef File) : File(File.str()) {}
 protected:
+  std::string File;
+
   std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &CI,
                                                  StringRef InFile) override;
 

@@ -185,6 +185,9 @@ public:
             DiagEngine->getDiagnosticIDs()->getDescription(DiagnosticID)));
   }
 
+public:
+  std::string MI_outputString;
+
 private:
   // Writes to Stats.
   friend class ClangTidyDiagnosticConsumer;

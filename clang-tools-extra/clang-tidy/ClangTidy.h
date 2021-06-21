@@ -46,9 +46,9 @@ public:
   /// Get the union of options from all checks.
   ClangTidyOptions::OptionMap getCheckOptions();
 
-private:
   ClangTidyContext &Context;
   IntrusiveRefCntPtr<llvm::vfs::OverlayFileSystem> OverlayFS;
+private:
   std::unique_ptr<ClangTidyCheckFactories> CheckFactories;
 };
 

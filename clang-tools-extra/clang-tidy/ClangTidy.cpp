@@ -117,8 +117,8 @@ public:
 
   SourceManager &getSourceManager() { return SourceMgr; }
 
-  void reportDiagnostic(const ClangTidyError &Error, StringRef File) {
-    std::fstream fs(File.str(), std::ios_base::app);
+  void reportDiagnostic(const ClangTidyError &Error) {
+    std::fstream fs(Context.MI_outputString, std::ios_base::app);
     const tooling::DiagnosticMessage &Message = Error.Message;
     SourceLocation Loc = getLocation(Message.FilePath, Message.FileOffset);
     // Contains a pair for each attempted fix: location and whether the fix was
@@ -149,6 +149,7 @@ public:
     }
     for (const auto &Note : Error.Notes)
       reportNote(Note);
+    fs.close();
   }
 
   void finish() {
@@ -511,12 +512,15 @@ runClangTidy(clang::tidy::ClangTidyContext &Context,
   Tool.setDiagnosticConsumer(&DiagConsumer);
 
   class ActionFactory : public FrontendActionFactory {
+    std::string outputdir;
   public:
     ActionFactory(ClangTidyContext &Context,
-                  IntrusiveRefCntPtr<llvm::vfs::OverlayFileSystem> BaseFS)
-        : ConsumerFactory(Context, std::move(BaseFS)) {}
+                  IntrusiveRefCntPtr<llvm::vfs::OverlayFileSystem> BaseFS,
+                  StringRef outputdir)
+        : ConsumerFactory(Context, std::move(BaseFS)), outputdir(outputdir.str()) {}
     std::unique_ptr<FrontendAction> create() override {
-      return std::make_unique<Action>(&ConsumerFactory);
+      return std::make_unique<Action>(&ConsumerFactory,
+                  outputdir);
     }
 
     bool runInvocation(std::shared_ptr<CompilerInvocation> Invocation,
@@ -531,10 +535,15 @@ runClangTidy(clang::tidy::ClangTidyContext &Context,
 
   private:
     class Action : public ASTFrontendAction {
+      std::string outputdir;
     public:
-      Action(ClangTidyASTConsumerFactory *Factory) : Factory(Factory) {}
+      Action(ClangTidyASTConsumerFactory *Factory,
+                  StringRef outputdir) : Factory(Factory), outputdir(outputdir.str()) {}
       std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &Compiler,
                                                      StringRef File) override {
+        Factory->Context.MI_outputString =
+            outputdir + File.rsplit("/").second.str() +
+            "_output_tidy_output.csv";
         return Factory->CreateASTConsumer(Compiler, File);
       }
 
@@ -547,16 +556,24 @@ runClangTidy(clang::tidy::ClangTidyContext &Context,
 
   class ActionFactory2 : public FrontendActionFactory {
   public:
-    ActionFactory2() = default;
+    ActionFactory2(StringRef File) : File(File.str()) {}
     std::unique_ptr<FrontendAction> create() override {
-      return std::make_unique<IntVectorDumpAction>();
+      return std::make_unique<IntVectorDumpAction>(File);
     }
+
+    std::string File;
   };
 
-  ActionFactory Factory(Context, std::move(BaseFS));
+  std::string outputdir =
+      BaseFS->getCurrentWorkingDirectory().get() + "/MI_output/";
+  llvm::errs() << "output dir: " << outputdir << '\n';
+
+  ActionFactory Factory(Context, std::move(BaseFS), outputdir);
   Tool.run(&Factory);
-  //ActionFactory2 Factory2;
-  //Tool.run(&Factory2);
+  ActionFactory2 Factory2(outputdir +
+                          Context.getCurrentFile().rsplit("/").second.str() +
+                          "_int_vector_output.csv");
+  Tool.run(&Factory2);
   return DiagConsumer.take();
 }
 
@@ -573,10 +590,7 @@ void handleErrors(llvm::ArrayRef<ClangTidyError> Errors,
 
   // Check reportDiagnostic (called later in this function) to add new columns.
   // This is spectacularly crude, but gets the job done for now.
-  std::string File = InitialWorkingDir.get() + "/MI_output/" +
-                     Context.getCurrentFile().rsplit("/").second.str() + "_output_tidy_output.csv";
-  llvm::errs() << File << '\n';
-  std::fstream fs(File, std::ios_base::app);
+  std::fstream fs(Context.MI_outputString, std::ios_base::app);
   assert(!fs.fail());
   fs << "Filename,Row,Column,Checker name,Checker message\n";
   fs.close();
@@ -588,7 +602,7 @@ void handleErrors(llvm::ArrayRef<ClangTidyError> Errors,
       // Change the directory to the one used during the analysis.
       FileSystem.setCurrentWorkingDirectory(Error.BuildDirectory);
     }
-    Reporter.reportDiagnostic(Error, File);
+    Reporter.reportDiagnostic(Error);
     // Return to the initial directory to correctly resolve next Error.
     FileSystem.setCurrentWorkingDirectory(InitialWorkingDir.get());
   }

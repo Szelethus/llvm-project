@@ -398,7 +398,7 @@ template <> struct MappingTraits<TemplightEntry> {
 
 std::unique_ptr<ASTConsumer>
 IntVectorDumpAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
-  return CreateIntVectorDumper();
+  return CreateIntVectorDumper(File);
 }
 
 void IntVectorDumpAction::ExecuteAction() {

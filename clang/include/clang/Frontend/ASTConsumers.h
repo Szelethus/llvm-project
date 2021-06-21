@@ -50,7 +50,7 @@ std::unique_ptr<ASTConsumer> CreateASTDeclNodeLister();
 // function declarations to stderr.
 std::unique_ptr<ASTConsumer> CreateASTViewer();
 
-std::unique_ptr<ASTConsumer> CreateIntVectorDumper();
+std::unique_ptr<ASTConsumer> CreateIntVectorDumper(StringRef File);
 
 } // namespace clang
 

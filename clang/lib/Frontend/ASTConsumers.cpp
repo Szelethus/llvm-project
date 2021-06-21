@@ -28,6 +28,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
@@ -280,9 +281,17 @@ namespace {
 class IntVectorDumper : public ASTConsumer {
   ASTContext *Context;
   llvm::SmallVector<FunctionInfo, 20> FunctionInfos;
+  std::string File;
 
 public:
-  ~IntVectorDumper() { dumpToStream(llvm::outs()); }
+  IntVectorDumper(StringRef File) : File(File.str()) {}
+  ~IntVectorDumper() {
+    std::error_code EC;
+    llvm::raw_fd_ostream O(File, EC, llvm::sys::fs::OF_TextWithCRLF);
+    assert(!O.has_error());
+    dumpToStream(O);
+    llvm_unreachable("");
+  }
   void Initialize(ASTContext &Context) override { this->Context = &Context; }
 
   bool HandleTopLevelDecl(DeclGroupRef D) override {
@@ -364,8 +373,8 @@ void IntVectorDumper::dumpToStream(llvm::raw_ostream &out) const {
   }
 }
 
-std::unique_ptr<ASTConsumer> clang::CreateIntVectorDumper() {
-  return std::make_unique<IntVectorDumper>();
+std::unique_ptr<ASTConsumer> clang::CreateIntVectorDumper(StringRef File) {
+  return std::make_unique<IntVectorDumper>(File);
 }
 
 //===----------------------------------------------------------------------===//
