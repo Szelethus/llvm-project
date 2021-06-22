@@ -192,7 +192,8 @@ std::unique_ptr<ASTConsumer> clang::CreateASTDeclNodeLister() {
 
 namespace {
 struct FunctionInfo {
-  NamedDecl *ND = nullptr;
+  const ASTContext *ACtx = nullptr;
+  std::string FileName, FunctionName;
 
   enum class InfoKind {
 #define STMT(E, Base) E##Count,
@@ -240,10 +241,11 @@ struct FunctionInfo {
     llvm_unreachable("Unknown infokind!");
   }
 
-  const ASTContext *ACtx = nullptr;
-
   FunctionInfo(NamedDecl *ND, const ASTContext *ACtx)
-      : ND(ND), Infos(static_cast<int>(InfoKind::END), 0), ACtx(ACtx) {}
+      : ACtx(ACtx),
+        FileName(ACtx->getSourceManager().getFilename(ND->getLocation())),
+        FunctionName(ND->getDeclName().getAsString()),
+        Infos(static_cast<int>(InfoKind::END), 0) {}
 
   template <InfoKind K> int &getCountMutable() {
     assert(static_cast<int>(K) < Infos.size());
@@ -264,8 +266,8 @@ struct FunctionInfo {
   void dumpToStream(llvm::raw_ostream &out) const {
     llvm::SmallString<200> Str;
     llvm::raw_svector_ostream OS(Str);
-    OS << ACtx->getSourceManager().getFilename(ND->getLocation()) << ',';
-    OS << ND->getDeclName() << ',';
+    OS << FileName << ',';
+    OS << FunctionName << ',';
     for (size_t I = 0; I < Infos.size(); ++I)
       OS << Infos[I] << ',';
     Str.pop_back();
@@ -286,11 +288,14 @@ class IntVectorDumper : public ASTConsumer {
 public:
   IntVectorDumper(StringRef File) : File(File.str()) {}
   ~IntVectorDumper() {
+    if (File == "") {
+      dumpToStream(llvm::errs());
+      return;
+    }
     std::error_code EC;
     llvm::raw_fd_ostream O(File, EC, llvm::sys::fs::OF_TextWithCRLF);
     assert(!O.has_error());
     dumpToStream(O);
-    llvm_unreachable("");
   }
   void Initialize(ASTContext &Context) override { this->Context = &Context; }
 

@@ -134,8 +134,8 @@ public:
         Level = DiagnosticsEngine::Error;
         WarningsAsErrors++;
       }
-      //auto Diag = Diags.Report(Loc, Diags.getCustomDiagID(Level, "%0 [%1]"))
-      //            << Message.Message << Name;
+      auto Diag = Diags.Report(Loc, Diags.getCustomDiagID(Level, "%0 [%1]"))
+                  << Message.Message << Name;
       const SourceManager &SM = Diags.getSourceManager();
       fs << "\"" << SM.getFilename(Loc).str() << "\","
                    << SM.getSpellingLineNumber(Loc) << ','
@@ -590,7 +590,8 @@ void handleErrors(llvm::ArrayRef<ClangTidyError> Errors,
 
   // Check reportDiagnostic (called later in this function) to add new columns.
   // This is spectacularly crude, but gets the job done for now.
-  std::fstream fs(Context.MI_outputString, std::ios_base::app);
+  std::ofstream fs(Context.MI_outputString);
+  llvm::errs() << Context.MI_outputString << ' ' << strerror(errno) << '\n';
   assert(!fs.fail());
   fs << "Filename,Row,Column,Checker name,Checker message\n";
   fs.close();
