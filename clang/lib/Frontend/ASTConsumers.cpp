@@ -266,8 +266,8 @@ struct FunctionInfo {
   void dumpToStream(llvm::raw_ostream &out) const {
     llvm::SmallString<200> Str;
     llvm::raw_svector_ostream OS(Str);
-    OS << FileName << ',';
-    OS << FunctionName << ',';
+    OS << '\"' << FileName << "\",";
+    OS << '\"' << FunctionName << "\",";
     for (size_t I = 0; I < Infos.size(); ++I)
       OS << Infos[I] << ',';
     Str.pop_back();
