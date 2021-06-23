@@ -244,10 +244,8 @@ public:
   ProgramStateRef CheckOverlap(CheckerContext &C, ProgramStateRef state,
                                SizeArgExpr Size, AnyArgExpr First,
                                AnyArgExpr Second) const;
-  void emitOverlapBug(CheckerContext &C,
-                      ProgramStateRef state,
-                      const Stmt *First,
-                      const Stmt *Second) const;
+  void emitOverlapBug(CheckerContext &C, ProgramStateRef state,
+                      const Expr *First, const Expr *Second) const;
 
   void emitNullArgBug(CheckerContext &C, ProgramStateRef State, const Stmt *S,
                       StringRef WarningMsg) const;
@@ -543,8 +541,26 @@ ProgramStateRef CStringChecker::CheckOverlap(CheckerContext &C,
   return stateFalse;
 }
 
+namespace {
+class BufferOverlappingArgHandler final : public bugreporter::StoreHandler {
+public:
+  using bugreporter::StoreHandler::StoreHandler;
+
+  virtual PathDiagnosticPieceRef
+  handle(bugreporter::StoreInfo SI,
+         bugreporter::TrackingOptions Opts) override {
+
+    llvm::SmallString<200> Str;
+    llvm::raw_svector_ostream OS(Str);
+    OS << "hello";
+    //this->getParentTracker().getReport().add
+  }
+};
+} // end anonymous namespace
+
 void CStringChecker::emitOverlapBug(CheckerContext &C, ProgramStateRef state,
-                                  const Stmt *First, const Stmt *Second) const {
+                                    const Expr *First,
+                                    const Expr *Second) const {
   ExplodedNode *N = C.generateErrorNode(state);
   if (!N)
     return;
@@ -558,7 +574,7 @@ void CStringChecker::emitOverlapBug(CheckerContext &C, ProgramStateRef state,
       *BT_Overlap, "Arguments must not be overlapping buffers", N);
   report->addRange(First->getSourceRange());
   report->addRange(Second->getSourceRange());
-
+  auto OverLappingExpressionsTracker = bugreporter::Tracker::create(*report);
   C.emitReport(std::move(report));
 }
 

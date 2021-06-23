@@ -130,6 +130,12 @@ void memcpy6() {
   memcpy(a, a, 8); // expected-warning{{overlapping}}  
 }
 
+void memcpyPtr() {
+  int a[4] = {0};
+  int *ptr = a;
+  memcpy(ptr, a, 8); // expected-warning{{overlapping}}  
+}
+
 void memcpy7() {
   int a[4] = {0};
   memcpy(a+2, a+1, 8); // expected-warning{{overlapping}}
