@@ -68,12 +68,14 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState_Fwd.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/StoreRef.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SymbolManager.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <algorithm>
 #include <climits>
 #include <functional>
 #include <utility>
@@ -722,6 +724,116 @@ private:
   bool isArgZERO_SIZE_PTR(ProgramStateRef State, CheckerContext &C,
                           SVal ArgVal) const;
 };
+
+//===----------------------------------------------------------------------===//
+// Definition of NoOwnershipChangeBugVisitor.
+//===----------------------------------------------------------------------===//
+
+class NoOwnershipChangeBugVisitor final : public NoStateChangeFuncVisitor {
+  SymbolRef Sym;
+  using OwnerSet = llvm::SmallPtrSet<const MemRegion *, 8>;
+
+  class OwnershipBindingsHandler : public StoreManager::BindingsHandler {
+    SymbolRef Sym;
+
+  public:
+    OwnerSet Owners;
+
+    OwnershipBindingsHandler(SymbolRef Sym) : Sym(Sym) {}
+
+    /// \return whether the iteration should continue.
+    bool HandleBinding(StoreManager &SMgr, Store Store,
+                               const MemRegion *Region, SVal Val) override {
+      if (Val.getAsSymbol() == Sym)
+        Owners.insert(Region);
+      return true;
+    }
+  };
+protected:
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
+                           const ObjCMethodCall &Call,
+                           const ExplodedNode *N) override {
+    return nullptr;
+  }
+
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForCXXThis(PathSensitiveBugReport &R,
+                          const CXXConstructorCall &Call,
+                          const ExplodedNode *N) override {
+    return nullptr;
+  }
+
+  virtual bool wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
+                                             const ExplodedNode *CallExitN) override {
+    if (CurrN->getLocationAs<CallEnter>())
+      return true;
+
+    if (CurrN->getState()->get<RegionState>(Sym) !=
+        CallExitN->getState()->get<RegionState>(Sym))
+      return true;
+    //CurrN->getStackFrame()->dump();
+
+    ProgramStateRef ExitState = CallExitN->getState();
+    OwnershipBindingsHandler ExitHandler{Sym};
+    ExitState->getStateManager().getStoreManager().iterBindings(
+        ExitState->getStore(), ExitHandler);
+
+    //llvm::errs() << "Exit node owners:\n";
+    //for (const MemRegion *R : ExitHandler.Owners) {
+    //  R->dump();
+    //  llvm::errs() << '\n';
+    //}
+    ProgramStateRef CurrState = CurrN->getState();
+    OwnershipBindingsHandler CurrHandler{Sym};
+    CurrState->getStateManager().getStoreManager().iterBindings(
+        CurrState->getStore(), CurrHandler);
+    //llvm::errs() << "Entry node owners:\n";
+    //for (const MemRegion *R : CurrHandler.Owners) {
+    //  R->dump();
+    //  llvm::errs() << '\n';
+    //}
+    if (ExitHandler.Owners.size() != CurrHandler.Owners.size())
+      return true;
+    return !std::equal(ExitHandler.Owners.begin(), ExitHandler.Owners.end(),
+                      CurrHandler.Owners.begin());
+  }
+
+  static PathDiagnosticPieceRef emitNote(const ExplodedNode *N) {
+    PathDiagnosticLocation L = PathDiagnosticLocation::create(
+        N->getLocation(),
+        N->getState()->getStateManager().getContext().getSourceManager());
+    return std::make_shared<PathDiagnosticEventPiece>(
+        L, "Returning without changing the ownership status of allocated "
+           "memory");
+  }
+
+  /// Consume the information on the no-store stack frame in order to
+  /// either emit a note or suppress the report enirely.
+  /// \return Diagnostics piece for region not modified in the current function,
+  /// if it decides to emit one.
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForParameters(PathSensitiveBugReport &R, const CallEvent &Call,
+                            const ExplodedNode *N) override {
+    return emitNote(N);
+  }
+
+public:
+  NoOwnershipChangeBugVisitor(SymbolRef Sym)
+      : NoStateChangeFuncVisitor(bugreporter::TrackingKind::Thorough),
+        Sym(Sym) {}
+
+  void Profile(llvm::FoldingSetNodeID &ID) const override {
+    static int Tag = 0;
+    ID.AddPointer(&Tag);
+    ID.AddPointer(Sym);
+    }
+
+    void *getTag() const {
+      static int Tag = 0;
+      return static_cast<void *>(&Tag);
+    }
+  };
 
 //===----------------------------------------------------------------------===//
 // Definition of MallocBugVisitor.
@@ -2579,6 +2691,7 @@ void MallocChecker::HandleLeak(SymbolRef Sym, ExplodedNode *N,
       AllocNode->getLocationContext()->getDecl());
   R->markInteresting(Sym);
   R->addVisitor<MallocBugVisitor>(Sym, true);
+  R->addVisitor<NoOwnershipChangeBugVisitor>(Sym);
   C.emitReport(std::move(R));
 }
 
