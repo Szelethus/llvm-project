@@ -192,8 +192,10 @@ std::unique_ptr<ASTConsumer> clang::CreateASTDeclNodeLister() {
 
 namespace {
 struct FunctionInfo {
-  const ASTContext *ACtx = nullptr;
   std::string FileName, FunctionName;
+  llvm::SmallVector<int, 32> Infos;
+  std::pair<int, int> BeginLoc, EndLoc;
+  bool IsSystemHeaderFunction;
 
   enum class InfoKind {
 #define STMT(E, Base) E##Count,
@@ -211,8 +213,6 @@ struct FunctionInfo {
 #undef TYPE
     END
   };
-
-  llvm::SmallVector<int, 32> Infos;
 
   static StringRef infoKindToString(InfoKind k) {
     switch (k) {
@@ -241,11 +241,21 @@ struct FunctionInfo {
     llvm_unreachable("Unknown infokind!");
   }
 
+  static std::pair<int, int> getLineColumnIntPair(SourceLocation R,
+                                                  const SourceManager &SM) {
+    return {SM.getSpellingLineNumber(R), SM.getSpellingColumnNumber(R)};
+  }
+
   FunctionInfo(NamedDecl *ND, const ASTContext *ACtx)
-      : ACtx(ACtx),
-        FileName(ACtx->getSourceManager().getFilename(ND->getLocation())),
+      : FileName(ACtx->getSourceManager().getFilename(ND->getLocation())),
         FunctionName(ND->getDeclName().getAsString()),
-        Infos(static_cast<int>(InfoKind::END), 0) {}
+        Infos(static_cast<int>(InfoKind::END), 0),
+        BeginLoc(getLineColumnIntPair(ND->getSourceRange().getBegin(),
+                                      ACtx->getSourceManager())),
+        EndLoc(getLineColumnIntPair(ND->getSourceRange().getEnd(),
+                                    ACtx->getSourceManager())),
+        IsSystemHeaderFunction(
+            ACtx->getSourceManager().isInSystemHeader(ND->getLocation())) {}
 
   template <InfoKind K> int &getCountMutable() {
     assert(static_cast<int>(K) < Infos.size());
@@ -255,7 +265,7 @@ struct FunctionInfo {
   static void dumpColumnNamesToStream(llvm::raw_ostream &out) {
     llvm::SmallString<200> Str;
     llvm::raw_svector_ostream OS(Str);
-    OS << "File name,Function name,";
+    OS << "File name,Function name,System header function,Begin line,Begin column,End line,End column,";
     for (size_t I = 0; I < static_cast<int>(InfoKind::END); ++I)
       OS << infoKindToString(static_cast<InfoKind>(I)) << ',';
     Str.pop_back();
@@ -268,6 +278,8 @@ struct FunctionInfo {
     llvm::raw_svector_ostream OS(Str);
     OS << '\"' << FileName << "\",";
     OS << '\"' << FunctionName << "\",";
+    OS << (IsSystemHeaderFunction ? "true" : "false") << ',';
+    OS << BeginLoc.first << ',' << BeginLoc.second << ',' << EndLoc.first << ',' << EndLoc.second << ',';
     for (size_t I = 0; I < Infos.size(); ++I)
       OS << Infos[I] << ',';
     Str.pop_back();
