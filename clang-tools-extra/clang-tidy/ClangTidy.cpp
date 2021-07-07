@@ -560,15 +560,17 @@ runClangTidy(clang::tidy::ClangTidyContext &Context,
   Tool.setDiagnosticConsumer(&DiagConsumer);
 
   class ActionFactory : public FrontendActionFactory {
-    std::string outputdir;
+    ClangTidyASTConsumerFactory ConsumerFactory;
+    std::string Outputdir;
   public:
     ActionFactory(ClangTidyContext &Context,
                   IntrusiveRefCntPtr<llvm::vfs::OverlayFileSystem> BaseFS,
-                  StringRef outputdir)
-        : ConsumerFactory(Context, std::move(BaseFS)), outputdir(outputdir.str()) {}
+                  StringRef Outputdir)
+        : ConsumerFactory(Context, std::move(BaseFS)),
+          Outputdir(Outputdir.str()) {}
     std::unique_ptr<FrontendAction> create() override {
       return std::make_unique<Action>(&ConsumerFactory,
-                  outputdir);
+                  Outputdir);
     }
 
     bool runInvocation(std::shared_ptr<CompilerInvocation> Invocation,
@@ -583,28 +585,24 @@ runClangTidy(clang::tidy::ClangTidyContext &Context,
 
   private:
     class Action : public ASTFrontendAction {
-      std::string outputdir;
+      ClangTidyASTConsumerFactory *Factory;
+      std::string Outputdir;
     public:
-      Action(ClangTidyASTConsumerFactory *Factory,
-                  StringRef outputdir) : Factory(Factory), outputdir(outputdir.str()) {}
+      Action(ClangTidyASTConsumerFactory *Factory, StringRef Outputdir)
+          : Factory(Factory), Outputdir(Outputdir.str()) {}
       std::unique_ptr<ASTConsumer> CreateASTConsumer(CompilerInstance &Compiler,
                                                      StringRef File) override {
         Factory->Context.MI_outputString =
-            outputdir + File.rsplit("/").second.str() +
+            Outputdir + File.rsplit("/").second.str() +
             "_output_tidy_output.csv";
         return Factory->CreateASTConsumer(Compiler, File);
       }
-
-    private:
-      ClangTidyASTConsumerFactory *Factory;
     };
-
-    ClangTidyASTConsumerFactory ConsumerFactory;
   };
 
-  class ActionFactory2 : public FrontendActionFactory {
+  class IntVectorActionFactory : public FrontendActionFactory {
   public:
-    ActionFactory2(StringRef File) : File(File.str()) {}
+    IntVectorActionFactory(StringRef File) : File(File.str()) {}
     std::unique_ptr<FrontendAction> create() override {
       return std::make_unique<IntVectorDumpAction>(File);
     }
@@ -618,7 +616,7 @@ runClangTidy(clang::tidy::ClangTidyContext &Context,
 
   ActionFactory Factory(Context, std::move(BaseFS), outputdir);
   Tool.run(&Factory);
-  ActionFactory2 Factory2(outputdir +
+  IntVectorActionFactory Factory2(outputdir +
                           Context.getCurrentFile().rsplit("/").second.str() +
                           "_int_vector_output.csv");
   Tool.run(&Factory2);
