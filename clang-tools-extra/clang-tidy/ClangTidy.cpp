@@ -41,6 +41,7 @@
 #include "clang/Tooling/Refactoring.h"
 #include "clang/Tooling/ReplacementsYaml.h"
 #include "clang/Tooling/Tooling.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Process.h"
 #include <algorithm>
 #include <utility>
@@ -612,6 +613,10 @@ runClangTidy(clang::tidy::ClangTidyContext &Context,
 
   std::string outputdir =
       BaseFS->getCurrentWorkingDirectory().get() + "/MI_output/";
+
+  auto error_code = llvm::sys::fs::create_directory(outputdir);
+  assert(!error_code);
+
   llvm::errs() << "output dir: " << outputdir << '\n';
 
   ActionFactory Factory(Context, std::move(BaseFS), outputdir);
