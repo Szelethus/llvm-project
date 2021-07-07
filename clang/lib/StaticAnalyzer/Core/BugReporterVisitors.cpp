@@ -344,45 +344,126 @@ BugReporterVisitor::getDefaultEndPath(const BugReporterContext &BRC,
 }
 
 //===----------------------------------------------------------------------===//
+// Implementation of NoStateChangeFuncVisitor.
+//===----------------------------------------------------------------------===//
+
+bool NoStateChangeFuncVisitor::isModifiedInFrame(const ExplodedNode *N) {
+  const LocationContext *Ctx = N->getLocationContext();
+  const StackFrameContext *SCtx = Ctx->getStackFrame();
+  if (!FramesModifyingCalculated.count(SCtx))
+    findModifyingFrames(N);
+  return FramesModifying.count(SCtx);
+}
+
+void NoStateChangeFuncVisitor::findModifyingFrames(
+    const ExplodedNode *const CallExitN) {
+
+  assert(CallExitN->getLocationAs<CallExitBegin>());
+  const ExplodedNode *LastReturnN = CallExitN;
+  const StackFrameContext *const OriginalSCtx =
+      CallExitN->getLocationContext()->getStackFrame();
+
+  const ExplodedNode *CurrN = CallExitN;
+
+  do {
+    ProgramStateRef State = CurrN->getState();
+    auto CallExitLoc = CurrN->getLocationAs<CallExitBegin>();
+    if (CallExitLoc) {
+      LastReturnN = CurrN;
+    }
+
+    FramesModifyingCalculated.insert(
+        CurrN->getLocationContext()->getStackFrame());
+
+    if (wasModifiedBeforeCallExit(CurrN, LastReturnN)) {
+      const StackFrameContext *SCtx = CurrN->getStackFrame();
+      while (!SCtx->inTopFrame()) {
+        auto p = FramesModifying.insert(SCtx);
+        if (!p.second)
+          break; // Frame and all its parents already inserted.
+        SCtx = SCtx->getParent()->getStackFrame();
+      }
+    }
+
+    // Stop calculation at the call to the current function.
+    if (auto CE = CurrN->getLocationAs<CallEnter>())
+      if (CE->getCalleeContext() == OriginalSCtx)
+        break;
+
+    CurrN = CurrN->getFirstPred();
+  } while (CurrN);
+}
+
+PathDiagnosticPieceRef NoStateChangeFuncVisitor::VisitNode(
+    const ExplodedNode *N, BugReporterContext &BR, PathSensitiveBugReport &R) {
+
+  const LocationContext *Ctx = N->getLocationContext();
+  const StackFrameContext *SCtx = Ctx->getStackFrame();
+  ProgramStateRef State = N->getState();
+  auto CallExitLoc = N->getLocationAs<CallExitBegin>();
+
+  // No diagnostic if region was modified inside the frame.
+  if (!CallExitLoc || isModifiedInFrame(N))
+    return nullptr;
+
+  CallEventRef<> Call =
+      BR.getStateManager().getCallEventManager().getCaller(SCtx, State);
+
+  // Optimistically suppress uninitialized value bugs that result
+  // from system headers having a chance to initialize the value
+  // but failing to do so. It's too unlikely a system header's fault.
+  // It's much more likely a situation in which the function has a failure
+  // mode that the user decided not to check. If we want to hunt such
+  // omitted checks, we should provide an explicit function-specific note
+  // describing the precondition under which the function isn't supposed to
+  // initialize its out-parameter, and additionally check that such
+  // precondition can actually be fulfilled on the current path.
+  if (Call->isInSystemHeader()) {
+    // We make an exception for system header functions that have no branches.
+    // Such functions unconditionally fail to initialize the variable.
+    // If they call other functions that have more paths within them,
+    // this suppression would still apply when we visit these inner functions.
+    // One common example of a standard function that doesn't ever initialize
+    // its out parameter is operator placement new; it's up to the follow-up
+    // constructor (if any) to initialize the memory.
+    if (!N->getStackFrame()->getCFG()->isLinear()) {
+      static int i = 0;
+      R.markInvalid(&i, nullptr);
+    }
+    return nullptr;
+  }
+
+  return maybeEmitNote(R, *Call, N);
+}
+
+//===----------------------------------------------------------------------===//
 // Implementation of NoStoreFuncVisitor.
 //===----------------------------------------------------------------------===//
 
 namespace {
-
 /// Put a diagnostic on return statement of all inlined functions
 /// for which  the region of interest \p RegionOfInterest was passed into,
 /// but not written inside, and it has caused an undefined read or a null
 /// pointer dereference outside.
-class NoStoreFuncVisitor final : public BugReporterVisitor {
+class NoStoreFuncVisitor final : public NoStateChangeFuncVisitor {
   const SubRegion *RegionOfInterest;
   MemRegionManager &MmrMgr;
   const SourceManager &SM;
   const PrintingPolicy &PP;
-  bugreporter::TrackingKind TKind;
 
   /// Recursion limit for dereferencing fields when looking for the
   /// region of interest.
   /// The limit of two indicates that we will dereference fields only once.
   static const unsigned DEREFERENCE_LIMIT = 2;
 
-  /// Frames writing into \c RegionOfInterest.
-  /// This visitor generates a note only if a function does not write into
-  /// a region of interest. This information is not immediately available
-  /// by looking at the node associated with the exit from the function
-  /// (usually the return statement). To avoid recomputing the same information
-  /// many times (going up the path for each node and checking whether the
-  /// region was written into) we instead lazily compute the
-  /// stack frames along the path which write into the region of interest.
-  llvm::SmallPtrSet<const StackFrameContext *, 32> FramesModifyingRegion;
-  llvm::SmallPtrSet<const StackFrameContext *, 32> FramesModifyingCalculated;
-
   using RegionVector = SmallVector<const MemRegion *, 5>;
 
 public:
   NoStoreFuncVisitor(const SubRegion *R, bugreporter::TrackingKind TKind)
-      : RegionOfInterest(R), MmrMgr(R->getMemRegionManager()),
+      : NoStateChangeFuncVisitor(TKind), RegionOfInterest(R),
+        MmrMgr(R->getMemRegionManager()),
         SM(MmrMgr.getContext().getSourceManager()),
-        PP(MmrMgr.getContext().getPrintingPolicy()), TKind(TKind) {}
+        PP(MmrMgr.getContext().getPrintingPolicy()) {}
 
   void Profile(llvm::FoldingSetNodeID &ID) const override {
     static int Tag = 0;
@@ -395,11 +476,13 @@ public:
     return static_cast<void *>(&Tag);
   }
 
-  PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
-                                   BugReporterContext &BR,
-                                   PathSensitiveBugReport &R) override;
-
 private:
+  /// \return Whether \c RegionOfInterest was modified at \p CurrN compared to
+  /// the value it holds in \p CallExitN.
+  virtual bool
+  wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
+                            const ExplodedNode *CallExitN) override;
+
   /// Attempts to find the region of interest in a given record decl,
   /// by either following the base classes or fields.
   /// Dereferences fields up to a given recursion limit.
@@ -411,20 +494,9 @@ private:
                                const MemRegion *R, const RegionVector &Vec = {},
                                int depth = 0);
 
-  /// Check and lazily calculate whether the region of interest is
-  /// modified in the stack frame to which \p N belongs.
-  /// The calculation is cached in FramesModifyingRegion.
-  bool isRegionOfInterestModifiedInFrame(const ExplodedNode *N) {
-    const LocationContext *Ctx = N->getLocationContext();
-    const StackFrameContext *SCtx = Ctx->getStackFrame();
-    if (!FramesModifyingCalculated.count(SCtx))
-      findModifyingFrames(N);
-    return FramesModifyingRegion.count(SCtx);
-  }
-
-  /// Write to \c FramesModifyingRegion all stack frames along
-  /// the path in the current stack frame which modify \c RegionOfInterest.
-  void findModifyingFrames(const ExplodedNode *N);
+  virtual PathDiagnosticPieceRef maybeEmitNote(PathSensitiveBugReport &R,
+                                               const CallEvent &Call,
+                                               const ExplodedNode *N) override;
 
   /// Consume the information on the no-store stack frame in order to
   /// either emit a note or suppress the report enirely.
@@ -436,22 +508,18 @@ private:
                 const MemRegion *MatchedRegion, StringRef FirstElement,
                 bool FirstIsReferenceType, unsigned IndirectionLevel);
 
-  /// Pretty-print region \p MatchedRegion to \p os.
-  /// \return Whether printing succeeded.
-  bool prettyPrintRegionName(StringRef FirstElement, bool FirstIsReferenceType,
+  bool prettyPrintRegionName(const RegionVector &FieldChain,
                              const MemRegion *MatchedRegion,
-                             const RegionVector &FieldChain,
-                             int IndirectionLevel,
+                             StringRef FirstElement, bool FirstIsReferenceType,
+                             unsigned IndirectionLevel,
                              llvm::raw_svector_ostream &os);
 
-  /// Print first item in the chain, return new separator.
-  static StringRef prettyPrintFirstElement(StringRef FirstElement,
-                                           bool MoreItemsExpected,
-                                           int IndirectionLevel,
-                                           llvm::raw_svector_ostream &os);
+  StringRef prettyPrintFirstElement(StringRef FirstElement,
+                                    bool MoreItemsExpected,
+                                    int IndirectionLevel,
+                                    llvm::raw_svector_ostream &os);
 };
-
-} // end of anonymous namespace
+} // namespace
 
 /// \return Whether the method declaration \p Parent
 /// syntactically has a binary operation writing into the ivar \p Ivar.
@@ -488,15 +556,15 @@ static bool potentiallyWritesIntoIvar(const Decl *Parent,
 
 /// Get parameters associated with runtime definition in order
 /// to get the correct parameter name.
-static ArrayRef<ParmVarDecl *> getCallParameters(CallEventRef<> Call) {
+static ArrayRef<ParmVarDecl *> getCallParameters(const CallEvent &Call) {
   // Use runtime definition, if available.
-  RuntimeDefinition RD = Call->getRuntimeDefinition();
+  RuntimeDefinition RD = Call.getRuntimeDefinition();
   if (const auto *FD = dyn_cast_or_null<FunctionDecl>(RD.getDecl()))
     return FD->parameters();
   if (const auto *MD = dyn_cast_or_null<ObjCMethodDecl>(RD.getDecl()))
     return MD->parameters();
 
-  return Call->parameters();
+  return Call.parameters();
 }
 
 /// \return whether \p Ty points to a const type, or is a const reference.
@@ -563,40 +631,27 @@ NoStoreFuncVisitor::findRegionOfInterestInRecord(
   return None;
 }
 
-PathDiagnosticPieceRef
-NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
-                              PathSensitiveBugReport &R) {
-
-  const LocationContext *Ctx = N->getLocationContext();
-  const StackFrameContext *SCtx = Ctx->getStackFrame();
-  ProgramStateRef State = N->getState();
-  auto CallExitLoc = N->getLocationAs<CallExitBegin>();
-
-  // No diagnostic if region was modified inside the frame.
-  if (!CallExitLoc || isRegionOfInterestModifiedInFrame(N))
-    return nullptr;
-
-  CallEventRef<> Call =
-      BR.getStateManager().getCallEventManager().getCaller(SCtx, State);
+PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
+    PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N) {
 
   // Region of interest corresponds to an IVar, exiting a method
   // which could have written into that IVar, but did not.
-  if (const auto *MC = dyn_cast<ObjCMethodCall>(Call)) {
+  if (const auto *MC = dyn_cast<ObjCMethodCall>(&Call)) {
     if (const auto *IvarR = dyn_cast<ObjCIvarRegion>(RegionOfInterest)) {
       const MemRegion *SelfRegion = MC->getReceiverSVal().getAsRegion();
       if (RegionOfInterest->isSubRegionOf(SelfRegion) &&
-          potentiallyWritesIntoIvar(Call->getRuntimeDefinition().getDecl(),
+          potentiallyWritesIntoIvar(Call.getRuntimeDefinition().getDecl(),
                                     IvarR->getDecl()))
-        return maybeEmitNote(R, *Call, N, {}, SelfRegion, "self",
+        return maybeEmitNote(R, Call, N, {}, SelfRegion, "self",
                              /*FirstIsReferenceType=*/false, 1);
     }
   }
 
-  if (const auto *CCall = dyn_cast<CXXConstructorCall>(Call)) {
+  if (const auto *CCall = dyn_cast<CXXConstructorCall>(&Call)) {
     const MemRegion *ThisR = CCall->getCXXThisVal().getAsRegion();
     if (RegionOfInterest->isSubRegionOf(ThisR) &&
         !CCall->getDecl()->isImplicit())
-      return maybeEmitNote(R, *Call, N, {}, ThisR, "this",
+      return maybeEmitNote(R, Call, N, {}, ThisR, "this",
                            /*FirstIsReferenceType=*/false, 1);
 
     // Do not generate diagnostics for not modified parameters in
@@ -605,27 +660,29 @@ NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
   }
 
   ArrayRef<ParmVarDecl *> parameters = getCallParameters(Call);
-  for (unsigned I = 0; I < Call->getNumArgs() && I < parameters.size(); ++I) {
+  for (unsigned I = 0; I < Call.getNumArgs() && I < parameters.size(); ++I) {
     const ParmVarDecl *PVD = parameters[I];
-    SVal V = Call->getArgSVal(I);
+    SVal V = Call.getArgSVal(I);
     bool ParamIsReferenceType = PVD->getType()->isReferenceType();
     std::string ParamName = PVD->getNameAsString();
 
-    int IndirectionLevel = 1;
+    unsigned IndirectionLevel = 1;
     QualType T = PVD->getType();
     while (const MemRegion *MR = V.getAsRegion()) {
       if (RegionOfInterest->isSubRegionOf(MR) && !isPointerToConst(T))
-        return maybeEmitNote(R, *Call, N, {}, MR, ParamName,
+        return maybeEmitNote(R, Call, N, {}, MR, ParamName,
                              ParamIsReferenceType, IndirectionLevel);
 
       QualType PT = T->getPointeeType();
       if (PT.isNull() || PT->isVoidType())
         break;
 
+      ProgramStateRef State = N->getState();
+
       if (const RecordDecl *RD = PT->getAsRecordDecl())
         if (Optional<RegionVector> P =
                 findRegionOfInterestInRecord(RD, State, MR))
-          return maybeEmitNote(R, *Call, N, *P, RegionOfInterest, ParamName,
+          return maybeEmitNote(R, Call, N, *P, RegionOfInterest, ParamName,
                                ParamIsReferenceType, IndirectionLevel);
 
       V = State->getSVal(MR, PT);
@@ -637,40 +694,11 @@ NoStoreFuncVisitor::VisitNode(const ExplodedNode *N, BugReporterContext &BR,
   return nullptr;
 }
 
-void NoStoreFuncVisitor::findModifyingFrames(const ExplodedNode *N) {
-  assert(N->getLocationAs<CallExitBegin>());
-  ProgramStateRef LastReturnState = N->getState();
-  SVal ValueAtReturn = LastReturnState->getSVal(RegionOfInterest);
-  const LocationContext *Ctx = N->getLocationContext();
-  const StackFrameContext *OriginalSCtx = Ctx->getStackFrame();
-
-  do {
-    ProgramStateRef State = N->getState();
-    auto CallExitLoc = N->getLocationAs<CallExitBegin>();
-    if (CallExitLoc) {
-      LastReturnState = State;
-      ValueAtReturn = LastReturnState->getSVal(RegionOfInterest);
-    }
-
-    FramesModifyingCalculated.insert(N->getLocationContext()->getStackFrame());
-
-    if (wasRegionOfInterestModifiedAt(RegionOfInterest, N, ValueAtReturn)) {
-      const StackFrameContext *SCtx = N->getStackFrame();
-      while (!SCtx->inTopFrame()) {
-        auto p = FramesModifyingRegion.insert(SCtx);
-        if (!p.second)
-          break; // Frame and all its parents already inserted.
-        SCtx = SCtx->getParent()->getStackFrame();
-      }
-    }
-
-    // Stop calculation at the call to the current function.
-    if (auto CE = N->getLocationAs<CallEnter>())
-      if (CE->getCalleeContext() == OriginalSCtx)
-        break;
-
-    N = N->getFirstPred();
-  } while (N);
+bool NoStoreFuncVisitor::wasModifiedBeforeCallExit(
+    const ExplodedNode *CurrN, const ExplodedNode *CallExitN) {
+  return ::wasRegionOfInterestModifiedAt(
+      RegionOfInterest, CurrN,
+      CallExitN->getState()->getSVal(RegionOfInterest));
 }
 
 static llvm::StringLiteral WillBeUsedForACondition =
@@ -681,27 +709,6 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
     const RegionVector &FieldChain, const MemRegion *MatchedRegion,
     StringRef FirstElement, bool FirstIsReferenceType,
     unsigned IndirectionLevel) {
-  // Optimistically suppress uninitialized value bugs that result
-  // from system headers having a chance to initialize the value
-  // but failing to do so. It's too unlikely a system header's fault.
-  // It's much more likely a situation in which the function has a failure
-  // mode that the user decided not to check. If we want to hunt such
-  // omitted checks, we should provide an explicit function-specific note
-  // describing the precondition under which the function isn't supposed to
-  // initialize its out-parameter, and additionally check that such
-  // precondition can actually be fulfilled on the current path.
-  if (Call.isInSystemHeader()) {
-    // We make an exception for system header functions that have no branches.
-    // Such functions unconditionally fail to initialize the variable.
-    // If they call other functions that have more paths within them,
-    // this suppression would still apply when we visit these inner functions.
-    // One common example of a standard function that doesn't ever initialize
-    // its out parameter is operator placement new; it's up to the follow-up
-    // constructor (if any) to initialize the memory.
-    if (!N->getStackFrame()->getCFG()->isLinear())
-      R.markInvalid(getTag(), nullptr);
-    return nullptr;
-  }
 
   PathDiagnosticLocation L =
       PathDiagnosticLocation::create(N->getLocation(), SM);
@@ -717,8 +724,8 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
   os << "Returning without writing to '";
 
   // Do not generate the note if failed to pretty-print.
-  if (!prettyPrintRegionName(FirstElement, FirstIsReferenceType, MatchedRegion,
-                             FieldChain, IndirectionLevel, os))
+  if (!prettyPrintRegionName(FieldChain, MatchedRegion, FirstElement,
+                             FirstIsReferenceType, IndirectionLevel, os))
     return nullptr;
 
   os << "'";
@@ -727,11 +734,11 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
   return std::make_shared<PathDiagnosticEventPiece>(L, os.str());
 }
 
-bool NoStoreFuncVisitor::prettyPrintRegionName(StringRef FirstElement,
-                                               bool FirstIsReferenceType,
+bool NoStoreFuncVisitor::prettyPrintRegionName(const RegionVector &FieldChain,
                                                const MemRegion *MatchedRegion,
-                                               const RegionVector &FieldChain,
-                                               int IndirectionLevel,
+                                               StringRef FirstElement,
+                                               bool FirstIsReferenceType,
+                                               unsigned IndirectionLevel,
                                                llvm::raw_svector_ostream &os) {
 
   if (FirstIsReferenceType)
