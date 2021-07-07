@@ -16,6 +16,7 @@
 
 #include "clang/Analysis/ProgramPoint.h"
 #include "clang/Basic/LLVM.h"
+#include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/RangedConstraintManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include "llvm/ADT/FoldingSet.h"
@@ -623,6 +624,9 @@ public:
                                    PathSensitiveBugReport &R) override;
 };
 
+class ObjCMethodCall;
+class CXXConstructorCall;
+
 /// Put a diagnostic on return statement of all inlined functions for which some
 /// property remained unchanged.
 /// Resulting diagnostics may read such as "Returning without writing to X".
@@ -665,9 +669,19 @@ protected:
   /// \return Diagnostics piece for the unmodified state in the current
   /// function, if it decides to emit one. A good description might start with
   /// "Returning without...".
-  virtual PathDiagnosticPieceRef maybeEmitNote(PathSensitiveBugReport &R,
-                                               const CallEvent &Call,
-                                               const ExplodedNode *N) = 0;
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
+                           const ObjCMethodCall &Call,
+                           const ExplodedNode *N) = 0;
+
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForCXXThis(PathSensitiveBugReport &R,
+                          const CXXConstructorCall &Call,
+                          const ExplodedNode *N) = 0;
+
+  virtual PathDiagnosticPieceRef maybeEmitNoteForParameter(
+      PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
+      ArrayRef<ParmVarDecl *> Parameters, unsigned ParamIdx) = 0;
 
 public:
   NoStateChangeFuncVisitor(bugreporter::TrackingKind TKind) : TKind(TKind) {}
@@ -677,8 +691,83 @@ public:
                                    PathSensitiveBugReport &R) override final;
 };
 
-} // namespace ento
+/// Put a diagnostic on return statement of all inlined functions for which some
+/// property on a MemRegion remained unchanged.
+class NoStateChangeRegionFuncVisitor : public NoStateChangeFuncVisitor {
+protected:
+  using RegionVector = SmallVector<const MemRegion *, 5>;
 
+private:
+  /// Attempts to find the region of interest in a given record decl,
+  /// by either following the base classes or fields.
+  /// Dereferences fields up to a given recursion limit.
+  /// Note that \p Vec is passed by value, leading to quadratic copying cost,
+  /// but it's OK in practice since its length is limited to DEREFERENCE_LIMIT.
+  /// \return A chain fields leading to the region of interest or None.
+  const Optional<RegionVector>
+  findRegionOfInterestInRecord(const RecordDecl *RD, ProgramStateRef State,
+                               const MemRegion *R, const RegionVector &Vec = {},
+                               int depth = 0);
+
+  /// Print first item in the chain, return new separator.
+  static StringRef prettyPrintFirstElement(StringRef FirstElement,
+                                           bool MoreItemsExpected,
+                                           int IndirectionLevel,
+                                           llvm::raw_svector_ostream &Os);
+
+protected:
+  const SubRegion *RegionOfInterest;
+  MemRegionManager &MmrMgr;
+  const SourceManager &SM;
+  const PrintingPolicy &PP;
+
+  /// Recursion limit for dereferencing fields when looking for the
+  /// region of interest.
+  /// The limit of two indicates that we will dereference fields only once.
+  static const unsigned DEREFERENCE_LIMIT = 2;
+
+  /// Pretty-print region \p MatchedRegion to \p os.
+  /// \return Whether printing succeeded.
+  bool prettyPrintRegionName(const RegionVector &FieldChain,
+                             const MemRegion *MatchedRegion,
+                             StringRef FirstElement, bool FirstIsReferenceType,
+                             unsigned IndirectionLevel,
+                             llvm::raw_svector_ostream &os);
+
+  // Region of interest corresponds to an IVar, exiting a method
+  // which could have written into that IVar, but did not.
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
+                           const ObjCMethodCall &Call,
+                           const ExplodedNode *N) override final;
+
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForCXXThis(PathSensitiveBugReport &R,
+                          const CXXConstructorCall &Call,
+                          const ExplodedNode *N) override final;
+
+  virtual PathDiagnosticPieceRef maybeEmitNoteForParameter(
+      PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
+      ArrayRef<ParmVarDecl *> Parameters, unsigned ParamIdx) override final;
+
+  /// \return Diagnostics piece for region not modified in the current function,
+  /// if it decides to emit one.
+  PathDiagnosticPieceRef virtual emitNote(
+      PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
+      const RegionVector &FieldChain, const MemRegion *MatchedRegion,
+      StringRef FirstElement, bool FirstIsReferenceType,
+      unsigned IndirectionLevel) = 0;
+
+public:
+  NoStateChangeRegionFuncVisitor(const SubRegion *R,
+                                 bugreporter::TrackingKind TKind)
+      : NoStateChangeFuncVisitor(TKind), RegionOfInterest(R),
+        MmrMgr(R->getMemRegionManager()),
+        SM(MmrMgr.getContext().getSourceManager()),
+        PP(MmrMgr.getContext().getPrintingPolicy()) {}
+};
+
+} // namespace ento
 } // namespace clang
 
 #endif // LLVM_CLANG_STATICANALYZER_CORE_BUGREPORTER_BUGREPORTERVISITORS_H

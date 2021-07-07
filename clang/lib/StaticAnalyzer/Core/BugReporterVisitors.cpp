@@ -394,6 +394,19 @@ void NoStateChangeFuncVisitor::findModifyingFrames(
   } while (CurrN);
 }
 
+/// Get parameters associated with runtime definition in order
+/// to get the correct parameter name.
+static ArrayRef<ParmVarDecl *> getCallParameters(const CallEvent &Call) {
+  // Use runtime definition, if available.
+  RuntimeDefinition RD = Call.getRuntimeDefinition();
+  if (const auto *FD = dyn_cast_or_null<FunctionDecl>(RD.getDecl()))
+    return FD->parameters();
+  if (const auto *MD = dyn_cast_or_null<ObjCMethodDecl>(RD.getDecl()))
+    return MD->parameters();
+
+  return Call.parameters();
+}
+
 PathDiagnosticPieceRef NoStateChangeFuncVisitor::VisitNode(
     const ExplodedNode *N, BugReporterContext &BR, PathSensitiveBugReport &R) {
 
@@ -433,145 +446,34 @@ PathDiagnosticPieceRef NoStateChangeFuncVisitor::VisitNode(
     return nullptr;
   }
 
-  return maybeEmitNote(R, *Call, N);
+  if (const auto *MC = dyn_cast<ObjCMethodCall>(Call)) {
+    // If we failed to construct a piece for self, we still want to check
+    // whether the entity of interest is in a parameter.
+    if (PathDiagnosticPieceRef Piece = maybeEmitNoteForObjCSelf(R, *MC, N))
+      return Piece;
+  }
+
+  if (const auto *CCall = dyn_cast<CXXConstructorCall>(Call)) {
+    // Do not generate diagnostics for not modified parameters in
+    // constructors.
+    return maybeEmitNoteForCXXThis(R, *CCall, N);
+  }
+
+  ArrayRef<ParmVarDecl *> parameters = getCallParameters(*Call);
+  for (unsigned ParamIdx = 0;
+       ParamIdx < Call->getNumArgs() && ParamIdx < parameters.size();
+       ++ParamIdx) {
+    if (PathDiagnosticPieceRef Piece =
+            maybeEmitNoteForParameter(R, *Call, N, parameters, ParamIdx))
+      return Piece;
+  }
+
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
-// Implementation of NoStoreFuncVisitor.
+// Implementation of NoStateChangeRegionFuncVisitor.
 //===----------------------------------------------------------------------===//
-
-namespace {
-/// Put a diagnostic on return statement of all inlined functions
-/// for which  the region of interest \p RegionOfInterest was passed into,
-/// but not written inside, and it has caused an undefined read or a null
-/// pointer dereference outside.
-class NoStoreFuncVisitor final : public NoStateChangeFuncVisitor {
-  const SubRegion *RegionOfInterest;
-  MemRegionManager &MmrMgr;
-  const SourceManager &SM;
-  const PrintingPolicy &PP;
-
-  /// Recursion limit for dereferencing fields when looking for the
-  /// region of interest.
-  /// The limit of two indicates that we will dereference fields only once.
-  static const unsigned DEREFERENCE_LIMIT = 2;
-
-  using RegionVector = SmallVector<const MemRegion *, 5>;
-
-public:
-  NoStoreFuncVisitor(const SubRegion *R, bugreporter::TrackingKind TKind)
-      : NoStateChangeFuncVisitor(TKind), RegionOfInterest(R),
-        MmrMgr(R->getMemRegionManager()),
-        SM(MmrMgr.getContext().getSourceManager()),
-        PP(MmrMgr.getContext().getPrintingPolicy()) {}
-
-  void Profile(llvm::FoldingSetNodeID &ID) const override {
-    static int Tag = 0;
-    ID.AddPointer(&Tag);
-    ID.AddPointer(RegionOfInterest);
-  }
-
-  void *getTag() const {
-    static int Tag = 0;
-    return static_cast<void *>(&Tag);
-  }
-
-private:
-  /// \return Whether \c RegionOfInterest was modified at \p CurrN compared to
-  /// the value it holds in \p CallExitN.
-  virtual bool
-  wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
-                            const ExplodedNode *CallExitN) override;
-
-  /// Attempts to find the region of interest in a given record decl,
-  /// by either following the base classes or fields.
-  /// Dereferences fields up to a given recursion limit.
-  /// Note that \p Vec is passed by value, leading to quadratic copying cost,
-  /// but it's OK in practice since its length is limited to DEREFERENCE_LIMIT.
-  /// \return A chain fields leading to the region of interest or None.
-  const Optional<RegionVector>
-  findRegionOfInterestInRecord(const RecordDecl *RD, ProgramStateRef State,
-                               const MemRegion *R, const RegionVector &Vec = {},
-                               int depth = 0);
-
-  virtual PathDiagnosticPieceRef maybeEmitNote(PathSensitiveBugReport &R,
-                                               const CallEvent &Call,
-                                               const ExplodedNode *N) override;
-
-  /// Consume the information on the no-store stack frame in order to
-  /// either emit a note or suppress the report enirely.
-  /// \return Diagnostics piece for region not modified in the current function,
-  /// if it decides to emit one.
-  PathDiagnosticPieceRef
-  maybeEmitNote(PathSensitiveBugReport &R, const CallEvent &Call,
-                const ExplodedNode *N, const RegionVector &FieldChain,
-                const MemRegion *MatchedRegion, StringRef FirstElement,
-                bool FirstIsReferenceType, unsigned IndirectionLevel);
-
-  bool prettyPrintRegionName(const RegionVector &FieldChain,
-                             const MemRegion *MatchedRegion,
-                             StringRef FirstElement, bool FirstIsReferenceType,
-                             unsigned IndirectionLevel,
-                             llvm::raw_svector_ostream &os);
-
-  StringRef prettyPrintFirstElement(StringRef FirstElement,
-                                    bool MoreItemsExpected,
-                                    int IndirectionLevel,
-                                    llvm::raw_svector_ostream &os);
-};
-} // namespace
-
-/// \return Whether the method declaration \p Parent
-/// syntactically has a binary operation writing into the ivar \p Ivar.
-static bool potentiallyWritesIntoIvar(const Decl *Parent,
-                                      const ObjCIvarDecl *Ivar) {
-  using namespace ast_matchers;
-  const char *IvarBind = "Ivar";
-  if (!Parent || !Parent->hasBody())
-    return false;
-  StatementMatcher WriteIntoIvarM = binaryOperator(
-      hasOperatorName("="),
-      hasLHS(ignoringParenImpCasts(
-          objcIvarRefExpr(hasDeclaration(equalsNode(Ivar))).bind(IvarBind))));
-  StatementMatcher ParentM = stmt(hasDescendant(WriteIntoIvarM));
-  auto Matches = match(ParentM, *Parent->getBody(), Parent->getASTContext());
-  for (BoundNodes &Match : Matches) {
-    auto IvarRef = Match.getNodeAs<ObjCIvarRefExpr>(IvarBind);
-    if (IvarRef->isFreeIvar())
-      return true;
-
-    const Expr *Base = IvarRef->getBase();
-    if (const auto *ICE = dyn_cast<ImplicitCastExpr>(Base))
-      Base = ICE->getSubExpr();
-
-    if (const auto *DRE = dyn_cast<DeclRefExpr>(Base))
-      if (const auto *ID = dyn_cast<ImplicitParamDecl>(DRE->getDecl()))
-        if (ID->getParameterKind() == ImplicitParamDecl::ObjCSelf)
-          return true;
-
-    return false;
-  }
-  return false;
-}
-
-/// Get parameters associated with runtime definition in order
-/// to get the correct parameter name.
-static ArrayRef<ParmVarDecl *> getCallParameters(const CallEvent &Call) {
-  // Use runtime definition, if available.
-  RuntimeDefinition RD = Call.getRuntimeDefinition();
-  if (const auto *FD = dyn_cast_or_null<FunctionDecl>(RD.getDecl()))
-    return FD->parameters();
-  if (const auto *MD = dyn_cast_or_null<ObjCMethodDecl>(RD.getDecl()))
-    return MD->parameters();
-
-  return Call.parameters();
-}
-
-/// \return whether \p Ty points to a const type, or is a const reference.
-static bool isPointerToConst(QualType Ty) {
-  return !Ty->getPointeeType().isNull() &&
-         Ty->getPointeeType().getCanonicalType().isConstQualified();
-}
 
 /// Attempts to find the region of interest in a given CXX decl,
 /// by either following the base classes or fields.
@@ -579,10 +481,10 @@ static bool isPointerToConst(QualType Ty) {
 /// Note that \p Vec is passed by value, leading to quadratic copying cost,
 /// but it's OK in practice since its length is limited to DEREFERENCE_LIMIT.
 /// \return A chain fields leading to the region of interest or None.
-const Optional<NoStoreFuncVisitor::RegionVector>
-NoStoreFuncVisitor::findRegionOfInterestInRecord(
+const Optional<NoStateChangeRegionFuncVisitor::RegionVector>
+NoStateChangeRegionFuncVisitor::findRegionOfInterestInRecord(
     const RecordDecl *RD, ProgramStateRef State, const MemRegion *R,
-    const NoStoreFuncVisitor::RegionVector &Vec /* = {} */,
+    const NoStateChangeRegionFuncVisitor::RegionVector &Vec /* = {} */,
     int depth /* = 0 */) {
 
   if (depth == DEREFERENCE_LIMIT) // Limit the recursion depth.
@@ -631,67 +533,139 @@ NoStoreFuncVisitor::findRegionOfInterestInRecord(
   return None;
 }
 
-PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
-    PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N) {
-
-  // Region of interest corresponds to an IVar, exiting a method
-  // which could have written into that IVar, but did not.
-  if (const auto *MC = dyn_cast<ObjCMethodCall>(&Call)) {
-    if (const auto *IvarR = dyn_cast<ObjCIvarRegion>(RegionOfInterest)) {
-      const MemRegion *SelfRegion = MC->getReceiverSVal().getAsRegion();
-      if (RegionOfInterest->isSubRegionOf(SelfRegion) &&
-          potentiallyWritesIntoIvar(Call.getRuntimeDefinition().getDecl(),
-                                    IvarR->getDecl()))
-        return maybeEmitNote(R, Call, N, {}, SelfRegion, "self",
+PathDiagnosticPieceRef NoStateChangeRegionFuncVisitor::maybeEmitNoteForObjCSelf(
+    PathSensitiveBugReport &R, const ObjCMethodCall &Call,
+    const ExplodedNode *N) {
+  if (isa<ObjCIvarRegion>(RegionOfInterest)) {
+    const MemRegion *SelfRegion = Call.getReceiverSVal().getAsRegion();
+    if (RegionOfInterest->isSubRegionOf(SelfRegion))
+      return emitNote(R, Call, N, {}, SelfRegion, "self",
                              /*FirstIsReferenceType=*/false, 1);
-    }
   }
+  return nullptr;
+}
 
-  if (const auto *CCall = dyn_cast<CXXConstructorCall>(&Call)) {
-    const MemRegion *ThisR = CCall->getCXXThisVal().getAsRegion();
-    if (RegionOfInterest->isSubRegionOf(ThisR) &&
-        !CCall->getDecl()->isImplicit())
-      return maybeEmitNote(R, Call, N, {}, ThisR, "this",
+PathDiagnosticPieceRef NoStateChangeRegionFuncVisitor::maybeEmitNoteForCXXThis(
+    PathSensitiveBugReport &R, const CXXConstructorCall &Call,
+    const ExplodedNode *N) {
+  const MemRegion *ThisR = Call.getCXXThisVal().getAsRegion();
+  if (RegionOfInterest->isSubRegionOf(ThisR) && !Call.getDecl()->isImplicit())
+    return emitNote(R, Call, N, {}, ThisR, "this",
                            /*FirstIsReferenceType=*/false, 1);
+  return nullptr;
+}
 
-    // Do not generate diagnostics for not modified parameters in
-    // constructors.
-    return nullptr;
-  }
+/// \return whether \p Ty points to a const type, or is a const reference.
+static bool isPointerToConst(QualType Ty) {
+  return !Ty->getPointeeType().isNull() &&
+         Ty->getPointeeType().getCanonicalType().isConstQualified();
+}
 
-  ArrayRef<ParmVarDecl *> parameters = getCallParameters(Call);
-  for (unsigned I = 0; I < Call.getNumArgs() && I < parameters.size(); ++I) {
-    const ParmVarDecl *PVD = parameters[I];
-    SVal V = Call.getArgSVal(I);
-    bool ParamIsReferenceType = PVD->getType()->isReferenceType();
-    std::string ParamName = PVD->getNameAsString();
+PathDiagnosticPieceRef
+NoStateChangeRegionFuncVisitor::maybeEmitNoteForParameter(
+    PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
+    ArrayRef<ParmVarDecl *> Parameters, unsigned ParamIdx) {
+  const ParmVarDecl *PVD = Parameters[ParamIdx];
+  SVal V = Call.getArgSVal(ParamIdx);
+  bool ParamIsReferenceType = PVD->getType()->isReferenceType();
+  std::string ParamName = PVD->getNameAsString();
 
-    unsigned IndirectionLevel = 1;
-    QualType T = PVD->getType();
-    while (const MemRegion *MR = V.getAsRegion()) {
-      if (RegionOfInterest->isSubRegionOf(MR) && !isPointerToConst(T))
-        return maybeEmitNote(R, Call, N, {}, MR, ParamName,
+  unsigned IndirectionLevel = 1;
+  QualType T = PVD->getType();
+  while (const MemRegion *MR = V.getAsRegion()) {
+    if (RegionOfInterest->isSubRegionOf(MR) && !isPointerToConst(T))
+      return emitNote(R, Call, N, {}, MR, ParamName,
                              ParamIsReferenceType, IndirectionLevel);
 
-      QualType PT = T->getPointeeType();
-      if (PT.isNull() || PT->isVoidType())
-        break;
+    QualType PT = T->getPointeeType();
+    if (PT.isNull() || PT->isVoidType())
+      break;
 
-      ProgramStateRef State = N->getState();
+    ProgramStateRef State = N->getState();
 
-      if (const RecordDecl *RD = PT->getAsRecordDecl())
-        if (Optional<RegionVector> P =
-                findRegionOfInterestInRecord(RD, State, MR))
-          return maybeEmitNote(R, Call, N, *P, RegionOfInterest, ParamName,
+    if (const RecordDecl *RD = PT->getAsRecordDecl())
+      if (Optional<RegionVector> P =
+              findRegionOfInterestInRecord(RD, State, MR))
+        return emitNote(R, Call, N, *P, RegionOfInterest, ParamName,
                                ParamIsReferenceType, IndirectionLevel);
+    V = State->getSVal(MR, PT);
+    T = PT;
+    IndirectionLevel++;
+  }
+  return nullptr;
+}
 
-      V = State->getSVal(MR, PT);
-      T = PT;
-      IndirectionLevel++;
-    }
+//===----------------------------------------------------------------------===//
+// Implementation of NoStoreFuncVisitor.
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Put a diagnostic on return statement of all inlined functions
+/// for which  the region of interest \p RegionOfInterest was passed into,
+/// but not written inside, and it has caused an undefined read or a null
+/// pointer dereference outside.
+class NoStoreFuncVisitor final : public NoStateChangeRegionFuncVisitor {
+public:
+  NoStoreFuncVisitor(const SubRegion *R, bugreporter::TrackingKind TKind)
+      : NoStateChangeRegionFuncVisitor(R, TKind) {}
+
+  void Profile(llvm::FoldingSetNodeID &ID) const override {
+    static int Tag = 0;
+    ID.AddPointer(&Tag);
+    ID.AddPointer(RegionOfInterest);
   }
 
-  return nullptr;
+  void *getTag() const {
+    static int Tag = 0;
+    return static_cast<void *>(&Tag);
+  }
+
+private:
+  /// \return Whether \c RegionOfInterest was modified at \p CurrN compared to
+  /// the value it holds in \p CallExitN.
+  virtual bool
+  wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
+                            const ExplodedNode *CallExitN) override;
+
+  virtual PathDiagnosticPieceRef
+  emitNote(PathSensitiveBugReport &R, const CallEvent &Call,
+           const ExplodedNode *N, const RegionVector &FieldChain,
+           const MemRegion *MatchedRegion, StringRef FirstElement,
+           bool FirstIsReferenceType, unsigned IndirectionLevel) override;
+};
+} // namespace
+
+/// \return Whether the method declaration \p Parent
+/// syntactically has a binary operation writing into the ivar \p Ivar.
+static bool potentiallyWritesIntoIvar(const Decl *Parent,
+                                      const ObjCIvarDecl *Ivar) {
+  using namespace ast_matchers;
+  const char *IvarBind = "Ivar";
+  if (!Parent || !Parent->hasBody())
+    return false;
+  StatementMatcher WriteIntoIvarM = binaryOperator(
+      hasOperatorName("="),
+      hasLHS(ignoringParenImpCasts(
+          objcIvarRefExpr(hasDeclaration(equalsNode(Ivar))).bind(IvarBind))));
+  StatementMatcher ParentM = stmt(hasDescendant(WriteIntoIvarM));
+  auto Matches = match(ParentM, *Parent->getBody(), Parent->getASTContext());
+  for (BoundNodes &Match : Matches) {
+    auto IvarRef = Match.getNodeAs<ObjCIvarRefExpr>(IvarBind);
+    if (IvarRef->isFreeIvar())
+      return true;
+
+    const Expr *Base = IvarRef->getBase();
+    if (const auto *ICE = dyn_cast<ImplicitCastExpr>(Base))
+      Base = ICE->getSubExpr();
+
+    if (const auto *DRE = dyn_cast<DeclRefExpr>(Base))
+      if (const auto *ID = dyn_cast<ImplicitParamDecl>(DRE->getDecl()))
+        if (ID->getParameterKind() == ImplicitParamDecl::ObjCSelf)
+          return true;
+
+    return false;
+  }
+  return false;
 }
 
 bool NoStoreFuncVisitor::wasModifiedBeforeCallExit(
@@ -704,11 +678,23 @@ bool NoStoreFuncVisitor::wasModifiedBeforeCallExit(
 static llvm::StringLiteral WillBeUsedForACondition =
     ", which participates in a condition later";
 
-PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
+PathDiagnosticPieceRef NoStoreFuncVisitor::emitNote(
     PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
     const RegionVector &FieldChain, const MemRegion *MatchedRegion,
     StringRef FirstElement, bool FirstIsReferenceType,
     unsigned IndirectionLevel) {
+
+  // Method calls that are not even able to write into the region of interest
+  // (if it is, or at least a subregion of 'self') should be ignored.
+  if (const auto *IvarR = dyn_cast<ObjCIvarRegion>(RegionOfInterest)) {
+    if (const ObjCMethodCall *MC = dyn_cast<ObjCMethodCall>(&Call)) {
+      const MemRegion *SelfRegion = MC->getReceiverSVal().getAsRegion();
+      if (!RegionOfInterest->isSubRegionOf(SelfRegion) &&
+          potentiallyWritesIntoIvar(MC->getRuntimeDefinition().getDecl(),
+                                    IvarR->getDecl()))
+        return nullptr;
+    }
+  }
 
   PathDiagnosticLocation L =
       PathDiagnosticLocation::create(N->getLocation(), SM);
@@ -734,7 +720,7 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
   return std::make_shared<PathDiagnosticEventPiece>(L, os.str());
 }
 
-bool NoStoreFuncVisitor::prettyPrintRegionName(const RegionVector &FieldChain,
+bool NoStateChangeRegionFuncVisitor::prettyPrintRegionName(const RegionVector &FieldChain,
                                                const MemRegion *MatchedRegion,
                                                StringRef FirstElement,
                                                bool FirstIsReferenceType,
@@ -786,7 +772,7 @@ bool NoStoreFuncVisitor::prettyPrintRegionName(const RegionVector &FieldChain,
   return true;
 }
 
-StringRef NoStoreFuncVisitor::prettyPrintFirstElement(
+StringRef NoStateChangeRegionFuncVisitor::prettyPrintFirstElement(
     StringRef FirstElement, bool MoreItemsExpected, int IndirectionLevel,
     llvm::raw_svector_ostream &os) {
   StringRef Out = ".";
