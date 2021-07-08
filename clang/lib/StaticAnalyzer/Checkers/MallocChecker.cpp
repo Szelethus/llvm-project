@@ -726,10 +726,10 @@ private:
 };
 
 //===----------------------------------------------------------------------===//
-// Definition of NoOwnershipChangeBugVisitor.
+// Definition of NoOwnershipChangeVisitor.
 //===----------------------------------------------------------------------===//
 
-class NoOwnershipChangeBugVisitor final : public NoStateChangeFuncVisitor {
+class NoOwnershipChangeVisitor final : public NoStateChangeFuncVisitor {
   SymbolRef Sym;
   using OwnerSet = llvm::SmallPtrSet<const MemRegion *, 8>;
 
@@ -819,7 +819,7 @@ protected:
   }
 
 public:
-  NoOwnershipChangeBugVisitor(SymbolRef Sym)
+  NoOwnershipChangeVisitor(SymbolRef Sym)
       : NoStateChangeFuncVisitor(bugreporter::TrackingKind::Thorough),
         Sym(Sym) {}
 
@@ -2691,7 +2691,7 @@ void MallocChecker::HandleLeak(SymbolRef Sym, ExplodedNode *N,
       AllocNode->getLocationContext()->getDecl());
   R->markInteresting(Sym);
   R->addVisitor<MallocBugVisitor>(Sym, true);
-  R->addVisitor<NoOwnershipChangeBugVisitor>(Sym);
+  R->addVisitor<NoOwnershipChangeVisitor>(Sym);
   C.emitReport(std::move(R));
 }
 

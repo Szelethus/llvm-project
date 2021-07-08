@@ -1,18 +1,37 @@
 // RUN: %clang_analyze_cc1 -analyzer-checker=core,cplusplus,unix -verify -analyzer-output=text %s
-int *ptr;
+
+#include "Inputs/system-header-simulator-for-malloc.h"
+
+//===----------------------------------------------------------------------===//
+// Report for which NoOwnershipChangeBugVisitor added a new note. 
+//===----------------------------------------------------------------------===//
 
 void sink(int *P) {
 } // expected-note {{Returning without changing the ownership status of allocated memory}}
 
-void f() {
+void memoryAllocatedInFnCall() {
   sink(new int(5)); // expected-note {{Memory is allocated}}
                     // expected-note@-1 {{Calling 'sink'}}
                     // expected-note@-2 {{Returning from 'sink'}}
 } // expected-warning {{Potential memory leak [cplusplus.NewDeleteLeaks]}}
   // expected-note@-1 {{Potential memory leak}}
 
-typedef __typeof(sizeof(int)) size_t;
-void *malloc(size_t);
+//===----------------------------------------------------------------------===//
+// Report for which NoOwnershipChangeBugVisitor *did not* add a new note, nor
+// do we want it to.
+//===----------------------------------------------------------------------===//
+
+void sink2(int *P) {
+} // expected-note {{Returning without changing the ownership status of allocated memory}}
+
+void allocatedMemoryWasntPassed() {
+  int *ptr = new int(5); // expected-note {{Memory is allocated}}
+  int *q = nullptr;
+  sink2(q);// expected-note {{Calling 'sink2'}}
+           // expected-note@-1 {{Returning from 'sink2'}}
+  (void)ptr;
+} // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
+  // expected-note@-1 {{Potential leak}}
 
 // RefKind of the symbol changed from nothing to Allocated. We don't want to
 // emit notes when the RefKind changes in the stack frame.
