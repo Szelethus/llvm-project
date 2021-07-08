@@ -6,44 +6,58 @@
 // Report for which we expect NoOwnershipChangeVisitor to a new note.
 //===----------------------------------------------------------------------===//
 
+namespace memory_allocated_in_fn_call {
+
 void sink(int *P) {
 } // expected-note {{Returning without changing the ownership status of allocated memory}}
 
-void memoryAllocatedInFnCall() {
+void foo() {
   sink(new int(5)); // expected-note {{Memory is allocated}}
                     // expected-note@-1 {{Calling 'sink'}}
                     // expected-note@-2 {{Returning from 'sink'}}
 } // expected-warning {{Potential memory leak [cplusplus.NewDeleteLeaks]}}
 // expected-note@-1 {{Potential memory leak}}
 
-void sink3(int *P) {
+} // namespace memory_allocated_in_fn_call
+
+namespace memory_passed_to_fn_call {
+
+void sink(int *P) {
 } // expected-note {{Returning without changing the ownership status of allocated memory}}
 
 void memoryPassedToFnCall() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
-  sink3(ptr);             // expected-note {{Calling 'sink3'}}
-                         // expected-note@-1 {{Returning from 'sink3'}}
+  sink(ptr);             // expected-note {{Calling 'sink'}}
+                         // expected-note@-1 {{Returning from 'sink'}}
 } // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
 // expected-note@-1 {{Potential leak}}
+
+} // namespace memory_passed_to_fn_call
 
 //===----------------------------------------------------------------------===//
 // Report for which we *do not* expect NoOwnershipChangeVisitor add a new note,
 // nor do we want it to.
 //===----------------------------------------------------------------------===//
 
+namespace memory_not_passed_to_fn_call {
+
 // TODO: We don't want a note here. We need to check whether the allocated
 // memory was actually passed into the function.
-void sink2(int *P) {
+void sink(int *P) {
 } // expected-note {{Returning without changing the ownership status of allocated memory}}
 
 void allocatedMemoryWasntPassed() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
   int *q = nullptr;
-  sink2(q); // expected-note {{Calling 'sink2'}}
-            // expected-note@-1 {{Returning from 'sink2'}}
+  sink(q); // expected-note {{Calling 'sink'}}
+            // expected-note@-1 {{Returning from 'sink'}}
   (void)ptr;
 } // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
 // expected-note@-1 {{Potential leak}}
+
+} // namespace memory_not_passed_to_fn_call
+
+namespace refkind_from_unoallocated_to_allocated {
 
 // RefKind of the symbol changed from nothing to Allocated. We don't want to
 // emit notes when the RefKind changes in the stack frame.
@@ -56,3 +70,5 @@ void use_ret() {
                             // expected-note@-1 {{Returned allocated memory}}
 } // expected-warning {{Potential leak of memory pointed to by 'v' [unix.Malloc]}}
 // expected-note@-1 {{Potential leak of memory pointed to by 'v'}}
+
+} // namespace refkind_from_unoallocated_to_allocated
