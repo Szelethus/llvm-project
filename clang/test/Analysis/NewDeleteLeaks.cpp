@@ -3,7 +3,7 @@
 #include "Inputs/system-header-simulator-for-malloc.h"
 
 //===----------------------------------------------------------------------===//
-// Report for which NoOwnershipChangeBugVisitor added a new note. 
+// Report for which NoOwnershipChangeVisitor added a new note. 
 //===----------------------------------------------------------------------===//
 
 void sink(int *P) {
@@ -17,10 +17,11 @@ void memoryAllocatedInFnCall() {
   // expected-note@-1 {{Potential memory leak}}
 
 //===----------------------------------------------------------------------===//
-// Report for which NoOwnershipChangeBugVisitor *did not* add a new note, nor
+// Report for which NoOwnershipChangeVisitor *did not* add a new note, nor
 // do we want it to.
 //===----------------------------------------------------------------------===//
 
+// TODO: We don't want a note here.
 void sink2(int *P) {
 } // expected-note {{Returning without changing the ownership status of allocated memory}}
 

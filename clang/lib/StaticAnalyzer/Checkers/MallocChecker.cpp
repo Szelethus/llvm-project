@@ -48,6 +48,7 @@
 #include "InterCheckerAPI.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/DeclCXX.h"
+#include "clang/AST/DeclTemplate.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ParentMap.h"
@@ -724,32 +725,74 @@ private:
   bool isArgZERO_SIZE_PTR(ProgramStateRef State, CheckerContext &C,
                           SVal ArgVal) const;
 };
+} // end anonymous namespace
 
 //===----------------------------------------------------------------------===//
 // Definition of NoOwnershipChangeVisitor.
 //===----------------------------------------------------------------------===//
 
+namespace {
 class NoOwnershipChangeVisitor final : public NoStateChangeFuncVisitor {
   SymbolRef Sym;
   using OwnerSet = llvm::SmallPtrSet<const MemRegion *, 8>;
 
   class OwnershipBindingsHandler : public StoreManager::BindingsHandler {
     SymbolRef Sym;
+    OwnerSet &Owners;
 
   public:
-    OwnerSet Owners;
+    OwnershipBindingsHandler(SymbolRef Sym, OwnerSet &Owners)
+        : Sym(Sym), Owners(Owners) {}
 
-    OwnershipBindingsHandler(SymbolRef Sym) : Sym(Sym) {}
-
-    /// \return whether the iteration should continue.
-    bool HandleBinding(StoreManager &SMgr, Store Store,
-                               const MemRegion *Region, SVal Val) override {
+    bool HandleBinding(StoreManager &SMgr, Store Store, const MemRegion *Region,
+                       SVal Val) override {
       if (Val.getAsSymbol() == Sym)
         Owners.insert(Region);
       return true;
     }
   };
+
 protected:
+  OwnerSet getOwnersAtNode(const ExplodedNode *N) {
+    OwnerSet Ret;
+
+    ProgramStateRef ExitState = N->getState();
+    OwnershipBindingsHandler ExitHandler{Sym, Ret};
+    ExitState->getStateManager().getStoreManager().iterBindings(
+        ExitState->getStore(), ExitHandler);
+
+    return Ret;
+  }
+
+  virtual bool
+  wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
+                            const ExplodedNode *CallExitN) override {
+    if (CurrN->getLocationAs<CallEnter>())
+      return true;
+
+    if (CurrN->getState()->get<RegionState>(Sym) !=
+        CallExitN->getState()->get<RegionState>(Sym))
+      return true;
+
+    OwnerSet CurrOwners = getOwnersAtNode(CurrN);
+    OwnerSet ExitOwners = getOwnersAtNode(CallExitN);
+
+    if (CurrOwners.size() != ExitOwners.size())
+      return true;
+
+    return !std::equal(CurrOwners.begin(), CurrOwners.end(),
+                       ExitOwners.begin());
+  }
+
+  static PathDiagnosticPieceRef emitNote(const ExplodedNode *N) {
+    PathDiagnosticLocation L = PathDiagnosticLocation::create(
+        N->getLocation(),
+        N->getState()->getStateManager().getContext().getSourceManager());
+    return std::make_shared<PathDiagnosticEventPiece>(
+        L, "Returning without changing the ownership status of allocated "
+           "memory");
+  }
+
   virtual PathDiagnosticPieceRef
   maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
                            const ObjCMethodCall &Call,
@@ -764,56 +807,8 @@ protected:
     return nullptr;
   }
 
-  virtual bool wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
-                                             const ExplodedNode *CallExitN) override {
-    if (CurrN->getLocationAs<CallEnter>())
-      return true;
-
-    if (CurrN->getState()->get<RegionState>(Sym) !=
-        CallExitN->getState()->get<RegionState>(Sym))
-      return true;
-    //CurrN->getStackFrame()->dump();
-
-    ProgramStateRef ExitState = CallExitN->getState();
-    OwnershipBindingsHandler ExitHandler{Sym};
-    ExitState->getStateManager().getStoreManager().iterBindings(
-        ExitState->getStore(), ExitHandler);
-
-    //llvm::errs() << "Exit node owners:\n";
-    //for (const MemRegion *R : ExitHandler.Owners) {
-    //  R->dump();
-    //  llvm::errs() << '\n';
-    //}
-    ProgramStateRef CurrState = CurrN->getState();
-    OwnershipBindingsHandler CurrHandler{Sym};
-    CurrState->getStateManager().getStoreManager().iterBindings(
-        CurrState->getStore(), CurrHandler);
-    //llvm::errs() << "Entry node owners:\n";
-    //for (const MemRegion *R : CurrHandler.Owners) {
-    //  R->dump();
-    //  llvm::errs() << '\n';
-    //}
-    if (ExitHandler.Owners.size() != CurrHandler.Owners.size())
-      return true;
-    return !std::equal(ExitHandler.Owners.begin(), ExitHandler.Owners.end(),
-                      CurrHandler.Owners.begin());
-  }
-
-  static PathDiagnosticPieceRef emitNote(const ExplodedNode *N) {
-    PathDiagnosticLocation L = PathDiagnosticLocation::create(
-        N->getLocation(),
-        N->getState()->getStateManager().getContext().getSourceManager());
-    return std::make_shared<PathDiagnosticEventPiece>(
-        L, "Returning without changing the ownership status of allocated "
-           "memory");
-  }
-
-  /// Consume the information on the no-store stack frame in order to
-  /// either emit a note or suppress the report enirely.
-  /// \return Diagnostics piece for region not modified in the current function,
-  /// if it decides to emit one.
   virtual PathDiagnosticPieceRef
-  maybeEmitNoteForParameters(PathSensitiveBugReport &R, const CallEvent &Call,
+  maybeEmitNoteForParameter(PathSensitiveBugReport &R, const CallEvent &Call,
                             const ExplodedNode *N) override {
     return emitNote(N);
   }
@@ -827,18 +822,21 @@ public:
     static int Tag = 0;
     ID.AddPointer(&Tag);
     ID.AddPointer(Sym);
-    }
+  }
 
-    void *getTag() const {
-      static int Tag = 0;
-      return static_cast<void *>(&Tag);
-    }
-  };
+  void *getTag() const {
+    static int Tag = 0;
+    return static_cast<void *>(&Tag);
+  }
+};
+
+} // end anonymous namespace
 
 //===----------------------------------------------------------------------===//
 // Definition of MallocBugVisitor.
 //===----------------------------------------------------------------------===//
 
+namespace {
 /// The bug visitor which allows us to print extra diagnostics along the
 /// BugReport path. For example, showing the allocation site of the leaked
 /// region.
@@ -963,7 +961,6 @@ private:
     }
   };
 };
-
 } // end anonymous namespace
 
 // A map from the freed symbol to the symbol representing the return value of
