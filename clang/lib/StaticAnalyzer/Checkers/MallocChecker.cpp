@@ -797,6 +797,7 @@ protected:
   maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
                            const ObjCMethodCall &Call,
                            const ExplodedNode *N) override {
+    // TODO: Implement.
     return nullptr;
   }
 
@@ -804,12 +805,15 @@ protected:
   maybeEmitNoteForCXXThis(PathSensitiveBugReport &R,
                           const CXXConstructorCall &Call,
                           const ExplodedNode *N) override {
+    // TODO: Implement.
     return nullptr;
   }
 
   virtual PathDiagnosticPieceRef
-  maybeEmitNoteForParameter(PathSensitiveBugReport &R, const CallEvent &Call,
+  maybeEmitNoteForParameters(PathSensitiveBugReport &R, const CallEvent &Call,
                             const ExplodedNode *N) override {
+    // TODO: Check whether the allocated memory was actually passed into the
+    // function.
     return emitNote(N);
   }
 

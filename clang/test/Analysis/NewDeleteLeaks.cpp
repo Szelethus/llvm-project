@@ -3,7 +3,7 @@
 #include "Inputs/system-header-simulator-for-malloc.h"
 
 //===----------------------------------------------------------------------===//
-// Report for which NoOwnershipChangeVisitor added a new note.
+// Report for which we expect NoOwnershipChangeVisitor to a new note.
 //===----------------------------------------------------------------------===//
 
 void sink(int *P) {
@@ -16,12 +16,23 @@ void memoryAllocatedInFnCall() {
 } // expected-warning {{Potential memory leak [cplusplus.NewDeleteLeaks]}}
 // expected-note@-1 {{Potential memory leak}}
 
+void sink3(int *P) {
+} // expected-note {{Returning without changing the ownership status of allocated memory}}
+
+void memoryPassedToFnCall() {
+  int *ptr = new int(5); // expected-note {{Memory is allocated}}
+  sink3(ptr);             // expected-note {{Calling 'sink3'}}
+                         // expected-note@-1 {{Returning from 'sink3'}}
+} // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
+// expected-note@-1 {{Potential leak}}
+
 //===----------------------------------------------------------------------===//
-// Report for which NoOwnershipChangeVisitor *did not* add a new note, nor
-// do we want it to.
+// Report for which we *do not* expect NoOwnershipChangeVisitor add a new note,
+// nor do we want it to.
 //===----------------------------------------------------------------------===//
 
-// TODO: We don't want a note here.
+// TODO: We don't want a note here. We need to check whether the allocated
+// memory was actually passed into the function.
 void sink2(int *P) {
 } // expected-note {{Returning without changing the ownership status of allocated memory}}
 
