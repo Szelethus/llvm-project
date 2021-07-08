@@ -623,6 +623,9 @@ public:
                                    PathSensitiveBugReport &R) override;
 };
 
+class ObjCMethodCall;
+class CXXConstructorCall;
+
 /// Put a diagnostic on return statement of all inlined functions for which some
 /// property remained unchanged.
 /// Resulting diagnostics may read such as "Returning without writing to X".
@@ -665,9 +668,19 @@ protected:
   /// \return Diagnostics piece for the unmodified state in the current
   /// function, if it decides to emit one. A good description might start with
   /// "Returning without...".
-  virtual PathDiagnosticPieceRef maybeEmitNote(PathSensitiveBugReport &R,
-                                               const CallEvent &Call,
-                                               const ExplodedNode *N) = 0;
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
+                           const ObjCMethodCall &Call,
+                           const ExplodedNode *N) = 0;
+
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForCXXThis(PathSensitiveBugReport &R,
+                          const CXXConstructorCall &Call,
+                          const ExplodedNode *N) = 0;
+
+  virtual PathDiagnosticPieceRef maybeEmitNoteForParameter(
+      PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
+      ArrayRef<ParmVarDecl *> Parameters, unsigned ParamIdx) = 0;
 
 public:
   NoStateChangeFuncVisitor(bugreporter::TrackingKind TKind) : TKind(TKind) {}

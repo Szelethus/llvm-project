@@ -394,6 +394,19 @@ void NoStateChangeFuncVisitor::findModifyingFrames(
   } while (CurrN);
 }
 
+/// Get parameters associated with runtime definition in order
+/// to get the correct parameter name.
+static ArrayRef<ParmVarDecl *> getCallParameters(const CallEvent &Call) {
+  // Use runtime definition, if available.
+  RuntimeDefinition RD = Call.getRuntimeDefinition();
+  if (const auto *FD = dyn_cast_or_null<FunctionDecl>(RD.getDecl()))
+    return FD->parameters();
+  if (const auto *MD = dyn_cast_or_null<ObjCMethodDecl>(RD.getDecl()))
+    return MD->parameters();
+
+  return Call.parameters();
+}
+
 PathDiagnosticPieceRef NoStateChangeFuncVisitor::VisitNode(
     const ExplodedNode *N, BugReporterContext &BR, PathSensitiveBugReport &R) {
 
@@ -433,7 +446,29 @@ PathDiagnosticPieceRef NoStateChangeFuncVisitor::VisitNode(
     return nullptr;
   }
 
-  return maybeEmitNote(R, *Call, N);
+  if (const auto *MC = dyn_cast<ObjCMethodCall>(Call)) {
+    // If we failed to construct a piece for self, we still want to check
+    // whether the entity of interest is in a parameter.
+    if (PathDiagnosticPieceRef Piece = maybeEmitNoteForObjCSelf(R, *MC, N))
+      return Piece;
+  }
+
+  if (const auto *CCall = dyn_cast<CXXConstructorCall>(Call)) {
+    // Do not generate diagnostics for not modified parameters in
+    // constructors.
+    return maybeEmitNoteForCXXThis(R, *CCall, N);
+  }
+
+  ArrayRef<ParmVarDecl *> parameters = getCallParameters(*Call);
+  for (unsigned ParamIdx = 0;
+       ParamIdx < Call->getNumArgs() && ParamIdx < parameters.size();
+       ++ParamIdx) {
+    if (PathDiagnosticPieceRef Piece =
+            maybeEmitNoteForParameter(R, *Call, N, parameters, ParamIdx))
+      return Piece;
+  }
+
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
@@ -494,9 +529,21 @@ private:
                                const MemRegion *R, const RegionVector &Vec = {},
                                int depth = 0);
 
-  virtual PathDiagnosticPieceRef maybeEmitNote(PathSensitiveBugReport &R,
-                                               const CallEvent &Call,
-                                               const ExplodedNode *N) override;
+  // Region of interest corresponds to an IVar, exiting a method
+  // which could have written into that IVar, but did not.
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
+                           const ObjCMethodCall &Call,
+                           const ExplodedNode *N) override final;
+
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForCXXThis(PathSensitiveBugReport &R,
+                          const CXXConstructorCall &Call,
+                          const ExplodedNode *N) override final;
+
+  virtual PathDiagnosticPieceRef maybeEmitNoteForParameter(
+      PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
+      ArrayRef<ParmVarDecl *> Parameters, unsigned ParamIdx) override final;
 
   /// Consume the information on the no-store stack frame in order to
   /// either emit a note or suppress the report enirely.
@@ -552,25 +599,6 @@ static bool potentiallyWritesIntoIvar(const Decl *Parent,
     return false;
   }
   return false;
-}
-
-/// Get parameters associated with runtime definition in order
-/// to get the correct parameter name.
-static ArrayRef<ParmVarDecl *> getCallParameters(const CallEvent &Call) {
-  // Use runtime definition, if available.
-  RuntimeDefinition RD = Call.getRuntimeDefinition();
-  if (const auto *FD = dyn_cast_or_null<FunctionDecl>(RD.getDecl()))
-    return FD->parameters();
-  if (const auto *MD = dyn_cast_or_null<ObjCMethodDecl>(RD.getDecl()))
-    return MD->parameters();
-
-  return Call.parameters();
-}
-
-/// \return whether \p Ty points to a const type, or is a const reference.
-static bool isPointerToConst(QualType Ty) {
-  return !Ty->getPointeeType().isNull() &&
-         Ty->getPointeeType().getCanonicalType().isConstQualified();
 }
 
 /// Attempts to find the region of interest in a given CXX decl,
@@ -631,37 +659,46 @@ NoStoreFuncVisitor::findRegionOfInterestInRecord(
   return None;
 }
 
-PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
-    PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N) {
-
-  // Region of interest corresponds to an IVar, exiting a method
-  // which could have written into that IVar, but did not.
-  if (const auto *MC = dyn_cast<ObjCMethodCall>(&Call)) {
-    if (const auto *IvarR = dyn_cast<ObjCIvarRegion>(RegionOfInterest)) {
-      const MemRegion *SelfRegion = MC->getReceiverSVal().getAsRegion();
-      if (RegionOfInterest->isSubRegionOf(SelfRegion) &&
-          potentiallyWritesIntoIvar(Call.getRuntimeDefinition().getDecl(),
-                                    IvarR->getDecl()))
-        return maybeEmitNote(R, Call, N, {}, SelfRegion, "self",
-                             /*FirstIsReferenceType=*/false, 1);
-    }
-  }
-
-  if (const auto *CCall = dyn_cast<CXXConstructorCall>(&Call)) {
-    const MemRegion *ThisR = CCall->getCXXThisVal().getAsRegion();
-    if (RegionOfInterest->isSubRegionOf(ThisR) &&
-        !CCall->getDecl()->isImplicit())
-      return maybeEmitNote(R, Call, N, {}, ThisR, "this",
+PathDiagnosticPieceRef
+NoStoreFuncVisitor::maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
+                                             const ObjCMethodCall &Call,
+                                             const ExplodedNode *N) {
+  if (const auto *IvarR = dyn_cast<ObjCIvarRegion>(RegionOfInterest)) {
+    const MemRegion *SelfRegion = Call.getReceiverSVal().getAsRegion();
+    if (RegionOfInterest->isSubRegionOf(SelfRegion) &&
+        potentiallyWritesIntoIvar(Call.getRuntimeDefinition().getDecl(),
+                                  IvarR->getDecl()))
+      return maybeEmitNote(R, Call, N, {}, SelfRegion, "self",
                            /*FirstIsReferenceType=*/false, 1);
-
-    // Do not generate diagnostics for not modified parameters in
-    // constructors.
-    return nullptr;
   }
+  return nullptr;
+}
 
-  ArrayRef<ParmVarDecl *> parameters = getCallParameters(Call);
-  for (unsigned I = 0; I < Call.getNumArgs() && I < parameters.size(); ++I) {
-    const ParmVarDecl *PVD = parameters[I];
+PathDiagnosticPieceRef
+NoStoreFuncVisitor::maybeEmitNoteForCXXThis(PathSensitiveBugReport &R,
+                                            const CXXConstructorCall &Call,
+                                            const ExplodedNode *N) {
+  const MemRegion *ThisR = Call.getCXXThisVal().getAsRegion();
+  if (RegionOfInterest->isSubRegionOf(ThisR) && !Call.getDecl()->isImplicit())
+    return maybeEmitNote(R, Call, N, {}, ThisR, "this",
+                         /*FirstIsReferenceType=*/false, 1);
+
+  // Do not generate diagnostics for not modified parameters in
+  // constructors.
+  return nullptr;
+}
+
+/// \return whether \p Ty points to a const type, or is a const reference.
+static bool isPointerToConst(QualType Ty) {
+  return !Ty->getPointeeType().isNull() &&
+         Ty->getPointeeType().getCanonicalType().isConstQualified();
+}
+
+PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameter(
+    PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
+    ArrayRef<ParmVarDecl *> Parameters, unsigned ParamIdx) {
+  for (unsigned I = 0; I < Call.getNumArgs() && I < Parameters.size(); ++I) {
+    const ParmVarDecl *PVD = Parameters[I];
     SVal V = Call.getArgSVal(I);
     bool ParamIsReferenceType = PVD->getType()->isReferenceType();
     std::string ParamName = PVD->getNameAsString();
