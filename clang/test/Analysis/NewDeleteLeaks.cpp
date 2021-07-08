@@ -3,7 +3,7 @@
 #include "Inputs/system-header-simulator-for-malloc.h"
 
 //===----------------------------------------------------------------------===//
-// Report for which NoOwnershipChangeVisitor added a new note. 
+// Report for which NoOwnershipChangeVisitor added a new note.
 //===----------------------------------------------------------------------===//
 
 void sink(int *P) {
@@ -14,7 +14,7 @@ void memoryAllocatedInFnCall() {
                     // expected-note@-1 {{Calling 'sink'}}
                     // expected-note@-2 {{Returning from 'sink'}}
 } // expected-warning {{Potential memory leak [cplusplus.NewDeleteLeaks]}}
-  // expected-note@-1 {{Potential memory leak}}
+// expected-note@-1 {{Potential memory leak}}
 
 //===----------------------------------------------------------------------===//
 // Report for which NoOwnershipChangeVisitor *did not* add a new note, nor
@@ -28,20 +28,20 @@ void sink2(int *P) {
 void allocatedMemoryWasntPassed() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
   int *q = nullptr;
-  sink2(q);// expected-note {{Calling 'sink2'}}
-           // expected-note@-1 {{Returning from 'sink2'}}
+  sink2(q); // expected-note {{Calling 'sink2'}}
+            // expected-note@-1 {{Returning from 'sink2'}}
   (void)ptr;
 } // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
-  // expected-note@-1 {{Potential leak}}
+// expected-note@-1 {{Potential leak}}
 
 // RefKind of the symbol changed from nothing to Allocated. We don't want to
 // emit notes when the RefKind changes in the stack frame.
 static char *malloc_wrapper_ret() {
-    return (char*)malloc(12); // expected-note {{Memory is allocated}}
+  return (char *)malloc(12); // expected-note {{Memory is allocated}}
 }
 void use_ret() {
-    char *v;
-    v = malloc_wrapper_ret(); // expected-note {{Calling 'malloc_wrapper_ret'}}
-                              // expected-note@-1 {{Returned allocated memory}}
+  char *v;
+  v = malloc_wrapper_ret(); // expected-note {{Calling 'malloc_wrapper_ret'}}
+                            // expected-note@-1 {{Returned allocated memory}}
 } // expected-warning {{Potential leak of memory pointed to by 'v' [unix.Malloc]}}
-  // expected-note@-1 {{Potential leak of memory pointed to by 'v'}}
+// expected-note@-1 {{Potential leak of memory pointed to by 'v'}}

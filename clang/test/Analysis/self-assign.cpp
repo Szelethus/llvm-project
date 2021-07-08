@@ -33,7 +33,7 @@ StringUsed::~StringUsed() {
   free(str);
 }
 
-StringUsed& StringUsed::operator=(const StringUsed &rhs) {
+StringUsed &StringUsed::operator=(const StringUsed &rhs) {
   // expected-note@-1{{Assuming rhs == *this}}
   // expected-note@-2{{Assuming rhs == *this}}
   // expected-note@-3{{Assuming rhs != *this}}
@@ -48,7 +48,7 @@ StringUsed& StringUsed::operator=(const StringUsed &rhs) {
   return *this;
 }
 
-StringUsed& StringUsed::operator=(StringUsed &&rhs) {
+StringUsed &StringUsed::operator=(StringUsed &&rhs) {
   // expected-note@-1{{Assuming rhs == *this}}
   // expected-note@-2{{Assuming rhs != *this}}
   clang_analyzer_eval(*this == rhs); // expected-warning{{TRUE}}
@@ -81,7 +81,7 @@ StringUnused::~StringUnused() {
   free(str);
 }
 
-StringUnused& StringUnused::operator=(const StringUnused &rhs) {
+StringUnused &StringUnused::operator=(const StringUnused &rhs) {
   // expected-note@-1{{Assuming rhs == *this}}
   // expected-note@-2{{Assuming rhs == *this}}
   // expected-note@-3{{Assuming rhs != *this}}
@@ -95,7 +95,7 @@ StringUnused& StringUnused::operator=(const StringUnused &rhs) {
   return *this;
 }
 
-StringUnused& StringUnused::operator=(StringUnused &&rhs) {
+StringUnused &StringUnused::operator=(StringUnused &&rhs) {
   // expected-note@-1{{Assuming rhs == *this}}
   // expected-note@-2{{Assuming rhs != *this}}
   clang_analyzer_eval(*this == rhs); // expected-warning{{TRUE}}
@@ -114,8 +114,8 @@ StringUnused::operator const char*() const {
 
 int main() {
   StringUsed s1 ("test"), s2;
-  s2 = s1; // expected-note{{Calling copy assignment operator for 'StringUsed'}}
-           // expected-note@-1{{Returned allocated memory}}
+  s2 = s1;            // expected-note{{Calling copy assignment operator for 'StringUsed'}}
+                      // expected-note@-1{{Returned allocated memory}}
   s2 = std::move(s1); // expected-note{{Calling move assignment operator for 'StringUsed'}}
   return 0;
 }
