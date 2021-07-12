@@ -65,6 +65,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerHelpers.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicExtent.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/ExplodedGraph.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState_Fwd.h"
@@ -769,17 +770,37 @@ protected:
     return Ret;
   }
 
+  static const ExplodedNode *getCallExitEnd(const ExplodedNode *N) {
+    while (N && !N->getLocationAs<CallExitEnd>())
+      N = N->getFirstSucc();
+    return N;
+  }
+
   virtual bool
   wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
                             const ExplodedNode *CallExitN) override {
     if (CurrN->getLocationAs<CallEnter>())
       return true;
 
+    // Its the state right *after* the call that is interesting. Any pointers
+    // inside the call that pointed to the allocated memory was of little
+    // consequence if their lifetime ends before within the function.
+    CallExitN = getCallExitEnd(CallExitN);
+    if (!CallExitN)
+      return true;
+
+    llvm::errs() << "==============\n";
+
+    CallExitN->getFirstPred()->getState()->dump();
+    llvm::errs() << '\n';
+    CallExitN->getState()->dump();
     if (CurrN->getState()->get<RegionState>(Sym) !=
         CallExitN->getState()->get<RegionState>(Sym))
       return true;
 
+    llvm::errs() << "Current:\n";
     OwnerSet CurrOwners = getOwnersAtNode(CurrN);
+    llvm::errs() << "Call exit:\n";
     OwnerSet ExitOwners = getOwnersAtNode(CallExitN);
 
     if (CurrOwners.size() != ExitOwners.size())
