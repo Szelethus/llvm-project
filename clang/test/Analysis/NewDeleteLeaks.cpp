@@ -3,8 +3,10 @@
 #include "Inputs/system-header-simulator-for-malloc.h"
 
 //===----------------------------------------------------------------------===//
-// Report for which we expect NoOwnershipChangeVisitor to a new note.
+// Report for which we expect NoOwnershipChangeVisitor to add a new note.
 //===----------------------------------------------------------------------===//
+
+bool coin();
 
 namespace memory_allocated_in_fn_call {
 
@@ -23,6 +25,9 @@ void foo() {
 namespace memory_passed_to_fn_call {
 
 void sink(int *P) {
+  if (coin()) // expected-note {{Assuming the condition is false}}
+              // expected-note@-1 {{Taking false branch}}
+    delete P;
 } // expected-note {{Returning without changing the ownership status of allocated memory}}
 
 void memoryPassedToFnCall() {
@@ -44,6 +49,9 @@ namespace memory_not_passed_to_fn_call {
 // TODO: We don't want a note here. We need to check whether the allocated
 // memory was actually passed into the function.
 void sink(int *P) {
+  if (coin()) // expected-note {{Assuming the condition is false}}
+              // expected-note@-1 {{Taking false branch}}
+    delete P;
 } // expected-note {{Returning without changing the ownership status of allocated memory}}
 
 void allocatedMemoryWasntPassed() {
