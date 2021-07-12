@@ -736,6 +736,8 @@ class NoOwnershipChangeVisitor final : public NoStateChangeFuncVisitor {
   SymbolRef Sym;
   using OwnerSet = llvm::SmallPtrSet<const MemRegion *, 8>;
 
+  // Collect which entities point to the allocated memory, and could be
+  // responsible for deallocating it.
   class OwnershipBindingsHandler : public StoreManager::BindingsHandler {
     SymbolRef Sym;
     OwnerSet &Owners;
@@ -746,8 +748,12 @@ class NoOwnershipChangeVisitor final : public NoStateChangeFuncVisitor {
 
     bool HandleBinding(StoreManager &SMgr, Store Store, const MemRegion *Region,
                        SVal Val) override {
-      if (Val.getAsSymbol() == Sym)
+      if (Val.getAsSymbol() == Sym) {
+        llvm::errs() << "Owner: ";
+        Region->dump();
+        llvm::errs() << '\n';
         Owners.insert(Region);
+      }
       return true;
     }
   };
@@ -756,11 +762,10 @@ protected:
   OwnerSet getOwnersAtNode(const ExplodedNode *N) {
     OwnerSet Ret;
 
-    ProgramStateRef ExitState = N->getState();
-    OwnershipBindingsHandler ExitHandler{Sym, Ret};
-    ExitState->getStateManager().getStoreManager().iterBindings(
-        ExitState->getStore(), ExitHandler);
-
+    ProgramStateRef State = N->getState();
+    OwnershipBindingsHandler Handler{Sym, Ret};
+    State->getStateManager().getStoreManager().iterBindings(State->getStore(),
+                                                            Handler);
     return Ret;
   }
 
