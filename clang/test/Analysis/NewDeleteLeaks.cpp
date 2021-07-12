@@ -8,19 +8,19 @@
 
 bool coin();
 
-//namespace memory_allocated_in_fn_call {
-//
-//void sink(int *P) {
-//} // expected-note {{Returning without changing the ownership status of allocated memory}}
-//
-//void foo() {
-//  sink(new int(5)); // expected-note {{Memory is allocated}}
-//                    // expected-note@-1 {{Calling 'sink'}}
-//                    // expected-note@-2 {{Returning from 'sink'}}
-//} // expected-warning {{Potential memory leak [cplusplus.NewDeleteLeaks]}}
-//// expected-note@-1 {{Potential memory leak}}
-//
-//} // namespace memory_allocated_in_fn_call
+namespace memory_allocated_in_fn_call {
+
+void sink(int *P) {
+} // expected-note {{Returning without changing the ownership status of allocated memory}}
+
+void foo() {
+  sink(new int(5)); // expected-note {{Memory is allocated}}
+                    // expected-note@-1 {{Calling 'sink'}}
+                    // expected-note@-2 {{Returning from 'sink'}}
+} // expected-warning {{Potential memory leak [cplusplus.NewDeleteLeaks]}}
+// expected-note@-1 {{Potential memory leak}}
+
+} // namespace memory_allocated_in_fn_call
 
 namespace memory_passed_to_fn_call {
 
@@ -39,96 +39,96 @@ void foo() {
 
 } // namespace memory_passed_to_fn_call
 
-//namespace memory_shared_with_ptr_of_shorter_lifetime {
-//
-//void sink(int *P) {
-//  int *Q = P;
-//  if (coin()) // expected-note {{Assuming the condition is false}}
-//              // expected-note@-1 {{Taking false branch}}
-//    delete P;
-//  (void)Q;
-//} // expected-note {{Returning without changing the ownership status of allocated memory}}
-//
-//void foo() {
-//  int *ptr = new int(5); // expected-note {{Memory is allocated}}
-//  sink(ptr);             // expected-note {{Calling 'sink'}}
-//                         // expected-note@-1 {{Returning from 'sink'}}
-//} // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
-//// expected-note@-1 {{Potential leak}}
-//
-//} // namespace memory_shared_with_ptr_of_shorter_lifetime
-//
-////===----------------------------------------------------------------------===//
-//// Report for which we *do not* expect NoOwnershipChangeVisitor add a new note,
-//// nor do we want it to.
-////===----------------------------------------------------------------------===//
-//
-//namespace memory_not_passed_to_fn_call {
-//
-//// TODO: We don't want a note here. We need to check whether the allocated
-//// memory was actually passed into the function.
-//void sink(int *P) {
-//  if (coin()) // expected-note {{Assuming the condition is false}}
-//              // expected-note@-1 {{Taking false branch}}
-//    delete P;
-//} // expected-note {{Returning without changing the ownership status of allocated memory}}
-//
-//void foo() {
-//  int *ptr = new int(5); // expected-note {{Memory is allocated}}
-//  int *q = nullptr;
-//  sink(q); // expected-note {{Calling 'sink'}}
-//           // expected-note@-1 {{Returning from 'sink'}}
-//  (void)ptr;
-//} // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
-//// expected-note@-1 {{Potential leak}}
-//
-//} // namespace memory_not_passed_to_fn_call
-//
-//namespace memory_shared_with_ptr_of_same_lifetime {
-//
-//void sink(int *P, int **Q) {
-//  // NOTE: Not a job of NoOwnershipChangeVisitor, but maybe this could be
-//  // highlighted still?
-//  *Q = P;
-//}
-//
-//void foo() {
-//  int *ptr = new int(5); // expected-note {{Memory is allocated}}
-//  int *q = nullptr;
-//  sink(ptr, &q);
-//} // expected-warning {{Potential leak of memory pointed to by 'q' [cplusplus.NewDeleteLeaks]}}
-//// expected-note@-1 {{Potential leak}}
-//
-//} // namespace memory_shared_with_ptr_of_same_lifetime
-//
-//// TODO: We don't want a note here. sink() doesn't seem like a function that
-//// even attempts to take care of any memory ownership problems.
-//namespace memory_passed_into_fn_that_doesnt_intend_to_free {
-//
-//void sink(int *P) {
-//} // expected-note {{Returning without changing the ownership status of allocated memory}}
-//
-//void foo() {
-//  int *ptr = new int(5); // expected-note {{Memory is allocated}}
-//  sink(ptr);             // expected-note {{Calling 'sink'}}
-//                         // expected-note@-1 {{Returning from 'sink'}}
-//} // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
-//// expected-note@-1 {{Potential leak}}
-//
-//} // namespace memory_passed_into_fn_that_doesnt_intend_to_free
-//
-//namespace refkind_from_unoallocated_to_allocated {
-//
-//// RefKind of the symbol changed from nothing to Allocated. We don't want to
-//// emit notes when the RefKind changes in the stack frame.
-//static char *malloc_wrapper_ret() {
-//  return (char *)malloc(12); // expected-note {{Memory is allocated}}
-//}
-//void use_ret() {
-//  char *v;
-//  v = malloc_wrapper_ret(); // expected-note {{Calling 'malloc_wrapper_ret'}}
-//                            // expected-note@-1 {{Returned allocated memory}}
-//} // expected-warning {{Potential leak of memory pointed to by 'v' [unix.Malloc]}}
-//// expected-note@-1 {{Potential leak of memory pointed to by 'v'}}
-//
-//} // namespace refkind_from_unoallocated_to_allocated
+namespace memory_shared_with_ptr_of_shorter_lifetime {
+
+void sink(int *P) {
+  int *Q = P;
+  if (coin()) // expected-note {{Assuming the condition is false}}
+              // expected-note@-1 {{Taking false branch}}
+    delete P;
+  (void)Q;
+} // expected-note {{Returning without changing the ownership status of allocated memory}}
+
+void foo() {
+  int *ptr = new int(5); // expected-note {{Memory is allocated}}
+  sink(ptr);             // expected-note {{Calling 'sink'}}
+                         // expected-note@-1 {{Returning from 'sink'}}
+} // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
+// expected-note@-1 {{Potential leak}}
+
+} // namespace memory_shared_with_ptr_of_shorter_lifetime
+
+//===----------------------------------------------------------------------===//
+// Report for which we *do not* expect NoOwnershipChangeVisitor add a new note,
+// nor do we want it to.
+//===----------------------------------------------------------------------===//
+
+namespace memory_not_passed_to_fn_call {
+
+// TODO: We don't want a note here. We need to check whether the allocated
+// memory was actually passed into the function.
+void sink(int *P) {
+  if (coin()) // expected-note {{Assuming the condition is false}}
+              // expected-note@-1 {{Taking false branch}}
+    delete P;
+} // expected-note {{Returning without changing the ownership status of allocated memory}}
+
+void foo() {
+  int *ptr = new int(5); // expected-note {{Memory is allocated}}
+  int *q = nullptr;
+  sink(q); // expected-note {{Calling 'sink'}}
+           // expected-note@-1 {{Returning from 'sink'}}
+  (void)ptr;
+} // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
+// expected-note@-1 {{Potential leak}}
+
+} // namespace memory_not_passed_to_fn_call
+
+namespace memory_shared_with_ptr_of_same_lifetime {
+
+void sink(int *P, int **Q) {
+  // NOTE: Not a job of NoOwnershipChangeVisitor, but maybe this could be
+  // highlighted still?
+  *Q = P;
+}
+
+void foo() {
+  int *ptr = new int(5); // expected-note {{Memory is allocated}}
+  int *q = nullptr;
+  sink(ptr, &q);
+} // expected-warning {{Potential leak of memory pointed to by 'q' [cplusplus.NewDeleteLeaks]}}
+// expected-note@-1 {{Potential leak}}
+
+} // namespace memory_shared_with_ptr_of_same_lifetime
+
+// TODO: We don't want a note here. sink() doesn't seem like a function that
+// even attempts to take care of any memory ownership problems.
+namespace memory_passed_into_fn_that_doesnt_intend_to_free {
+
+void sink(int *P) {
+} // expected-note {{Returning without changing the ownership status of allocated memory}}
+
+void foo() {
+  int *ptr = new int(5); // expected-note {{Memory is allocated}}
+  sink(ptr);             // expected-note {{Calling 'sink'}}
+                         // expected-note@-1 {{Returning from 'sink'}}
+} // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
+// expected-note@-1 {{Potential leak}}
+
+} // namespace memory_passed_into_fn_that_doesnt_intend_to_free
+
+namespace refkind_from_unoallocated_to_allocated {
+
+// RefKind of the symbol changed from nothing to Allocated. We don't want to
+// emit notes when the RefKind changes in the stack frame.
+static char *malloc_wrapper_ret() {
+  return (char *)malloc(12); // expected-note {{Memory is allocated}}
+}
+void use_ret() {
+  char *v;
+  v = malloc_wrapper_ret(); // expected-note {{Calling 'malloc_wrapper_ret'}}
+                            // expected-note@-1 {{Returned allocated memory}}
+} // expected-warning {{Potential leak of memory pointed to by 'v' [unix.Malloc]}}
+// expected-note@-1 {{Potential leak of memory pointed to by 'v'}}
+
+} // namespace refkind_from_unoallocated_to_allocated

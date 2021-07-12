@@ -73,6 +73,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/StoreRef.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SymbolManager.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SetOperations.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Compiler.h"
@@ -749,12 +750,8 @@ class NoOwnershipChangeVisitor final : public NoStateChangeFuncVisitor {
 
     bool HandleBinding(StoreManager &SMgr, Store Store, const MemRegion *Region,
                        SVal Val) override {
-      if (Val.getAsSymbol() == Sym) {
-        llvm::errs() << "Owner: ";
-        Region->dump();
-        llvm::errs() << '\n';
+      if (Val.getAsSymbol() == Sym)
         Owners.insert(Region);
-      }
       return true;
     }
   };
@@ -783,31 +780,26 @@ protected:
       return true;
 
     // Its the state right *after* the call that is interesting. Any pointers
-    // inside the call that pointed to the allocated memory was of little
+    // inside the call that pointed to the allocated memory are of little
     // consequence if their lifetime ends before within the function.
     CallExitN = getCallExitEnd(CallExitN);
     if (!CallExitN)
       return true;
 
-    llvm::errs() << "==============\n";
-
-    CallExitN->getFirstPred()->getState()->dump();
-    llvm::errs() << '\n';
-    CallExitN->getState()->dump();
     if (CurrN->getState()->get<RegionState>(Sym) !=
         CallExitN->getState()->get<RegionState>(Sym))
       return true;
 
-    llvm::errs() << "Current:\n";
     OwnerSet CurrOwners = getOwnersAtNode(CurrN);
-    llvm::errs() << "Call exit:\n";
     OwnerSet ExitOwners = getOwnersAtNode(CallExitN);
 
-    if (CurrOwners.size() != ExitOwners.size())
-      return true;
-
-    return !std::equal(CurrOwners.begin(), CurrOwners.end(),
-                       ExitOwners.begin());
+    // Owners in the exit set may be purged from the analyzer later on.
+    // If a variable is dead (is not referenced directly or indirectly after
+    // some point), it will be removed from the Store before the end of its
+    // actual lifetime.
+    // This means that that if the ownership status didn't change, CurrOwners
+    // must be a superset of, but not necessarily equal to ExitOwners.
+    return !llvm::set_is_subset(ExitOwners, CurrOwners);
   }
 
   static PathDiagnosticPieceRef emitNote(const ExplodedNode *N) {
