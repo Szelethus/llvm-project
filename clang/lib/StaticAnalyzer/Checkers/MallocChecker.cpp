@@ -78,7 +78,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
-#include <algorithm>
 #include <climits>
 #include <functional>
 #include <utility>
@@ -793,7 +792,7 @@ protected:
     OwnerSet CurrOwners = getOwnersAtNode(CurrN);
     OwnerSet ExitOwners = getOwnersAtNode(CallExitN);
 
-    // Owners in the exit set may be purged from the analyzer later on.
+    // Owners in the current set may be purged from the analyzer later on.
     // If a variable is dead (is not referenced directly or indirectly after
     // some point), it will be removed from the Store before the end of its
     // actual lifetime.
