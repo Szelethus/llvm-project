@@ -30,7 +30,7 @@ void sink(int *P) {
     delete P;
 } // expected-note {{Returning without changing the ownership status of allocated memory}}
 
-void memoryPassedToFnCall() {
+void foo() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
   sink(ptr);             // expected-note {{Calling 'sink'}}
                          // expected-note@-1 {{Returning from 'sink'}}
@@ -54,7 +54,7 @@ void sink(int *P) {
     delete P;
 } // expected-note {{Returning without changing the ownership status of allocated memory}}
 
-void allocatedMemoryWasntPassed() {
+void foo() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
   int *q = nullptr;
   sink(q); // expected-note {{Calling 'sink'}}
@@ -64,6 +64,22 @@ void allocatedMemoryWasntPassed() {
 // expected-note@-1 {{Potential leak}}
 
 } // namespace memory_not_passed_to_fn_call
+
+// TODO: We don't want a note here. sink() doesn't seem like a function that
+// even attempts to take care of any memory ownership problems.
+namespace memory_passed_into_fn_that_doesnt_intend_to_free {
+
+void sink(int *P) {
+} // expected-note {{Returning without changing the ownership status of allocated memory}}
+
+void foo() {
+  int *ptr = new int(5); // expected-note {{Memory is allocated}}
+  sink(ptr);             // expected-note {{Calling 'sink'}}
+                         // expected-note@-1 {{Returning from 'sink'}}
+} // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
+// expected-note@-1 {{Potential leak}}
+
+} // namespace memory_passed_into_fn_that_doesnt_intend_to_free
 
 namespace refkind_from_unoallocated_to_allocated {
 
