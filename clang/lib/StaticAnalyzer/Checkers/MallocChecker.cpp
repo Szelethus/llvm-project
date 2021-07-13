@@ -832,6 +832,15 @@ protected:
     ArrayRef<ParmVarDecl *> Parameters = Call.parameters();
     for (unsigned I = 0; I < Call.getNumArgs() && I < Parameters.size(); ++I) {
       SVal V = Call.getArgSVal(I);
+      if (SymbolRef S = V.getAsSymbol()) {
+        llvm::errs() << "symbol: ";
+        S->dump();
+        llvm::errs() << '\n';
+        if (const MemRegion *R = S->getOriginRegion()) {
+          R->dump();
+          llvm::errs() << '\n';
+        }
+      }
       if (V.getAsSymbol() == Sym)
         return emitNote(N);
     }
