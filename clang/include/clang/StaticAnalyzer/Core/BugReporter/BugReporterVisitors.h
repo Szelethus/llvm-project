@@ -626,8 +626,8 @@ public:
 class ObjCMethodCall;
 class CXXConstructorCall;
 
-/// Put a diagnostic on return statement of all inlined functions for which some
-/// property remained unchanged.
+/// Put a diagnostic on return statement (or on } in its absence) of all inlined
+/// functions for which some property remained unchanged.
 /// Resulting diagnostics may read such as "Returning without writing to X".
 ///
 /// Descendants can define what a "state change is", like a change of value
@@ -647,21 +647,22 @@ private:
   llvm::SmallPtrSet<const StackFrameContext *, 32> FramesModifyingCalculated;
 
   /// Check and lazily calculate whether the state is modified in the stack
-  /// frame to which \p CallExitN belongs.
+  /// frame to which \p CallExitBeginN belongs.
   /// The calculation is cached in FramesModifying.
-  bool isModifiedInFrame(const ExplodedNode *CallExitN);
+  bool isModifiedInFrame(const ExplodedNode *CallExitBeginN);
 
   /// Write to \c FramesModifying all stack frames along the path in the current
   /// stack frame which modifies the state.
-  void findModifyingFrames(const ExplodedNode *const CallExitN);
+  void findModifyingFrames(const ExplodedNode *const CallExitBeginN);
 
 protected:
   bugreporter::TrackingKind TKind;
 
   /// \return Whether the state was modified from the current node, \CurrN, to
-  /// the end of the stack fram, at \p CallExitN.
-  virtual bool wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
-                                         const ExplodedNode *CallExitN) = 0;
+  /// the end of the stack fram, at \p CallExitBeginN.
+  virtual bool
+  wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
+                            const ExplodedNode *CallExitBeginN) = 0;
 
   /// Consume the information on the non-modifying stack frame in order to
   /// either emit a note or not. May suppress the report entirely.
@@ -673,11 +674,21 @@ protected:
                            const ObjCMethodCall &Call,
                            const ExplodedNode *N) = 0;
 
+  /// Consume the information on the non-modifying stack frame in order to
+  /// either emit a note or not. May suppress the report entirely.
+  /// \return Diagnostics piece for the unmodified state in the current
+  /// function, if it decides to emit one. A good description might start with
+  /// "Returning without...".
   virtual PathDiagnosticPieceRef
   maybeEmitNoteForCXXThis(PathSensitiveBugReport &R,
                           const CXXConstructorCall &Call,
                           const ExplodedNode *N) = 0;
 
+  /// Consume the information on the non-modifying stack frame in order to
+  /// either emit a note or not. May suppress the report entirely.
+  /// \return Diagnostics piece for the unmodified state in the current
+  /// function, if it decides to emit one. A good description might start with
+  /// "Returning without...".
   virtual PathDiagnosticPieceRef
   maybeEmitNoteForParameters(PathSensitiveBugReport &R, const CallEvent &Call,
                              const ExplodedNode *N) = 0;

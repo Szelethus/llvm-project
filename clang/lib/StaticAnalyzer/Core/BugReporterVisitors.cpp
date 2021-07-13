@@ -356,14 +356,14 @@ bool NoStateChangeFuncVisitor::isModifiedInFrame(const ExplodedNode *N) {
 }
 
 void NoStateChangeFuncVisitor::findModifyingFrames(
-    const ExplodedNode *const CallExitN) {
+    const ExplodedNode *const CallExitBeginN) {
 
-  assert(CallExitN->getLocationAs<CallExitBegin>());
-  const ExplodedNode *LastReturnN = CallExitN;
+  assert(CallExitBeginN->getLocationAs<CallExitBegin>());
+  const ExplodedNode *LastReturnN = CallExitBeginN;
   const StackFrameContext *const OriginalSCtx =
-      CallExitN->getLocationContext()->getStackFrame();
+      CallExitBeginN->getLocationContext()->getStackFrame();
 
-  const ExplodedNode *CurrN = CallExitN;
+  const ExplodedNode *CurrN = CallExitBeginN;
 
   do {
     ProgramStateRef State = CurrN->getState();
@@ -491,10 +491,10 @@ public:
 
 private:
   /// \return Whether \c RegionOfInterest was modified at \p CurrN compared to
-  /// the value it holds in \p CallExitN.
+  /// the value it holds in \p CallExitBeginN.
   virtual bool
   wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
-                            const ExplodedNode *CallExitN) override;
+                            const ExplodedNode *CallExitBeginN) override;
 
   /// Attempts to find the region of interest in a given record decl,
   /// by either following the base classes or fields.
@@ -709,10 +709,10 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameters(
 }
 
 bool NoStoreFuncVisitor::wasModifiedBeforeCallExit(
-    const ExplodedNode *CurrN, const ExplodedNode *CallExitN) {
+    const ExplodedNode *CurrN, const ExplodedNode *CallExitBeginN) {
   return ::wasRegionOfInterestModifiedAt(
       RegionOfInterest, CurrN,
-      CallExitN->getState()->getSVal(RegionOfInterest));
+      CallExitBeginN->getState()->getSVal(RegionOfInterest));
 }
 
 static llvm::StringLiteral WillBeUsedForACondition =
