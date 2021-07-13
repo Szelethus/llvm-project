@@ -519,8 +519,9 @@ private:
                           const CXXConstructorCall &Call,
                           const ExplodedNode *N) override final;
 
-  virtual PathDiagnosticPieceRef maybeEmitNoteForParameters(
-      PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N) override final;
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForParameters(PathSensitiveBugReport &R, const CallEvent &Call,
+                             const ExplodedNode *N) override final;
 
   /// Consume the information on the no-store stack frame in order to
   /// either emit a note or suppress the report enirely.
