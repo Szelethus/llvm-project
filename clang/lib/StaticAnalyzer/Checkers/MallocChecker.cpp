@@ -829,8 +829,13 @@ protected:
   virtual PathDiagnosticPieceRef
   maybeEmitNoteForParameters(PathSensitiveBugReport &R, const CallEvent &Call,
                              const ExplodedNode *N) override {
-    // TODO: Check whether the allocated memory was actually passed into the
-    // function.
+    ArrayRef<ParmVarDecl *> Parameters = Call.parameters();
+    for (unsigned I = 0; I < Call.getNumArgs() && I < Parameters.size(); ++I) {
+      const ParmVarDecl *PVD = Parameters[I];
+      SVal V = Call.getArgSVal(I);
+      V.dump();
+      llvm::errs() << '\n';
+    }
     return emitNote(N);
   }
 
