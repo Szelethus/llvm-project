@@ -678,9 +678,9 @@ protected:
                           const CXXConstructorCall &Call,
                           const ExplodedNode *N) = 0;
 
-  virtual PathDiagnosticPieceRef maybeEmitNoteForParameter(
-      PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
-      ArrayRef<ParmVarDecl *> Parameters, unsigned ParamIdx) = 0;
+  virtual PathDiagnosticPieceRef
+  maybeEmitNoteForParameters(PathSensitiveBugReport &R, const CallEvent &Call,
+                             const ExplodedNode *N) = 0;
 
 public:
   NoStateChangeFuncVisitor(bugreporter::TrackingKind TKind) : TKind(TKind) {}

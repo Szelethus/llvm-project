@@ -394,19 +394,6 @@ void NoStateChangeFuncVisitor::findModifyingFrames(
   } while (CurrN);
 }
 
-/// Get parameters associated with runtime definition in order
-/// to get the correct parameter name.
-static ArrayRef<ParmVarDecl *> getCallParameters(const CallEvent &Call) {
-  // Use runtime definition, if available.
-  RuntimeDefinition RD = Call.getRuntimeDefinition();
-  if (const auto *FD = dyn_cast_or_null<FunctionDecl>(RD.getDecl()))
-    return FD->parameters();
-  if (const auto *MD = dyn_cast_or_null<ObjCMethodDecl>(RD.getDecl()))
-    return MD->parameters();
-
-  return Call.parameters();
-}
-
 PathDiagnosticPieceRef NoStateChangeFuncVisitor::VisitNode(
     const ExplodedNode *N, BugReporterContext &BR, PathSensitiveBugReport &R) {
 
@@ -459,16 +446,7 @@ PathDiagnosticPieceRef NoStateChangeFuncVisitor::VisitNode(
     return maybeEmitNoteForCXXThis(R, *CCall, N);
   }
 
-  ArrayRef<ParmVarDecl *> parameters = getCallParameters(*Call);
-  for (unsigned ParamIdx = 0;
-       ParamIdx < Call->getNumArgs() && ParamIdx < parameters.size();
-       ++ParamIdx) {
-    if (PathDiagnosticPieceRef Piece =
-            maybeEmitNoteForParameter(R, *Call, N, parameters, ParamIdx))
-      return Piece;
-  }
-
-  return nullptr;
+  return maybeEmitNoteForParameters(R, *Call, N);
 }
 
 //===----------------------------------------------------------------------===//
@@ -541,9 +519,8 @@ private:
                           const CXXConstructorCall &Call,
                           const ExplodedNode *N) override final;
 
-  virtual PathDiagnosticPieceRef maybeEmitNoteForParameter(
-      PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
-      ArrayRef<ParmVarDecl *> Parameters, unsigned ParamIdx) override final;
+  virtual PathDiagnosticPieceRef maybeEmitNoteForParameters(
+      PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N) override final;
 
   /// Consume the information on the no-store stack frame in order to
   /// either emit a note or suppress the report enirely.
@@ -694,9 +671,9 @@ static bool isPointerToConst(QualType Ty) {
          Ty->getPointeeType().getCanonicalType().isConstQualified();
 }
 
-PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameter(
-    PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
-    ArrayRef<ParmVarDecl *> Parameters, unsigned ParamIdx) {
+PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameters(
+    PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N) {
+  ArrayRef<ParmVarDecl *> Parameters = Call.parameters();
   for (unsigned I = 0; I < Call.getNumArgs() && I < Parameters.size(); ++I) {
     const ParmVarDecl *PVD = Parameters[I];
     SVal V = Call.getArgSVal(I);
