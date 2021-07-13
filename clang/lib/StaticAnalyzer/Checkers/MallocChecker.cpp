@@ -828,7 +828,7 @@ protected:
 
   virtual PathDiagnosticPieceRef
   maybeEmitNoteForParameters(PathSensitiveBugReport &R, const CallEvent &Call,
-                            const ExplodedNode *N) override {
+                             const ExplodedNode *N) override {
     // TODO: Check whether the allocated memory was actually passed into the
     // function.
     return emitNote(N);
