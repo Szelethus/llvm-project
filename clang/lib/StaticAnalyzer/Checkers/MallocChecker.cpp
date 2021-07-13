@@ -831,12 +831,11 @@ protected:
                              const ExplodedNode *N) override {
     ArrayRef<ParmVarDecl *> Parameters = Call.parameters();
     for (unsigned I = 0; I < Call.getNumArgs() && I < Parameters.size(); ++I) {
-      const ParmVarDecl *PVD = Parameters[I];
       SVal V = Call.getArgSVal(I);
-      V.dump();
-      llvm::errs() << '\n';
+      if (V.getAsSymbol() == Sym)
+        return emitNote(N);
     }
-    return emitNote(N);
+    return nullptr;
   }
 
 public:
