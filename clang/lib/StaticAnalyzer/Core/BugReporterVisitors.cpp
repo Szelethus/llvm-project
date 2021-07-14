@@ -529,20 +529,18 @@ private:
   /// if it decides to emit one.
   PathDiagnosticPieceRef
   maybeEmitNote(PathSensitiveBugReport &R, const CallEvent &Call,
-                const ExplodedNode *N, const RegionVector &FieldChain,
-                const MemRegion *MatchedRegion, StringRef FirstElement,
-                bool FirstIsReferenceType, unsigned IndirectionLevel);
+                const ExplodedNode *N, std::string RegionName);
 
-  bool prettyPrintRegionName(const RegionVector &FieldChain,
-                             const MemRegion *MatchedRegion,
-                             StringRef FirstElement, bool FirstIsReferenceType,
-                             unsigned IndirectionLevel,
-                             llvm::raw_svector_ostream &os);
+  std::string getPrettyRegionName(const RegionVector &FieldChain,
+                                  const MemRegion *MatchedRegion,
+                                  StringRef FirstElement,
+                                  bool FirstIsReferenceType,
+                                  unsigned IndirectionLevel);
 
   StringRef prettyPrintFirstElement(StringRef FirstElement,
                                     bool MoreItemsExpected,
                                     int IndirectionLevel,
-                                    llvm::raw_svector_ostream &os);
+                                    llvm::raw_ostream &os);
 };
 } // namespace
 
@@ -646,8 +644,10 @@ NoStoreFuncVisitor::maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
     if (RegionOfInterest->isSubRegionOf(SelfRegion) &&
         potentiallyWritesIntoIvar(Call.getRuntimeDefinition().getDecl(),
                                   IvarR->getDecl()))
-      return maybeEmitNote(R, Call, N, {}, SelfRegion, "self",
-                           /*FirstIsReferenceType=*/false, 1);
+      return maybeEmitNote(R, Call, N,
+                           getPrettyRegionName({}, SelfRegion, "self",
+                                               /*FirstIsReferenceType=*/false,
+                                               1));
   }
   return nullptr;
 }
@@ -658,8 +658,10 @@ NoStoreFuncVisitor::maybeEmitNoteForCXXThis(PathSensitiveBugReport &R,
                                             const ExplodedNode *N) {
   const MemRegion *ThisR = Call.getCXXThisVal().getAsRegion();
   if (RegionOfInterest->isSubRegionOf(ThisR) && !Call.getDecl()->isImplicit())
-    return maybeEmitNote(R, Call, N, {}, ThisR, "this",
-                         /*FirstIsReferenceType=*/false, 1);
+    return maybeEmitNote(R, Call, N,
+                         getPrettyRegionName({}, ThisR, "this",
+                                             /*FirstIsReferenceType=*/false,
+                                             1));
 
   // Do not generate diagnostics for not modified parameters in
   // constructors.
@@ -685,8 +687,10 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameters(
     QualType T = PVD->getType();
     while (const MemRegion *MR = V.getAsRegion()) {
       if (RegionOfInterest->isSubRegionOf(MR) && !isPointerToConst(T))
-        return maybeEmitNote(R, Call, N, {}, MR, ParamName,
-                             ParamIsReferenceType, IndirectionLevel);
+        return maybeEmitNote(R, Call, N,
+                             getPrettyRegionName({}, MR, ParamName,
+                                                 ParamIsReferenceType,
+                                                 IndirectionLevel));
 
       QualType PT = T->getPointeeType();
       if (PT.isNull() || PT->isVoidType())
@@ -697,8 +701,10 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameters(
       if (const RecordDecl *RD = PT->getAsRecordDecl())
         if (Optional<RegionVector> P =
                 findRegionOfInterestInRecord(RD, State, MR))
-          return maybeEmitNote(R, Call, N, *P, RegionOfInterest, ParamName,
-                               ParamIsReferenceType, IndirectionLevel);
+          return maybeEmitNote(
+              R, Call, N,
+              getPrettyRegionName(*P, RegionOfInterest, ParamName,
+                                  ParamIsReferenceType, IndirectionLevel));
 
       V = State->getSVal(MR, PT);
       T = PT;
@@ -721,9 +727,7 @@ static llvm::StringLiteral WillBeUsedForACondition =
 
 PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
     PathSensitiveBugReport &R, const CallEvent &Call, const ExplodedNode *N,
-    const RegionVector &FieldChain, const MemRegion *MatchedRegion,
-    StringRef FirstElement, bool FirstIsReferenceType,
-    unsigned IndirectionLevel) {
+    std::string RegionName) {
 
   PathDiagnosticLocation L =
       PathDiagnosticLocation::create(N->getLocation(), SM);
@@ -739,22 +743,22 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
   os << "Returning without writing to '";
 
   // Do not generate the note if failed to pretty-print.
-  if (!prettyPrintRegionName(FieldChain, MatchedRegion, FirstElement,
-                             FirstIsReferenceType, IndirectionLevel, os))
+  if (RegionName.empty())
     return nullptr;
+  os << RegionName << "'";
 
-  os << "'";
   if (TKind == bugreporter::TrackingKind::Condition)
     os << WillBeUsedForACondition;
   return std::make_shared<PathDiagnosticEventPiece>(L, os.str());
 }
 
-bool NoStoreFuncVisitor::prettyPrintRegionName(const RegionVector &FieldChain,
-                                               const MemRegion *MatchedRegion,
-                                               StringRef FirstElement,
-                                               bool FirstIsReferenceType,
-                                               unsigned IndirectionLevel,
-                                               llvm::raw_svector_ostream &os) {
+std::string NoStoreFuncVisitor::getPrettyRegionName(
+    const RegionVector &FieldChain, const MemRegion *MatchedRegion,
+    StringRef FirstElement, bool FirstIsReferenceType,
+    unsigned IndirectionLevel) {
+
+  std::string Ret;
+  llvm::raw_string_ostream os(Ret);
 
   if (FirstIsReferenceType)
     IndirectionLevel--;
@@ -788,7 +792,7 @@ bool NoStoreFuncVisitor::prettyPrintRegionName(const RegionVector &FieldChain,
 
     // Can only reasonably pretty-print DeclRegions.
     if (!isa<DeclRegion>(R))
-      return false;
+      return "";
 
     const auto *DR = cast<DeclRegion>(R);
     Sep = DR->getValueType()->isAnyPointerType() ? "->" : ".";
@@ -798,12 +802,12 @@ bool NoStoreFuncVisitor::prettyPrintRegionName(const RegionVector &FieldChain,
   if (Sep.empty())
     prettyPrintFirstElement(FirstElement,
                             /*MoreItemsExpected=*/false, IndirectionLevel, os);
-  return true;
+  return Ret;
 }
 
 StringRef NoStoreFuncVisitor::prettyPrintFirstElement(
     StringRef FirstElement, bool MoreItemsExpected, int IndirectionLevel,
-    llvm::raw_svector_ostream &os) {
+    llvm::raw_ostream &os) {
   StringRef Out = ".";
 
   if (IndirectionLevel > 0 && MoreItemsExpected) {
