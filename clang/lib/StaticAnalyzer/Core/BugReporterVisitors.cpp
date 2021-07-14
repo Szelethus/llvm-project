@@ -626,6 +626,8 @@ NoStoreFuncVisitor::findRegionOfInterestInRecord(
     RegionVector VecF = Vec;
     VecF.push_back(FR);
 
+    llvm::errs() << "checking val "; V.dump(); llvm::errs() << '\n';
+    llvm::errs() << "against region "; RegionOfInterest->dump(); llvm::errs() << '\n';
     if (isParamRelatedToRegionOfInterest(V, FT))
       return VecF;
 
