@@ -507,6 +507,19 @@ private:
                                const MemRegion *R, const RegionVector &Vec = {},
                                int depth = 0);
 
+  /// \return whether \p Ty points to a const type, or is a const reference.
+  static bool isPointerToConst(QualType Ty) {
+    return !Ty->getPointeeType().isNull() &&
+           Ty->getPointeeType().getCanonicalType().isConstQualified();
+  }
+
+  bool isParamRelatedToRegionOfInterest(SVal ParamVal, QualType T) {
+    if (RegionOfInterest == ParamVal.getAsRegion())
+      if (!isPointerToConst(T))
+        return true;
+    return false;
+  }
+
   // Region of interest corresponds to an IVar, exiting a method
   // which could have written into that IVar, but did not.
   virtual PathDiagnosticPieceRef
@@ -532,7 +545,7 @@ private:
                 const ExplodedNode *N, std::string RegionName);
 
   std::string getPrettyRegionName(const RegionVector &FieldChain,
-                                  const MemRegion *MatchedRegion,
+                                  SVal MatchedVal,
                                   StringRef FirstElement,
                                   bool FirstIsReferenceType,
                                   unsigned IndirectionLevel);
@@ -609,12 +622,11 @@ NoStoreFuncVisitor::findRegionOfInterestInRecord(
     QualType FT = I->getType();
     const FieldRegion *FR = MmrMgr.getFieldRegion(I, cast<SubRegion>(R));
     const SVal V = State->getSVal(FR);
-    const MemRegion *VR = V.getAsRegion();
 
     RegionVector VecF = Vec;
     VecF.push_back(FR);
 
-    if (RegionOfInterest == VR)
+    if (isParamRelatedToRegionOfInterest(V, FT))
       return VecF;
 
     if (const RecordDecl *RRD = FT->getAsRecordDecl())
@@ -623,6 +635,7 @@ NoStoreFuncVisitor::findRegionOfInterestInRecord(
         return Out;
 
     QualType PT = FT->getPointeeType();
+    const MemRegion *VR = V.getAsRegion();
     if (PT.isNull() || PT->isVoidType() || !VR)
       continue;
 
@@ -640,12 +653,12 @@ NoStoreFuncVisitor::maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
                                              const ObjCMethodCall &Call,
                                              const ExplodedNode *N) {
   if (const auto *IvarR = dyn_cast<ObjCIvarRegion>(RegionOfInterest)) {
-    const MemRegion *SelfRegion = Call.getReceiverSVal().getAsRegion();
-    if (RegionOfInterest->isSubRegionOf(SelfRegion) &&
+    SVal RVal = Call.getReceiverSVal();
+    if (RegionOfInterest->isSubRegionOf(RVal.getAsRegion()) &&
         potentiallyWritesIntoIvar(Call.getRuntimeDefinition().getDecl(),
                                   IvarR->getDecl()))
       return maybeEmitNote(R, Call, N,
-                           getPrettyRegionName({}, SelfRegion, "self",
+                           getPrettyRegionName({}, RVal, "self",
                                                /*FirstIsReferenceType=*/false,
                                                1));
   }
@@ -656,22 +669,17 @@ PathDiagnosticPieceRef
 NoStoreFuncVisitor::maybeEmitNoteForCXXThis(PathSensitiveBugReport &R,
                                             const CXXConstructorCall &Call,
                                             const ExplodedNode *N) {
-  const MemRegion *ThisR = Call.getCXXThisVal().getAsRegion();
-  if (RegionOfInterest->isSubRegionOf(ThisR) && !Call.getDecl()->isImplicit())
+  SVal ThisVal = Call.getCXXThisVal();
+  if (RegionOfInterest->isSubRegionOf(ThisVal.getAsRegion()) &&
+      !Call.getDecl()->isImplicit())
     return maybeEmitNote(R, Call, N,
-                         getPrettyRegionName({}, ThisR, "this",
+                         getPrettyRegionName({}, ThisVal, "this",
                                              /*FirstIsReferenceType=*/false,
                                              1));
 
   // Do not generate diagnostics for not modified parameters in
   // constructors.
   return nullptr;
-}
-
-/// \return whether \p Ty points to a const type, or is a const reference.
-static bool isPointerToConst(QualType Ty) {
-  return !Ty->getPointeeType().isNull() &&
-         Ty->getPointeeType().getCanonicalType().isConstQualified();
 }
 
 PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameters(
@@ -685,10 +693,12 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameters(
 
     unsigned IndirectionLevel = 1;
     QualType T = PVD->getType();
-    while (const MemRegion *MR = V.getAsRegion()) {
-      if (RegionOfInterest->isSubRegionOf(MR) && !isPointerToConst(T))
+    const MemRegion *MR = V.getAsRegion();
+
+    while (true) {
+      if (isParamRelatedToRegionOfInterest(V, T))
         return maybeEmitNote(R, Call, N,
-                             getPrettyRegionName({}, MR, ParamName,
+                             getPrettyRegionName({}, V, ParamName,
                                                  ParamIsReferenceType,
                                                  IndirectionLevel));
 
@@ -703,10 +713,13 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameters(
                 findRegionOfInterestInRecord(RD, State, MR))
           return maybeEmitNote(
               R, Call, N,
-              getPrettyRegionName(*P, RegionOfInterest, ParamName,
+              getPrettyRegionName(*P, V, ParamName,
                                   ParamIsReferenceType, IndirectionLevel));
 
+      if (!MR)
+        break;
       V = State->getSVal(MR, PT);
+      MR = V.getAsRegion();
       T = PT;
       IndirectionLevel++;
     }
@@ -753,7 +766,7 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
 }
 
 std::string NoStoreFuncVisitor::getPrettyRegionName(
-    const RegionVector &FieldChain, const MemRegion *MatchedRegion,
+    const RegionVector &FieldChain, SVal MatchedVal,
     StringRef FirstElement, bool FirstIsReferenceType,
     unsigned IndirectionLevel) {
 
@@ -764,6 +777,15 @@ std::string NoStoreFuncVisitor::getPrettyRegionName(
     IndirectionLevel--;
 
   RegionVector RegionSequence;
+
+  const MemRegion *MatchedRegion = nullptr;
+  if (FieldChain.empty())
+    MatchedRegion = MatchedVal.getAsRegion();
+  else
+    MatchedRegion = RegionOfInterest;
+  assert(MatchedRegion);
+  MatchedRegion->dump();
+  llvm::errs() << '\n';
 
   // Add the regions in the reverse order, then reverse the resulting array.
   assert(RegionOfInterest->isSubRegionOf(MatchedRegion));
