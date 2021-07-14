@@ -514,7 +514,7 @@ private:
   }
 
   bool isParamRelatedToRegionOfInterest(SVal ParamVal, QualType T) {
-    if (RegionOfInterest == ParamVal.getAsRegion())
+    if (RegionOfInterest->isSubRegionOf(ParamVal.getAsRegion()))
       if (!isPointerToConst(T))
         return true;
     return false;
@@ -698,6 +698,7 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameters(
     const MemRegion *MR = V.getAsRegion();
 
     while (true) {
+      llvm::errs() << "Val: "; V.dump() ; llvm::errs() << '\n';
       if (isParamRelatedToRegionOfInterest(V, T))
         return maybeEmitNote(R, Call, N,
                              getPrettyRegionName({}, V, ParamName,
@@ -758,8 +759,10 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
   os << "Returning without writing to '";
 
   // Do not generate the note if failed to pretty-print.
-  if (RegionName.empty())
+  if (RegionName.empty()) {
+  //llvm_unreachable("");
     return nullptr;
+  }
   os << RegionName << "'";
 
   if (TKind == bugreporter::TrackingKind::Condition)
