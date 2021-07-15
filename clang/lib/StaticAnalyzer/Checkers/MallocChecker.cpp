@@ -780,7 +780,7 @@ protected:
 
     // Its the state right *after* the call that is interesting. Any pointers
     // inside the call that pointed to the allocated memory are of little
-    // consequence if their lifetime ends before within the function.
+    // consequence if their lifetime ends within the function.
     CallExitN = getCallExitEnd(CallExitN);
     if (!CallExitN)
       return true;
@@ -806,8 +806,8 @@ protected:
         N->getLocation(),
         N->getState()->getStateManager().getContext().getSourceManager());
     return std::make_shared<PathDiagnosticEventPiece>(
-        L, "Returning without changing the ownership status of allocated "
-           "memory");
+        L, "Returning without deallocating memory or storing the pointer for "
+           "later deallocation");
   }
 
   virtual PathDiagnosticPieceRef
@@ -829,6 +829,10 @@ protected:
   virtual PathDiagnosticPieceRef
   maybeEmitNoteForParameters(PathSensitiveBugReport &R, const CallEvent &Call,
                              const ExplodedNode *N) override {
+    // TODO: Factor the logic of "what constitutes as an entity being passed
+    // into a function call" out by reusing the code in
+    // NoStoreFuncVisitor::maybeEmitNoteForParameters, maybe by incorporating
+    // the printing technology in UninitializedObject's FieldChainInfo.
     ArrayRef<ParmVarDecl *> Parameters = Call.parameters();
     for (unsigned I = 0; I < Call.getNumArgs() && I < Parameters.size(); ++I) {
       SVal V = Call.getArgSVal(I);

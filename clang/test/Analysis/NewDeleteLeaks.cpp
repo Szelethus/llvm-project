@@ -11,7 +11,7 @@ bool coin();
 namespace memory_allocated_in_fn_call {
 
 void sink(int *P) {
-} // expected-note {{Returning without changing the ownership status of allocated memory}}
+} // expected-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
 
 void foo() {
   sink(new int(5)); // expected-note {{Memory is allocated}}
@@ -28,7 +28,7 @@ void sink(int *P) {
   if (coin()) // expected-note {{Assuming the condition is false}}
               // expected-note@-1 {{Taking false branch}}
     delete P;
-} // expected-note {{Returning without changing the ownership status of allocated memory}}
+} // expected-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
 
 void foo() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
@@ -47,7 +47,7 @@ void sink(int *P) {
               // expected-note@-1 {{Taking false branch}}
     delete P;
   (void)Q;
-} // expected-note {{Returning without changing the ownership status of allocated memory}}
+} // expected-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
 
 void foo() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
@@ -102,7 +102,7 @@ void foo() {
 namespace memory_passed_into_fn_that_doesnt_intend_to_free {
 
 void sink(int *P) {
-} // expected-note {{Returning without changing the ownership status of allocated memory}}
+} // expected-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
 
 void foo() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
