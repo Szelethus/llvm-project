@@ -65,19 +65,15 @@ void foo() {
 
 namespace memory_not_passed_to_fn_call {
 
-// TODO: We don't want a note here. We need to check whether the allocated
-// memory was actually passed into the function.
 void sink(int *P) {
-  if (coin()) // expected-note {{Assuming the condition is false}}
-              // expected-note@-1 {{Taking false branch}}
+  if (coin())
     delete P;
-} // expected-note {{Returning without changing the ownership status of allocated memory}}
+}
 
 void foo() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
   int *q = nullptr;
-  sink(q); // expected-note {{Calling 'sink'}}
-           // expected-note@-1 {{Returning from 'sink'}}
+  sink(q);
   (void)ptr;
 } // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
 // expected-note@-1 {{Potential leak}}
