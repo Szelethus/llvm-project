@@ -265,7 +265,7 @@ struct FunctionInfo {
   static void dumpColumnNamesToStream(llvm::raw_ostream &out) {
     llvm::SmallString<200> Str;
     llvm::raw_svector_ostream OS(Str);
-    OS << "File name,Function name,System header function,Begin line,Begin column,End line,End column,";
+    OS << "Filename,Function name,System header function,Begin line,Begin column,End line,End column,";
     for (size_t I = 0; I < static_cast<int>(InfoKind::END); ++I)
       OS << infoKindToString(static_cast<InfoKind>(I)) << ',';
     Str.pop_back();
@@ -375,8 +375,8 @@ struct FunctionVisitor : public RecursiveASTVisitor<FunctionVisitor> {
 };
 
 void IntVectorDumper::HandleTopLevelSingleDecl(Decl *D) {
-  //if (Context->getSourceManager().isInSystemHeader(D->getLocation()))
-  //  return;
+  if (Context->getSourceManager().isInSystemHeader(D->getLocation()))
+    return;
   FunctionVisitor FV(FunctionInfos, *Context);
 
   FV.TraverseDecl(D);
