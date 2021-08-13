@@ -494,7 +494,8 @@ def DynamicMemoryModeling: Checker<"DynamicMemoryModeling">,
                   "of the ownership are noted, similarly to "
                   "NoStoreFuncVisitor.",
                   "false",
-                  InAlpha>
+                  InAlpha,
+                  Hide>
   ]>,
   Dependencies<[CStringModeling]>,
   Documentation<NotDocumented>,
