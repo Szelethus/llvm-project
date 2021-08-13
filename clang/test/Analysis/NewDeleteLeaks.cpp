@@ -1,4 +1,16 @@
-// RUN: %clang_analyze_cc1 -analyzer-checker=core,cplusplus,unix -verify -analyzer-output=text %s
+// RUN: %clang_analyze_cc1 -verify -analyzer-output=text %s \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=cplusplus \
+// RUN:   -analyzer-checker=unix \
+// RUN:   -analyzer-config \
+// RUN:     unix.DynamicMemoryModeling:AddNoOwnershipChangeNotes=false
+
+// RUN: %clang_analyze_cc1 -verify=expected,ownership -analyzer-output=text %s \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=cplusplus \
+// RUN:   -analyzer-checker=unix \
+// RUN:   -analyzer-config \
+// RUN:     unix.DynamicMemoryModeling:AddNoOwnershipChangeNotes=true
 
 #include "Inputs/system-header-simulator-for-malloc.h"
 
@@ -11,12 +23,12 @@ bool coin();
 namespace memory_allocated_in_fn_call {
 
 void sink(int *P) {
-} // expected-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
+} // ownership-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
 
 void foo() {
   sink(new int(5)); // expected-note {{Memory is allocated}}
-                    // expected-note@-1 {{Calling 'sink'}}
-                    // expected-note@-2 {{Returning from 'sink'}}
+                    // ownership-note@-1 {{Calling 'sink'}}
+                    // ownership-note@-2 {{Returning from 'sink'}}
 } // expected-warning {{Potential memory leak [cplusplus.NewDeleteLeaks]}}
 // expected-note@-1 {{Potential memory leak}}
 
@@ -25,15 +37,15 @@ void foo() {
 namespace memory_passed_to_fn_call {
 
 void sink(int *P) {
-  if (coin()) // expected-note {{Assuming the condition is false}}
-              // expected-note@-1 {{Taking false branch}}
+  if (coin()) // ownership-note {{Assuming the condition is false}}
+              // ownership-note@-1 {{Taking false branch}}
     delete P;
-} // expected-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
+} // ownership-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
 
 void foo() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
-  sink(ptr);             // expected-note {{Calling 'sink'}}
-                         // expected-note@-1 {{Returning from 'sink'}}
+  sink(ptr);             // ownership-note {{Calling 'sink'}}
+                         // ownership-note@-1 {{Returning from 'sink'}}
 } // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
 // expected-note@-1 {{Potential leak}}
 
@@ -43,16 +55,16 @@ namespace memory_shared_with_ptr_of_shorter_lifetime {
 
 void sink(int *P) {
   int *Q = P;
-  if (coin()) // expected-note {{Assuming the condition is false}}
-              // expected-note@-1 {{Taking false branch}}
+  if (coin()) // ownership-note {{Assuming the condition is false}}
+              // ownership-note@-1 {{Taking false branch}}
     delete P;
   (void)Q;
-} // expected-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
+} // ownership-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
 
 void foo() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
-  sink(ptr);             // expected-note {{Calling 'sink'}}
-                         // expected-note@-1 {{Returning from 'sink'}}
+  sink(ptr);             // ownership-note {{Calling 'sink'}}
+                         // ownership-note@-1 {{Returning from 'sink'}}
 } // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
 // expected-note@-1 {{Potential leak}}
 
@@ -102,12 +114,12 @@ void foo() {
 namespace memory_passed_into_fn_that_doesnt_intend_to_free {
 
 void sink(int *P) {
-} // expected-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
+} // ownership-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
 
 void foo() {
   int *ptr = new int(5); // expected-note {{Memory is allocated}}
-  sink(ptr);             // expected-note {{Calling 'sink'}}
-                         // expected-note@-1 {{Returning from 'sink'}}
+  sink(ptr);             // ownership-note {{Calling 'sink'}}
+                         // ownership-note@-1 {{Returning from 'sink'}}
 } // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
 // expected-note@-1 {{Potential leak}}
 

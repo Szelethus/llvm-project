@@ -302,6 +302,8 @@ public:
   /// which might free a pointer are annotated.
   DefaultBool ShouldIncludeOwnershipAnnotatedFunctions;
 
+  DefaultBool ShouldRegisterNoOwnershipChangeVisitor;
+
   /// Many checkers are essentially built into this one, so enabling them will
   /// make MallocChecker perform additional modeling and reporting.
   enum CheckKind {
@@ -2717,7 +2719,8 @@ void MallocChecker::HandleLeak(SymbolRef Sym, ExplodedNode *N,
       AllocNode->getLocationContext()->getDecl());
   R->markInteresting(Sym);
   R->addVisitor<MallocBugVisitor>(Sym, true);
-  R->addVisitor<NoOwnershipChangeVisitor>(Sym);
+  if (ShouldRegisterNoOwnershipChangeVisitor)
+    R->addVisitor<NoOwnershipChangeVisitor>(Sym);
   C.emitReport(std::move(R));
 }
 
@@ -3534,6 +3537,9 @@ void ento::registerDynamicMemoryModeling(CheckerManager &mgr) {
   auto *checker = mgr.registerChecker<MallocChecker>();
   checker->ShouldIncludeOwnershipAnnotatedFunctions =
       mgr.getAnalyzerOptions().getCheckerBooleanOption(checker, "Optimistic");
+  checker->ShouldRegisterNoOwnershipChangeVisitor =
+      mgr.getAnalyzerOptions().getCheckerBooleanOption(
+          checker, "AddNoOwnershipChangeNotes");
 }
 
 bool ento::shouldRegisterDynamicMemoryModeling(const CheckerManager &mgr) {
