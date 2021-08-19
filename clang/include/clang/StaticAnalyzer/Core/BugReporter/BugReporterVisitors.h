@@ -651,6 +651,8 @@ private:
   /// The calculation is cached in FramesModifying.
   bool isModifiedInFrame(const ExplodedNode *CallExitBeginN);
 
+  void markFrameAsModifying(const StackFrameContext *SCtx);
+
   /// Write to \c FramesModifying all stack frames along the path in the current
   /// stack frame which modifies the state.
   void findModifyingFrames(const ExplodedNode *const CallExitBeginN);
@@ -662,7 +664,18 @@ protected:
   /// the end of the stack fram, at \p CallExitBeginN.
   virtual bool
   wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
-                            const ExplodedNode *CallExitBeginN) = 0;
+                            const ExplodedNode *CallExitBeginN) {
+    return false;
+  }
+
+  /// \return Whether the state was modified in the inlined function call in
+  /// between \p CallEnterN and \p CallExitBeginN. Mind that the stack frame
+  /// retrieved from a CallEnter is the *caller's* stack frame! The inlined
+  /// function's stack should be retrieved from \p CallExitBeginN.
+  virtual bool wasModifiedInFunction(const ExplodedNode *CallEnterN,
+                                     const ExplodedNode *CallExitEndN) {
+    return false;
+  }
 
   /// Consume the information on the non-modifying stack frame in order to
   /// either emit a note or not. May suppress the report entirely.
