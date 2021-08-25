@@ -52,6 +52,7 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ParentMap.h"
+#include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Analysis/ProgramPoint.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/SourceManager.h"
@@ -737,6 +738,7 @@ private:
 // Definition of NoOwnershipChangeVisitor.
 //===----------------------------------------------------------------------===//
 
+#include "clang/ASTMatchers/ASTMatchFinder.h"
 namespace {
 class NoOwnershipChangeVisitor final : public NoStateChangeFuncVisitor {
   SymbolRef Sym;
@@ -791,9 +793,26 @@ protected:
     return "";
   }
 
+  bool doesFnIntendToHandleOwnership(const Decl *Callee, ASTContext &ACtx) {
+    using namespace clang::ast_matchers;
+    const FunctionDecl *FD = dyn_cast<FunctionDecl>(Callee);
+    if (!FD)
+      return false;
+    auto Deallocations = match(
+        stmt(hasDescendant(cxxDeleteExpr().bind("delete"))
+             ), *FD->getBody(), ACtx);
+    // TODO: Ownership my change with an attempt to store the allocated memory.
+    return !Deallocations.empty();
+  }
+
   virtual bool
   wasModifiedInFunction(const ExplodedNode *CallEnterN,
                         const ExplodedNode *CallExitEndN) override {
+    if (!doesFnIntendToHandleOwnership(
+            CallExitEndN->getFirstPred()->getLocationContext()->getDecl(),
+            CallExitEndN->getState()->getAnalysisManager().getASTContext()))
+      return true;
+
     if (CallEnterN->getState()->get<RegionState>(Sym) !=
         CallExitEndN->getState()->get<RegionState>(Sym))
       return true;
