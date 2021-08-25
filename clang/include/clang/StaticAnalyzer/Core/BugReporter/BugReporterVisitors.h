@@ -660,8 +660,9 @@ private:
 protected:
   bugreporter::TrackingKind TKind;
 
-  /// \return Whether the state was modified from the current node, \CurrN, to
-  /// the end of the stack fram, at \p CallExitBeginN.
+  /// \return Whether the state was modified from the current node, \p CurrN, to
+  /// the end of the stack fram, at \p CallExitBeginN. \p CurrN and
+  /// \p CallExitBeginN are always in the same stack frame.
   virtual bool
   wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
                             const ExplodedNode *CallExitBeginN) {
