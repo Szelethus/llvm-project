@@ -798,6 +798,8 @@ protected:
     const FunctionDecl *FD = dyn_cast<FunctionDecl>(Callee);
     if (!FD)
       return false;
+    // TODO: Operator delete is hardly the only deallocator -- Can we reuse
+    // isFreeingCall() or something thats already here?
     auto Deallocations = match(
         stmt(hasDescendant(cxxDeleteExpr().bind("delete"))
              ), *FD->getBody(), ACtx);
