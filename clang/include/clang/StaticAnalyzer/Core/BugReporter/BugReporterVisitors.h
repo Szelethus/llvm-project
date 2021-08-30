@@ -663,6 +663,12 @@ protected:
   /// \return Whether the state was modified from the current node, \p CurrN, to
   /// the end of the stack fram, at \p CallExitBeginN. \p CurrN and
   /// \p CallExitBeginN are always in the same stack frame.
+  /// Clients should override this callback when a state change is important
+  /// not only on the entire function call, but inside of it as well.
+  /// Example: we may want to leave a note about the lack of locking/unlocking
+  /// on a particular mutex, but not if inside the function its state was
+  /// changed, but also restored. wasModifiedInFunction() wouldn't know of this
+  /// change.
   virtual bool
   wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
                             const ExplodedNode *CallExitBeginN) {
@@ -673,6 +679,13 @@ protected:
   /// between \p CallEnterN and \p CallExitBeginN. Mind that the stack frame
   /// retrieved from a CallEnter is the *caller's* stack frame! The inlined
   /// function's stack should be retrieved from \p CallExitBeginN.
+  /// Clients should override this function if a state changes local to the
+  /// inlined function are not interesting, only the change occuring as a
+  /// result of it.
+  /// Example: we want to leave a not about a leaked resource object not being
+  /// deallocated / its ownership changed inside a function, and we don't care
+  /// if it was assigned to a local variable (its change in ownership is
+  /// inconsequential).
   virtual bool wasModifiedInFunction(const ExplodedNode *CallEnterN,
                                      const ExplodedNode *CallExitEndN) {
     return false;
