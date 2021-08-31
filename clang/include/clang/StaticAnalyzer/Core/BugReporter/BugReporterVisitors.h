@@ -676,9 +676,9 @@ protected:
   }
 
   /// \return Whether the state was modified in the inlined function call in
-  /// between \p CallEnterN and \p CallExitBeginN. Mind that the stack frame
+  /// between \p CallEnterN and \p CallExitEndN. Mind that the stack frame
   /// retrieved from a CallEnter is the *caller's* stack frame! The inlined
-  /// function's stack should be retrieved from \p CallExitBeginN.
+  /// function's stack should be retrieved from \p CallExitEndN.
   /// Clients should override this function if a state changes local to the
   /// inlined function are not interesting, only the change occuring as a
   /// result of it.
