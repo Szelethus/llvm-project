@@ -137,7 +137,7 @@ public:
 };
 
 void addNonThoroughStatefulChecker(AnalysisASTConsumer &AnalysisConsumer,
-                        AnalyzerOptions &AnOpts) {
+                                   AnalyzerOptions &AnOpts) {
   AnOpts.CheckersAndPackages = {{"test.StatefulChecker", true}};
   AnalysisConsumer.AddCheckerRegistrationFn([](CheckerRegistry &Registry) {
     Registry
@@ -224,19 +224,18 @@ class ThoroughErrorNotPreventedFuncVisitor
 public:
   virtual bool
   wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
-                                         const ExplodedNode *CallExitBeginN) override {
+                            const ExplodedNode *CallExitBeginN) override {
     return CurrN->getState()->get<ErrorPrevented>() !=
            CallExitBeginN->getState()->get<ErrorPrevented>();
   }
 };
 
 void addThoroughStatefulChecker(AnalysisASTConsumer &AnalysisConsumer,
-                        AnalyzerOptions &AnOpts) {
+                                AnalyzerOptions &AnOpts) {
   AnOpts.CheckersAndPackages = {{"test.StatefulChecker", true}};
   AnalysisConsumer.AddCheckerRegistrationFn([](CheckerRegistry &Registry) {
-    Registry
-        .addChecker<StatefulChecker<ThoroughErrorNotPreventedFuncVisitor>>(
-            "test.StatefulChecker", "Description", "");
+    Registry.addChecker<StatefulChecker<ThoroughErrorNotPreventedFuncVisitor>>(
+        "test.StatefulChecker", "Description", "");
   });
 }
 
@@ -277,8 +276,7 @@ TEST(NoStateChangeFuncVisitor, ThoroughFunctionAnalysis) {
       error();
     }
   )", Diags));
-  EXPECT_EQ(Diags,
-            "test.StatefulChecker: error() called\n");
+  EXPECT_EQ(Diags, "test.StatefulChecker: error() called\n");
 
   Diags.clear();
 
