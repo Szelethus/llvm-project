@@ -1,4 +1,4 @@
-//===- unittests/StaticAnalyzer/RegisterCustomCheckersTest.cpp ------------===//
+//===- unittests/StaticAnalyzer/NoStateChangeFuncVisitorTest.cpp ----------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -12,14 +12,12 @@
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/CommonBugCategories.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
-#include "clang/StaticAnalyzer/Core/CheckerRegistryData.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/AnalysisManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExplodedGraph.h"
 #include "clang/StaticAnalyzer/Frontend/AnalysisConsumer.h"
 #include "clang/StaticAnalyzer/Frontend/CheckerRegistry.h"
-#include "clang/Tooling/Tooling.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include "gtest/gtest.h"
@@ -33,7 +31,7 @@ namespace {
 //
 //===----------------------------------------------------------------------===//
 
-class CustomChecker : public Checker<check::PreCall> {
+class StatefulChecker : public Checker<check::PreCall> {
   mutable std::unique_ptr<BugType> BT;
 
 public:
@@ -52,17 +50,18 @@ public:
   }
 };
 
-void addCustomChecker(AnalysisASTConsumer &AnalysisConsumer,
-                      AnalyzerOptions &AnOpts) {
-  AnOpts.CheckersAndPackages = {{"test.CustomChecker", true}};
+void addStatefulChecker(AnalysisASTConsumer &AnalysisConsumer,
+                        AnalyzerOptions &AnOpts) {
+  AnOpts.CheckersAndPackages = {{"test.StatefulChecker", true}};
   AnalysisConsumer.AddCheckerRegistrationFn([](CheckerRegistry &Registry) {
-    Registry.addChecker<CustomChecker>("test.CustomChecker", "Description", "");
+    Registry.addChecker<StatefulChecker>("test.StatefulChecker", "Description",
+                                         "");
   });
 }
 
 TEST(NoStateChangeFuncVisitor, ThoroughFunctionAnalysis) {
   std::string Diags;
-  EXPECT_TRUE(runCheckerOnCode<addCustomChecker>(R"(
+  EXPECT_TRUE(runCheckerOnCode<addStatefulChecker>(R"(
     void g(int &i) {
       i = 5;
       i = 0;
@@ -74,8 +73,8 @@ TEST(NoStateChangeFuncVisitor, ThoroughFunctionAnalysis) {
       error(i);
     }
   )",
-                                                 Diags));
-  EXPECT_EQ(Diags, "test.CustomChecker: error() called\n");
+                                                   Diags));
+  EXPECT_EQ(Diags, "test.StatefulChecker: error() called\n");
 }
 
 } // namespace
