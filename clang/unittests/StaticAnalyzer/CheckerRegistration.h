@@ -30,8 +30,13 @@ public:
     for (const auto *PD : Diags) {
       Output << PD->getCheckerName() << ": ";
       for (PathDiagnosticPieceRef Piece : PD->path) {
-        if (Piece->getKind() == PathDiagnosticPiece::Event)
+        if (Piece->getKind() != PathDiagnosticPiece::Event)
           continue;
+        if (Piece->getString().empty())
+          continue;
+        // The last event is usually the same as the warning message, skip.
+        if (Piece->getString() == PD->getShortDescription())
+          break;
         Output << Piece->getString() << " | ";
       }
       Output << PD->getShortDescription() << '\n';
