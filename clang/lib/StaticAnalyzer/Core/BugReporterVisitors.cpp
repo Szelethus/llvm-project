@@ -357,7 +357,7 @@ bool NoStateChangeFuncVisitor::isModifiedInFrame(const ExplodedNode *N) {
 
 void NoStateChangeFuncVisitor::markFrameAsModifying(
     const StackFrameContext *SCtx) {
-  while (!SCtx->inTopFrame()) {
+  while (SCtx) {
     auto p = FramesModifying.insert(SCtx);
     if (!p.second)
       break; // Frame and all its parents already inserted.
@@ -373,8 +373,11 @@ static const ExplodedNode *getMatchingCallExitEnd(const ExplodedNode *N) {
 
   // Similarly, the nodes preceding CallExitEnd refer to the callee's stack
   // frame.
-  while (N && !N->getLocationAs<CallExitEnd>() &&
-         OrigSCtx == N->getFirstPred()->getStackFrame()) {
+  auto IsMatchingCallExitEnd = [OrigSCtx](const ExplodedNode *N) {
+    return N->getLocationAs<CallExitEnd>() &&
+           OrigSCtx == N->getFirstPred()->getStackFrame();
+  };
+  while (N && !IsMatchingCallExitEnd(N)) {
     assert(N->succ_size() == 1 &&
            "This function is to be used on the trimmed ExplodedGraph!");
     N = N->getFirstSucc();

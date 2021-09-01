@@ -801,7 +801,6 @@ protected:
     OwnerSet CurrOwners = getOwnersAtNode(CurrN);
     OwnerSet ExitOwners = getOwnersAtNode(CallExitEndN);
 
-    llvm::errs() << "returning " << !llvm::set_is_subset(ExitOwners, CurrOwners) << '\n';
     // Owners in the current set may be purged from the analyzer later on.
     // If a variable is dead (is not referenced directly or indirectly after
     // some point), it will be removed from the Store before the end of its
