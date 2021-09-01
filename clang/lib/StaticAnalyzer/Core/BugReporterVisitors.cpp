@@ -378,7 +378,7 @@ static const ExplodedNode *getMatchingCallExitEnd(const ExplodedNode *N) {
            OrigSCtx == N->getFirstPred()->getStackFrame();
   };
   while (N && !IsMatchingCallExitEnd(N)) {
-    assert(N->succ_size() == 1 &&
+    assert(N->succ_size() <= 1 &&
            "This function is to be used on the trimmed ExplodedGraph!");
     N = N->getFirstSucc();
   }
