@@ -26,7 +26,16 @@
 #include <memory>
 
 //===----------------------------------------------------------------------===//
+// Base classes for testing NoStateChangeFuncVisitor.
 //
+// Testing is done by observing a very simple trait change from one node to
+// another -- the checker sets the ErrorPrevented trait to true if
+// 'preventError()' is called in the source code, and sets it to false if
+// 'allowError()' is called. If this trait is false when 'error()' is called,
+// a warning is emitted.
+//
+// The checker then registers a simple NoStateChangeFuncVisitor to add notes to
+// inlined functions that could have, but neglected to prevent the error.
 //===----------------------------------------------------------------------===//
 
 REGISTER_TRAIT_WITH_PROGRAMSTATE(ErrorPrevented, bool)
@@ -39,13 +48,6 @@ class ErrorNotPreventedFuncVisitor : public NoStateChangeFuncVisitor {
 public:
   ErrorNotPreventedFuncVisitor()
       : NoStateChangeFuncVisitor(bugreporter::TrackingKind::Thorough) {}
-
-  virtual bool
-  wasModifiedInFunction(const ExplodedNode *CallEnterN,
-                        const ExplodedNode *CallExitEndN) override {
-    return CallEnterN->getState()->get<ErrorPrevented>() !=
-           CallExitEndN->getState()->get<ErrorPrevented>();
-  }
 
   virtual PathDiagnosticPieceRef
   maybeEmitNoteForObjCSelf(PathSensitiveBugReport &R,
@@ -77,6 +79,7 @@ public:
   }
 };
 
+template <class Visitor>
 class StatefulChecker : public Checker<check::PreCall> {
   mutable std::unique_ptr<BugType> BT;
 
@@ -93,6 +96,8 @@ public:
     }
 
     if (Call.isCalled(CallDescription{"error", 0})) {
+      if (C.getState()->get<ErrorPrevented>())
+        return;
       const ExplodedNode *N = C.generateErrorNode();
       if (!N)
         return;
@@ -101,24 +106,49 @@ public:
                              categories::SecurityError));
       auto R =
           std::make_unique<PathSensitiveBugReport>(*BT, "error() called", N);
-      R->addVisitor<ErrorNotPreventedFuncVisitor>();
+      R->addVisitor<Visitor>();
       C.emitReport(std::move(R));
     }
   }
 };
 
-void addStatefulChecker(AnalysisASTConsumer &AnalysisConsumer,
+} // namespace
+} // namespace ento
+} // namespace clang
+
+//===----------------------------------------------------------------------===//
+// Non-thorough analysis: only the state right before and right after the
+// function call is checked for the difference in trait value.
+//===----------------------------------------------------------------------===//
+
+namespace clang {
+namespace ento {
+namespace {
+
+class NonThoroughErrorNotPreventedFuncVisitor
+    : public ErrorNotPreventedFuncVisitor {
+public:
+  virtual bool
+  wasModifiedInFunction(const ExplodedNode *CallEnterN,
+                        const ExplodedNode *CallExitEndN) override {
+    return CallEnterN->getState()->get<ErrorPrevented>() !=
+           CallExitEndN->getState()->get<ErrorPrevented>();
+  }
+};
+
+void addNonThoroughStatefulChecker(AnalysisASTConsumer &AnalysisConsumer,
                         AnalyzerOptions &AnOpts) {
   AnOpts.CheckersAndPackages = {{"test.StatefulChecker", true}};
   AnalysisConsumer.AddCheckerRegistrationFn([](CheckerRegistry &Registry) {
-    Registry.addChecker<StatefulChecker>("test.StatefulChecker", "Description",
-                                         "");
+    Registry
+        .addChecker<StatefulChecker<NonThoroughErrorNotPreventedFuncVisitor>>(
+            "test.StatefulChecker", "Description", "");
   });
 }
 
-TEST(NoStateChangeFuncVisitor, ThoroughFunctionAnalysis) {
+TEST(NoStateChangeFuncVisitor, NonThoroughFunctionAnalysis) {
   std::string Diags;
-  EXPECT_TRUE(runCheckerOnCode<addStatefulChecker>(R"(
+  EXPECT_TRUE(runCheckerOnCode<addNonThoroughStatefulChecker>(R"(
     void error();
     void preventError();
     void allowError();
@@ -131,9 +161,142 @@ TEST(NoStateChangeFuncVisitor, ThoroughFunctionAnalysis) {
       g();
       error();
     }
-  )",
-                                                   Diags));
-  EXPECT_EQ(Diags, "test.StatefulChecker: error() called\n");
+  )", Diags));
+  EXPECT_EQ(Diags,
+            "test.StatefulChecker: Calling 'g' | Returning without prevening "
+            "the error | Returning from 'g' | error() called\n");
+
+  Diags.clear();
+
+  EXPECT_TRUE(runCheckerOnCode<addNonThoroughStatefulChecker>(R"(
+    void error();
+    void preventError();
+    void allowError();
+
+    void g() {
+      preventError();
+      allowError();
+    }
+
+    void f() {
+      g();
+      error();
+    }
+  )", Diags));
+  EXPECT_EQ(Diags,
+            "test.StatefulChecker: Calling 'g' | Returning without prevening "
+            "the error | Returning from 'g' | error() called\n");
+
+  Diags.clear();
+
+  EXPECT_TRUE(runCheckerOnCode<addNonThoroughStatefulChecker>(R"(
+    void error();
+    void preventError();
+    void allowError();
+
+    void g() {
+      preventError();
+    }
+
+    void f() {
+      g();
+      error();
+    }
+  )", Diags));
+  EXPECT_EQ(Diags, "");
+}
+
+} // namespace
+} // namespace ento
+} // namespace clang
+
+//===----------------------------------------------------------------------===//
+// Thorough analysis: only the state right before and right after the
+// function call is checked for the difference in trait value.
+//===----------------------------------------------------------------------===//
+
+namespace clang {
+namespace ento {
+namespace {
+
+class ThoroughErrorNotPreventedFuncVisitor
+    : public ErrorNotPreventedFuncVisitor {
+public:
+  virtual bool
+  wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
+                                         const ExplodedNode *CallExitBeginN) override {
+    return CurrN->getState()->get<ErrorPrevented>() !=
+           CallExitBeginN->getState()->get<ErrorPrevented>();
+  }
+};
+
+void addThoroughStatefulChecker(AnalysisASTConsumer &AnalysisConsumer,
+                        AnalyzerOptions &AnOpts) {
+  AnOpts.CheckersAndPackages = {{"test.StatefulChecker", true}};
+  AnalysisConsumer.AddCheckerRegistrationFn([](CheckerRegistry &Registry) {
+    Registry
+        .addChecker<StatefulChecker<ThoroughErrorNotPreventedFuncVisitor>>(
+            "test.StatefulChecker", "Description", "");
+  });
+}
+
+TEST(NoStateChangeFuncVisitor, ThoroughFunctionAnalysis) {
+  std::string Diags;
+  EXPECT_TRUE(runCheckerOnCode<addThoroughStatefulChecker>(R"(
+    void error();
+    void preventError();
+    void allowError();
+
+    void g() {
+      //preventError();
+    }
+
+    void f() {
+      g();
+      error();
+    }
+  )", Diags));
+  EXPECT_EQ(Diags,
+            "test.StatefulChecker: Calling 'g' | Returning without prevening "
+            "the error | Returning from 'g' | error() called\n");
+
+  Diags.clear();
+
+  EXPECT_TRUE(runCheckerOnCode<addThoroughStatefulChecker>(R"(
+    void error();
+    void preventError();
+    void allowError();
+
+    void g() {
+      preventError();
+      allowError();
+    }
+
+    void f() {
+      g();
+      error();
+    }
+  )", Diags));
+  EXPECT_EQ(Diags,
+            "test.StatefulChecker: error() called\n");
+
+  Diags.clear();
+
+  EXPECT_TRUE(runCheckerOnCode<addThoroughStatefulChecker>(R"(
+    void error();
+    void preventError();
+    void allowError();
+
+    void g() {
+      preventError();
+    }
+
+    void f() {
+      g();
+      error();
+    }
+  )", Diags));
+  EXPECT_EQ(Diags, "");
 }
 
 } // namespace

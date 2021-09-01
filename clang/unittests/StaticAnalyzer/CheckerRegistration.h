@@ -29,14 +29,17 @@ public:
                             FilesMade *filesMade) override {
     for (const auto *PD : Diags) {
       Output << PD->getCheckerName() << ": ";
-      for (PathDiagnosticPieceRef Piece : PD->path) {
+
+      for (PathDiagnosticPieceRef Piece :
+           PD->path.flatten(/*ShouldFlattenMacros*/ true)) {
         if (Piece->getKind() != PathDiagnosticPiece::Event)
           continue;
         if (Piece->getString().empty())
           continue;
         // The last event is usually the same as the warning message, skip.
         if (Piece->getString() == PD->getShortDescription())
-          break;
+          continue;
+
         Output << Piece->getString() << " | ";
       }
       Output << PD->getShortDescription() << '\n';
