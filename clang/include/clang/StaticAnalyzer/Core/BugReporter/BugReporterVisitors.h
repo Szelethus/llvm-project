@@ -666,7 +666,7 @@ protected:
   bugreporter::TrackingKind TKind;
 
   /// \return Whether the state was modified from the current node, \p CurrN, to
-  /// the end of the stack fram, at \p CallExitBeginN. \p CurrN and
+  /// the end of the stack frame, at \p CallExitBeginN. \p CurrN and
   /// \p CallExitBeginN are always in the same stack frame.
   /// Clients should override this callback when a state change is important
   /// not only on the entire function call, but inside of it as well.
