@@ -669,9 +669,8 @@ protected:
   /// on a particular mutex, but not if inside the function its state was
   /// changed, but also restored. wasModifiedInFunction() wouldn't know of this
   /// change.
-  virtual bool
-  wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
-                            const ExplodedNode *CallExitBeginN) {
+  virtual bool wasModifiedBeforeCallExit(const ExplodedNode *CurrN,
+                                         const ExplodedNode *CallExitBeginN) {
     return false;
   }
 

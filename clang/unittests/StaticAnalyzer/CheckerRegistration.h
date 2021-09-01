@@ -28,7 +28,7 @@ public:
   void FlushDiagnosticsImpl(std::vector<const PathDiagnostic *> &Diags,
                             FilesMade *filesMade) override {
     for (const auto *PD : Diags) {
-      Output <<  PD->getCheckerName() << ": ";
+      Output << PD->getCheckerName() << ": ";
       for (PathDiagnosticPieceRef Piece : PD->path) {
         if (Piece->getKind() == PathDiagnosticPiece::Event)
           continue;

@@ -287,13 +287,15 @@ TEST(RegisterDeps, SimpleWeakDependency) {
   // Weak dependencies dont prevent dependent checkers from being enabled.
   EXPECT_TRUE(runCheckerOnCode<addWeakDepCheckerDepDisabled>(
       "void f() {int i;}", Diags));
-  EXPECT_EQ(Diags, "test.RegistrationOrder: test.Dep\ntest.RegistrationOrder\n");
+  EXPECT_EQ(Diags,
+            "test.RegistrationOrder: test.Dep\ntest.RegistrationOrder\n");
   Diags.clear();
 
   // Nor will they be enabled just because a dependent checker is.
   EXPECT_TRUE(runCheckerOnCode<addWeakDepCheckerDepUnspecified>(
       "void f() {int i;}", Diags));
-  EXPECT_EQ(Diags, "test.RegistrationOrder: test.Dep\ntest.RegistrationOrder\n");
+  EXPECT_EQ(Diags,
+            "test.RegistrationOrder: test.Dep\ntest.RegistrationOrder\n");
   Diags.clear();
 
   EXPECT_TRUE(
@@ -439,14 +441,16 @@ TEST(RegisterDeps, DependencyInteraction) {
   // but it shouldn't enable a strong unspecified dependency.
   EXPECT_TRUE(runCheckerOnCode<addDisabledWeakDepHasUnspecifiedStrongDep>(
       "void f() {int i;}", Diags));
-  EXPECT_EQ(Diags, "test.RegistrationOrder: test.Dep\ntest.RegistrationOrder\n");
+  EXPECT_EQ(Diags,
+            "test.RegistrationOrder: test.Dep\ntest.RegistrationOrder\n");
   Diags.clear();
 
   // A strong dependency of a weak dependency is disabled, so neither of them
   // should be enabled.
   EXPECT_TRUE(runCheckerOnCode<addWeakDepHasDisabledStrongDep>(
       "void f() {int i;}", Diags));
-  EXPECT_EQ(Diags, "test.RegistrationOrder: test.Dep\ntest.RegistrationOrder\n");
+  EXPECT_EQ(Diags,
+            "test.RegistrationOrder: test.Dep\ntest.RegistrationOrder\n");
   Diags.clear();
 
   EXPECT_TRUE(
