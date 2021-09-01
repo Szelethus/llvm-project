@@ -74,7 +74,7 @@ TEST(NoStateChangeFuncVisitor, ThoroughFunctionAnalysis) {
       error(i);
     }
   )", Diags));
-  EXPECT_EQ(Diags, "test.CustomChecker:error() called\n");
+  EXPECT_EQ(Diags, "test.CustomChecker: error() called\n");
 }
 
 } // namespace
