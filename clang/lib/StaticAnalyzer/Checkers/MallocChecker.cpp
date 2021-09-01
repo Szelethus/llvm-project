@@ -792,13 +792,13 @@ protected:
   }
 
   virtual bool
-  wasModifiedInFunction(const ExplodedNode *CurrN,
+  wasModifiedInFunction(const ExplodedNode *CallEnterN,
                         const ExplodedNode *CallExitEndN) override {
-    if (CurrN->getState()->get<RegionState>(Sym) !=
+    if (CallEnterN->getState()->get<RegionState>(Sym) !=
         CallExitEndN->getState()->get<RegionState>(Sym))
       return true;
 
-    OwnerSet CurrOwners = getOwnersAtNode(CurrN);
+    OwnerSet CurrOwners = getOwnersAtNode(CallEnterN);
     OwnerSet ExitOwners = getOwnersAtNode(CallExitEndN);
 
     // Owners in the current set may be purged from the analyzer later on.
