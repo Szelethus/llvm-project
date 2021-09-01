@@ -393,18 +393,17 @@ void NoStateChangeFuncVisitor::findModifyingFrames(
   const StackFrameContext *const OriginalSCtx =
       CallExitBeginN->getLocationContext()->getStackFrame();
 
-  const ExplodedNode *CurrN = CallExitBeginN;
   const ExplodedNode *CurrCallExitBeginN = CallExitBeginN;
   const StackFrameContext *CurrentSCtx = OriginalSCtx;
 
-  while (CurrN) {
+  for (const ExplodedNode *CurrN = CallExitBeginN; CurrN;
+       CurrN = CurrN->getFirstPred()) {
     // Found a new inlined call.
     if (CurrN->getLocationAs<CallExitBegin>()) {
       CurrCallExitBeginN = CurrN;
       CurrentSCtx = CurrN->getStackFrame();
       FramesModifyingCalculated.insert(CurrentSCtx);
       // We won't see a change in between two identical exploded nodes: skip.
-      CurrN = CurrN->getFirstPred();
       continue;
     }
 
@@ -430,8 +429,6 @@ void NoStateChangeFuncVisitor::findModifyingFrames(
 
     if (wasModifiedBeforeCallExit(CurrN, CurrCallExitBeginN))
       markFrameAsModifying(CurrentSCtx);
-
-    CurrN = CurrN->getFirstPred();
   }
 }
 

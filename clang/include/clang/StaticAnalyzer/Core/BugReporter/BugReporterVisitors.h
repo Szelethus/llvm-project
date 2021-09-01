@@ -646,6 +646,8 @@ private:
   /// many times (going up the path for each node and checking whether the
   /// region was written into) we instead lazily compute the stack frames
   /// along the path.
+  // TODO: Can't we just use a map instead? This is likely not as cheap as it
+  // makes the code difficult to read.
   llvm::SmallPtrSet<const StackFrameContext *, 32> FramesModifying;
   llvm::SmallPtrSet<const StackFrameContext *, 32> FramesModifyingCalculated;
 
