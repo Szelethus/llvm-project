@@ -633,6 +633,9 @@ class CXXConstructorCall;
 /// Descendants can define what a "state change is", like a change of value
 /// to a memory region, liveness, etc. For function calls where the state did
 /// not change as defined, a custom note may be constructed.
+///
+/// For a minimal example, check out
+/// clang/unittests/StaticAnalyzer/NoStateChangeFuncVisitorTest.cpp.
 class NoStateChangeFuncVisitor : public BugReporterVisitor {
 private:
   /// Frames modifying the state as defined in \c wasModifiedBeforeCallExit.
@@ -728,7 +731,6 @@ public:
 };
 
 } // namespace ento
-
 } // namespace clang
 
 #endif // LLVM_CLANG_STATICANALYZER_CORE_BUGREPORTER_BUGREPORTERVISITORS_H

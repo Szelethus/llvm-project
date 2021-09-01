@@ -365,9 +365,20 @@ void NoStateChangeFuncVisitor::markFrameAsModifying(
   }
 }
 
-static const ExplodedNode *getCallExitEnd(const ExplodedNode *N) {
-  while (N && !N->getLocationAs<CallExitEnd>())
+static const ExplodedNode *getMatchingCallExitEnd(const ExplodedNode *N) {
+  assert(N->getLocationAs<CallEnter>());
+  // The stackframe of the callee is only found in the nodes succeeding
+  // the CallEnter node. CallEnter's stack frame refers to the caller.
+  const StackFrameContext *OrigSCtx = N->getFirstSucc()->getStackFrame();
+
+  // Similarly, the nodes preceding CallExitEnd refer to the callee's stack
+  // frame.
+  while (N && !N->getLocationAs<CallExitEnd>() &&
+         OrigSCtx == N->getFirstPred()->getStackFrame()) {
+    assert(N->succ_size() == 1 &&
+           "This function is to be used on the trimmed ExplodedGraph!");
     N = N->getFirstSucc();
+  }
   return N;
 }
 
@@ -395,7 +406,7 @@ void NoStateChangeFuncVisitor::findModifyingFrames(
     }
 
     if (auto CE = CurrN->getLocationAs<CallEnter>()) {
-      if (const ExplodedNode *CallExitEndN = getCallExitEnd(CurrCallExitBeginN))
+      if (const ExplodedNode *CallExitEndN = getMatchingCallExitEnd(CurrN))
         if (wasModifiedInFunction(CurrN, CallExitEndN))
           markFrameAsModifying(CurrentSCtx);
 
