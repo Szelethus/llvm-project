@@ -20,7 +20,7 @@
 
 bool coin();
 
-// TODO: AST analysis of sink would reveal that it doesn't indent to free the
+// TODO: AST analysis of sink would reveal that it doesn't intent to free the
 // allocated memory, but in this instance, its also the only function with
 // the ability to do so, we should see a note here.
 namespace memory_allocated_in_fn_call {
