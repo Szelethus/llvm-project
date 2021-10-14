@@ -1428,6 +1428,7 @@ public:
   void viewCFG(const LangOptions &LO) const;
   void print(raw_ostream &OS, const LangOptions &LO, bool ShowColors) const;
   void dump(const LangOptions &LO, bool ShowColors) const;
+  void dump(bool ShowColors = true) const;
 
   //===--------------------------------------------------------------------===//
   // Internal: constructors and data.
