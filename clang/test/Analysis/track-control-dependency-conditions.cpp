@@ -1000,3 +1000,25 @@ void f(int *x) {
 }
 
 } // end of namespace only_track_the_evaluated_condition
+
+namespace operator_call_in_condition_point {
+
+} // namespace operator_call_in_condition_point
+
+namespace funcion_call_in_condition_point {
+
+int alwaysTrue() {
+  return true; // tracking-note {{Returning the value 1, which participates in a condition later}}
+}
+
+void f(int *x) {
+  x = nullptr; // expected-note {{Null pointer value stored to 'x'}}
+  if (alwaysTrue()) // tracking-note {{Calling 'alwaysTrue'}}
+                    // tracking-note@-1 {{Returning from 'alwaysTrue'}}
+                    // expected-note@-2 {{Taking true branch}}
+                    // debug-note@-3 {{Tracking condition 'alwaysTrue()'}}
+    *x = 5; // expected-warning {{Dereference of null pointer (loaded from variable 'x') [core.NullDereference]}}
+            // expected-note@-1 {{Dereference}}
+}
+
+} // namespace funcion_call_in_condition_point
