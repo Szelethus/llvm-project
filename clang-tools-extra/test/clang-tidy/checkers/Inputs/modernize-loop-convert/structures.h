@@ -58,7 +58,7 @@ struct Q {
   struct iterator {
     value_type &operator*();
     const value_type &operator*() const;
-    iterator& operator ++();
+    iterator &operator++();
     bool operator!=(const iterator &other);
     void insert(value_type);
     value_type X;
