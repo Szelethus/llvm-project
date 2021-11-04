@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "LoopConvertUtils.h"
+#include "clang/AST/Expr.h"
+#include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "clang/Basic/LLVM.h"
 #include "clang/Basic/Lambda.h"
@@ -165,7 +167,7 @@ bool DeclFinderASTVisitor::VisitTypeLoc(TypeLoc TL) {
 ///   vector<int>::iterator it;
 ///   vector<int>::iterator it(v.begin(), 0); // if this constructor existed
 /// as being initialized from `v.begin()`
-const Expr *digThroughConstructors(const Expr *E) {
+const Expr *digThroughConstructorsConversions(const Expr *E) {
   if (!E)
     return nullptr;
   E = E->IgnoreImplicit();
@@ -178,7 +180,19 @@ const Expr *digThroughConstructors(const Expr *E) {
     E = ConstructExpr->getArg(0);
     if (const auto *Temp = dyn_cast<MaterializeTemporaryExpr>(E))
       E = Temp->getSubExpr();
-    return digThroughConstructors(E);
+    return digThroughConstructorsConversions(E);
+  }
+  // If this is a CXXConversionDecl (as iterators commonly convert into their
+  // const iterator counterparts), dig through.
+  if (const auto *ME = dyn_cast<CXXMemberCallExpr>(E)) {
+    if (const auto *D = dyn_cast<CXXConversionDecl>(ME->getMemberDecl())) {
+      llvm::errs() << "==============\n";
+      ME->dump();
+      llvm::errs() << "--------------\n";
+      ME->getExprStmt()->dump();
+      llvm::errs() << "==============\n";
+      return digThroughConstructorsConversions(ME->getExprStmt());
+    }
   }
   return E;
 }
@@ -357,7 +371,7 @@ static bool isAliasDecl(ASTContext *Context, const Decl *TheDecl,
   bool OnlyCasts = true;
   const Expr *Init = VDecl->getInit()->IgnoreParenImpCasts();
   if (isa_and_nonnull<CXXConstructExpr>(Init)) {
-    Init = digThroughConstructors(Init);
+    Init = digThroughConstructorsConversions(Init);
     OnlyCasts = false;
   }
   if (!Init)

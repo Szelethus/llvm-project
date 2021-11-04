@@ -305,15 +305,16 @@ static const Expr *getContainerFromBeginEndCall(const Expr *Init, bool IsBegin,
                                                 bool *IsArrow, bool IsReverse) {
   // FIXME: Maybe allow declaration/initialization outside of the for loop.
   const auto *TheCall =
-      dyn_cast_or_null<CXXMemberCallExpr>(digThroughConstructors(Init));
+      dyn_cast_or_null<CXXMemberCallExpr>(digThroughConstructorsConversions(Init));
   if (!TheCall || TheCall->getNumArgs() != 0)
     return nullptr;
 
   const auto *Member = dyn_cast<MemberExpr>(TheCall->getCallee());
   if (!Member)
     return nullptr;
-  if (!Member->getMemberDecl()->getIdentifier())
-    return nullptr;
+  Member->dump();
+  //if (!Member->getMemberDecl()->getIdentifier())
+  //  return nullptr;
 
   StringRef Name = Member->getMemberDecl()->getName();
   if (!Name.consume_back(IsBegin ? "begin" : "end"))
