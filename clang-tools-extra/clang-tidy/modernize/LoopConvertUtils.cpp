@@ -185,13 +185,13 @@ const Expr *digThroughConstructorsConversions(const Expr *E) {
   // If this is a CXXConversionDecl (as iterators commonly convert into their
   // const iterator counterparts), dig through.
   if (const auto *ME = dyn_cast<CXXMemberCallExpr>(E)) {
-    if (const auto *D = dyn_cast<CXXConversionDecl>(ME->getMemberDecl())) {
+    if (const auto *D = dyn_cast<CXXConversionDecl>(ME->getMethodDecl())) {
       llvm::errs() << "==============\n";
       ME->dump();
       llvm::errs() << "--------------\n";
-      ME->getExprStmt()->dump();
+      ME->getCallee()->dump();
       llvm::errs() << "==============\n";
-      return digThroughConstructorsConversions(ME->getExprStmt());
+      return digThroughConstructorsConversions(ME->getCallee());
     }
   }
   return E;
