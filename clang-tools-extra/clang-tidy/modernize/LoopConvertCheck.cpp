@@ -312,10 +312,6 @@ static const Expr *getContainerFromBeginEndCall(const Expr *Init, bool IsBegin,
   const auto *Member = dyn_cast<MemberExpr>(TheCall->getCallee());
   if (!Member)
     return nullptr;
-  Member->dump();
-  //if (!Member->getMemberDecl()->getIdentifier())
-  //  return nullptr;
-
   StringRef Name = Member->getMemberDecl()->getName();
   if (!Name.consume_back(IsBegin ? "begin" : "end"))
     return nullptr;

@@ -154,7 +154,7 @@ bool DeclFinderASTVisitor::VisitTypeLoc(TypeLoc TL) {
   return true;
 }
 
-/// Look through conversion/copy constructors to find the explicit
+/// Look through conversion/copy constructors and operators to find the explicit
 /// initialization expression, returning it is found.
 ///
 /// The main idea is that given
@@ -171,6 +171,7 @@ const Expr *digThroughConstructorsConversions(const Expr *E) {
   if (!E)
     return nullptr;
   E = E->IgnoreImplicit();
+  E->dump();
   if (const auto *ConstructExpr = dyn_cast<CXXConstructExpr>(E)) {
     // The initial constructor must take exactly one parameter, but base class
     // and deferred constructors can take more.
@@ -182,18 +183,11 @@ const Expr *digThroughConstructorsConversions(const Expr *E) {
       E = Temp->getSubExpr();
     return digThroughConstructorsConversions(E);
   }
-  // If this is a CXXConversionDecl (as iterators commonly convert into their
-  // const iterator counterparts), dig through.
-  if (const auto *ME = dyn_cast<CXXMemberCallExpr>(E)) {
-    if (const auto *D = dyn_cast<CXXConversionDecl>(ME->getMethodDecl())) {
-      llvm::errs() << "==============\n";
-      ME->dump();
-      llvm::errs() << "--------------\n";
-      ME->getCallee()->dump();
-      llvm::errs() << "==============\n";
-      return digThroughConstructorsConversions(ME->getCallee());
-    }
-  }
+  // If this is a conversion (as iterators commonly convert into their const
+  // iterator counterparts), dig through that as well.
+  if (const auto *ME = dyn_cast<CXXMemberCallExpr>(E))
+    if (const auto *D = dyn_cast<CXXConversionDecl>(ME->getMethodDecl()))
+      return digThroughConstructorsConversions(ME->getImplicitObjectArgument());
   return E;
 }
 
