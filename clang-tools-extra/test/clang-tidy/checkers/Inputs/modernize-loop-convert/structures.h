@@ -68,8 +68,6 @@ struct Q {
   };
   converting_iterator begin();
   converting_iterator end();
-  converting_iterator one_point();
-  converting_iterator other_point();
 };
 
 struct U {

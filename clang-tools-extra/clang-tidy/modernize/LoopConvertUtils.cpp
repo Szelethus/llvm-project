@@ -171,7 +171,6 @@ const Expr *digThroughConstructorsConversions(const Expr *E) {
   if (!E)
     return nullptr;
   E = E->IgnoreImplicit();
-  E->dump();
   if (const auto *ConstructExpr = dyn_cast<CXXConstructExpr>(E)) {
     // The initial constructor must take exactly one parameter, but base class
     // and deferred constructors can take more.
