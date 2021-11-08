@@ -156,7 +156,7 @@ void test() {
             // expected-note@-1{{Dereference of null pointer}}
 }
 
-} // end of namespace variable_declaration_in_condition
+} // namespace conversion_to_bool
 
 namespace note_from_different_but_not_nested_stackframe {
 
