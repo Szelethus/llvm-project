@@ -55,19 +55,19 @@ struct T {
 
 struct Q {
   typedef int value_type;
-  struct iterator {
+  struct const_iterator {
     value_type &operator*();
     const value_type &operator*() const;
-    iterator &operator++();
-    bool operator!=(const iterator &other);
+    const_iterator &operator++();
+    bool operator!=(const const_iterator &other);
     void insert(value_type);
     value_type X;
   };
-  struct converting_iterator {
-    operator iterator() const;
+  struct iterator {
+    operator const_iterator() const;
   };
-  converting_iterator begin();
-  converting_iterator end();
+  iterator begin();
+  iterator end();
 };
 
 struct U {
