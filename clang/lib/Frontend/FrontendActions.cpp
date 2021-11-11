@@ -494,13 +494,12 @@ private:
       Policy.SuppressDefaultTemplateArgs = false;
       NamedTemplate->getNameForDiagnostic(OS, Policy, true);
       if (Entry.Name.empty()) {
-        cast<TypeDecl>(NamedTemplate)
-            ->getTypeForDecl()
-            ->getCanonicalTypeInternal()
-            .print(OS, Policy);
+        if (const auto *TD = dyn_cast<TypeDecl>(NamedTemplate))
+          TD->getTypeForDecl()->getCanonicalTypeInternal().print(OS, Policy);
       }
-      assert(!Entry.Name.empty() &&
-             "Failed to retrieve a name for this entry!");
+      //NamedTemplate->dump();
+      //assert(!Entry.Name.empty() &&
+      //       "Failed to retrieve a name for this entry!");
       const PresumedLoc DefLoc =
           TheSema.getSourceManager().getPresumedLoc(Inst.Entity->getLocation());
       if(!DefLoc.isInvalid())
