@@ -55,3 +55,6 @@ template <int = 0> void a() { a(); }
 // CHECK: {{^event:[ ]+End$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:20:31'$}}
+
+template <int> struct b { typedef int c; };
+template <bool d = true, class = typename b<d>::c> void a() { a(); }

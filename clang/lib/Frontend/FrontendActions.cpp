@@ -484,9 +484,7 @@ private:
 
   static void printEntryName(const Sema &TheSema, const Decl *Entity,
                              llvm::raw_string_ostream &OS) {
-    auto *NamedTemplate = dyn_cast_or_null<NamedDecl>(Entity);
-    if (!NamedTemplate)
-      return;
+    auto *NamedTemplate = cast<NamedDecl>(Entity);
 
     PrintingPolicy Policy = TheSema.Context.getPrintingPolicy();
     // FIXME: Also ask for FullyQualifiedNames?
@@ -550,7 +548,7 @@ private:
     //  return;
     //}
 
-    llvm_unreachable("Failed to retrieve a name for this entry!");
+    //llvm_unreachable("Failed to retrieve a name for this entry!");
   }
 
   template <bool BeginInstantiation>
