@@ -531,7 +531,7 @@ private:
     }
 
     if (const auto *Decl = dyn_cast<NonTypeTemplateParmDecl>(NamedTemplate)) {
-      OS << "template non-type parameter " << Decl->getIndex() << " ";
+      OS << "anonymous template non-type parameter " << Decl->getIndex() << " ";
       if (Decl->getDepth() > 0)
         OS << "(at depth " << Decl->getDepth() << ") ";
       OS << "of ";

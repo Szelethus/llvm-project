@@ -26,13 +26,13 @@ template <int = 0> void a() { a(); }
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:20:31'$}}
 // CHECK-LABEL: {{^---$}}
-// CHECK: {{^name:[ ]+template non-type parameter 0 of a$}}
+// CHECK: {{^name:[ ]+anonymous template non-type parameter 0 of a$}}
 // CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
 // CHECK: {{^event:[ ]+Begin$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:15'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
 // CHECK-LABEL: {{^---$}}
-// CHECK: {{^name:[ ]+template non-type parameter 0 of a$}}
+// CHECK: {{^name:[ ]+anonymous template non-type parameter 0 of a$}}
 // CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
 // CHECK: {{^event:[ ]+End$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:15'$}}
@@ -58,3 +58,112 @@ template <int = 0> void a() { a(); }
 
 template <int> struct b { typedef int c; };
 template <bool d = true, class = typename b<d>::c> void a() { a(); }
+
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+a$}}
+// CHECK: {{^kind:[ ]+DeducedTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:57'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:63'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+d$}}
+// CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:16'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:57'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+d$}}
+// CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:16'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:57'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+anonymous template type parameter 1 of a$}}
+// CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:32'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:57'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'b<1>'$}}
+// CHECK: {{^kind:[ ]+TemplateInstantiation$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:59:23'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:43'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'b<1>'$}}
+// CHECK: {{^kind:[ ]+TemplateInstantiation$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:59:23'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:43'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'b<1>'$}}
+// CHECK: {{^kind:[ ]+TemplateInstantiation$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:59:23'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:43'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'b<1>'$}}
+// CHECK: {{^kind:[ ]+TemplateInstantiation$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:59:23'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:43'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'b<1>'$}}
+// CHECK: {{^kind:[ ]+Memoization$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:59:23'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:43'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'b<1>'$}}
+// CHECK: {{^kind:[ ]+Memoization$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:59:23'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:43'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+anonymous template type parameter 1 of a$}}
+// CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:32'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:57'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+a$}}
+// CHECK: {{^kind:[ ]+DeducedTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:57'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:63'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'a<true, int>'$}}
+// CHECK: {{^kind:[ ]+TemplateInstantiation$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:57'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:63'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'a<true, int>'$}}
+// CHECK: {{^kind:[ ]+TemplateInstantiation$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:57'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:63'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+a$}}
+// CHECK: {{^kind:[ ]+DeducedTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:63'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+anonymous template non-type parameter 0 of a$}}
+// CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:15'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+anonymous template non-type parameter 0 of a$}}
+// CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:15'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+a$}}
+// CHECK: {{^kind:[ ]+DeducedTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:63'$}}
