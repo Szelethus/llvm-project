@@ -514,21 +514,21 @@ private:
     //  return;
     //}
 
-    //if (const auto *Decl = dyn_cast<TemplateTypeParmDecl>(NamedTemplate)) {
-    //  const Type *Ty = Decl->getTypeForDecl();
-    //  if (Ty) {
-    //    const TemplateTypeParmType *TTPT =
-    //        dyn_cast_or_null<TemplateTypeParmType>(Ty);
-    //    if (TTPT) {
-    //      OS << "template type parameter " << TTPT->getIndex() << " ";
-    //      if (TTPT->getDepth() > 0)
-    //        OS << "(at depth " << TTPT->getDepth() << ") ";
-    //      OS << "of ";
-    //      NamedCtx->getNameForDiagnostic(OS, TheSema.getLangOpts(), true);
-    //      return;
-    //    }
-    //  }
-    //}
+    if (const auto *Decl = dyn_cast<TemplateTypeParmDecl>(NamedTemplate)) {
+      const Type *Ty = Decl->getTypeForDecl();
+      if (Ty) {
+        const TemplateTypeParmType *TTPT =
+            dyn_cast_or_null<TemplateTypeParmType>(Ty);
+        if (TTPT) {
+          OS << "anonymous template type parameter " << TTPT->getIndex() << " ";
+          if (TTPT->getDepth() > 0)
+            OS << "(at depth " << TTPT->getDepth() << ") ";
+          OS << "of ";
+          NamedCtx->getNameForDiagnostic(OS, TheSema.getLangOpts(), true);
+          return;
+        }
+      }
+    }
 
     if (const auto *Decl = dyn_cast<NonTypeTemplateParmDecl>(NamedTemplate)) {
       OS << "template non-type parameter " << Decl->getIndex() << " ";
@@ -547,8 +547,8 @@ private:
     //  NamedCtx->getNameForDiagnostic(OS, TheSema.getLangOpts(), true);
     //  return;
     //}
-
-    //llvm_unreachable("Failed to retrieve a name for this entry!");
+    NamedTemplate->dump();
+    llvm_unreachable("Failed to retrieve a name for this entry!");
   }
 
   template <bool BeginInstantiation>
