@@ -273,14 +273,14 @@ void f() {
   // CHECK-FIXES: for (int & It : Tt)
   // CHECK-FIXES-NEXT: printf("I found %d\n", It);
 
-  // Do not crash because of Qt.begin() converting. Q::converting_iterator
+  // Do not crash because of Qq.begin() converting. Q::converting_iterator
   // converts with a conversion iterator, which has no name.
-  Q Qt;
-  for (Q::iterator It = Qt.begin(), E = Qt.end(); It != E; ++It) {
+  Q Qq;
+  for (Q::iterator It = Qq.begin(), E = Qq.end(); It != E; ++It) {
     printf("I found %d\n", *It);
   }
   // CHECK-MESSAGES: :[[@LINE-3]]:3: warning: use range-based for loop instead
-  // CHECK-FIXES: for (int & It : Qt)
+  // CHECK-FIXES: for (int & It : Qq)
   // CHECK-FIXES-NEXT: printf("I found %d\n", It);
 
   T *Pt;

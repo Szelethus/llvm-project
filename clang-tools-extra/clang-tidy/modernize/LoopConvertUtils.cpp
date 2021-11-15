@@ -154,14 +154,15 @@ bool DeclFinderASTVisitor::VisitTypeLoc(TypeLoc TL) {
   return true;
 }
 
-/// Look through conversion/copy constructors and operators to find the explicit
-/// initialization expression, returning it is found.
+/// Look through conversion/copy constructors and member functions to find the
+/// explicit initialization expression, returning it is found.
 ///
 /// The main idea is that given
 ///   vector<int> v;
 /// we consider either of these initializations
 ///   vector<int>::iterator it = v.begin();
 ///   vector<int>::iterator it(v.begin());
+///   vector<int>::const_iterator it(v.begin());
 /// and retrieve `v.begin()` as the expression used to initialize `it` but do
 /// not include
 ///   vector<int>::iterator it;
