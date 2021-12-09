@@ -547,8 +547,8 @@ private:
     //  NamedCtx->getNameForDiagnostic(OS, TheSema.getLangOpts(), true);
     //  return;
     //}
-    NamedTemplate->dump();
-    llvm_unreachable("Failed to retrieve a name for this entry!");
+    //NamedTemplate->dump();
+    //llvm_unreachable("Failed to retrieve a name for this entry!");
   }
 
   template <bool BeginInstantiation>
