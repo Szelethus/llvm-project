@@ -497,11 +497,15 @@ private:
     Decl *Ctx = Decl::castFromDeclContext(NamedTemplate->getDeclContext());
     NamedDecl *NamedCtx = dyn_cast_or_null<NamedDecl>(Ctx);
 
-    if (const auto *Decl = dyn_cast<CXXRecordDecl>(NamedTemplate)) {
-      if (Decl->isLambda()) {
-        OS << "lambda at ";
-        Decl->getLocation().print(OS, TheSema.getSourceManager());
+    if (const auto *Decl = dyn_cast<TagDecl>(NamedTemplate)) {
+      if (const auto *R = dyn_cast<RecordDecl>(Decl)) {
+        if (R->isLambda()) {
+          OS << "lambda at ";
+          Decl->getLocation().print(OS, TheSema.getSourceManager());
+          return;
+        }
       }
+      OS << "unnamed " << Decl->getKindName();
       return;
     }
 
@@ -547,8 +551,8 @@ private:
     //  NamedCtx->getNameForDiagnostic(OS, TheSema.getLangOpts(), true);
     //  return;
     //}
-    //NamedTemplate->dump();
-    //llvm_unreachable("Failed to retrieve a name for this entry!");
+    NamedTemplate->dump();
+    llvm_unreachable("Failed to retrieve a name for this entry!");
   }
 
   template <bool BeginInstantiation>
@@ -559,6 +563,7 @@ private:
     Entry.Event = BeginInstantiation ? "Begin" : "End";
     llvm::raw_string_ostream OS(Entry.Name);
     printEntryName(TheSema, Inst.Entity, OS);
+    assert(!OS.str().empty());
     const PresumedLoc DefLoc =
         TheSema.getSourceManager().getPresumedLoc(Inst.Entity->getLocation());
     if (!DefLoc.isInvalid())
