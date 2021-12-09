@@ -260,4 +260,3 @@ void e() {
 // CHECK: {{^event:[ ]+End$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:223:3'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:223:3'$}}
-

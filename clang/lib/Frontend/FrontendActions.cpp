@@ -9,8 +9,8 @@
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/Basic/FileManager.h"
-#include "clang/Basic/TargetInfo.h"
 #include "clang/Basic/LangStandard.h"
+#include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/ASTConsumers.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendDiagnostic.h"
@@ -510,7 +510,8 @@ private:
     }
 
     if (const auto *Decl = dyn_cast<ParmVarDecl>(NamedTemplate)) {
-      OS << "unnamed function parameter " << Decl->getFunctionScopeIndex() << " ";
+      OS << "unnamed function parameter " << Decl->getFunctionScopeIndex()
+         << " ";
       if (Decl->getFunctionScopeDepth() > 0)
         OS << "(at depth " << Decl->getFunctionScopeDepth() << ") ";
       OS << "of ";
