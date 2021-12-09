@@ -26,13 +26,13 @@ template <int = 0> void a() { a(); }
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:20:31'$}}
 // CHECK-LABEL: {{^---$}}
-// CHECK: {{^name:[ ]+anonymous template non-type parameter 0 of a$}}
+// CHECK: {{^name:[ ]+unnamed template non-type parameter 0 of a$}}
 // CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
 // CHECK: {{^event:[ ]+Begin$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:15'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
 // CHECK-LABEL: {{^---$}}
-// CHECK: {{^name:[ ]+anonymous template non-type parameter 0 of a$}}
+// CHECK: {{^name:[ ]+unnamed template non-type parameter 0 of a$}}
 // CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
 // CHECK: {{^event:[ ]+End$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:15'$}}
@@ -78,7 +78,7 @@ template <bool d = true, class = typename b<d>::c> void a() { a(); }
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:16'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:57'$}}
 // CHECK-LABEL: {{^---$}}
-// CHECK: {{^name:[ ]+anonymous template type parameter 1 of a$}}
+// CHECK: {{^name:[ ]+unnamed template type parameter 1 of a$}}
 // CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
 // CHECK: {{^event:[ ]+Begin$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:32'$}}
@@ -120,7 +120,7 @@ template <bool d = true, class = typename b<d>::c> void a() { a(); }
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:59:23'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:43'$}}
 // CHECK-LABEL: {{^---$}}
-// CHECK: {{^name:[ ]+anonymous template type parameter 1 of a$}}
+// CHECK: {{^name:[ ]+unnamed template type parameter 1 of a$}}
 // CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
 // CHECK: {{^event:[ ]+End$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:60:32'$}}
@@ -150,13 +150,13 @@ template <bool d = true, class = typename b<d>::c> void a() { a(); }
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:63'$}}
 // CHECK-LABEL: {{^---$}}
-// CHECK: {{^name:[ ]+anonymous template non-type parameter 0 of a$}}
+// CHECK: {{^name:[ ]+unnamed template non-type parameter 0 of a$}}
 // CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
 // CHECK: {{^event:[ ]+Begin$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:15'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
 // CHECK-LABEL: {{^---$}}
-// CHECK: {{^name:[ ]+anonymous template non-type parameter 0 of a$}}
+// CHECK: {{^name:[ ]+unnamed template non-type parameter 0 of a$}}
 // CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
 // CHECK: {{^event:[ ]+End$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:15'$}}
@@ -167,3 +167,54 @@ template <bool d = true, class = typename b<d>::c> void a() { a(); }
 // CHECK: {{^event:[ ]+End$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:20:25'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:60:63'$}}
+
+template <bool = true> void d(int = 0) { d(); }
+
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+d$}}
+// CHECK: {{^kind:[ ]+DeducedTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:171:29'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:171:42'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+unnamed template non-type parameter 0 of d$}}
+// CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:171:16'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:171:29'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+unnamed template non-type parameter 0 of d$}}
+// CHECK: {{^kind:[ ]+DefaultTemplateArgumentInstantiation$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:171:16'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:171:29'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+d$}}
+// CHECK: {{^kind:[ ]+DeducedTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:171:29'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:171:42'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'d<true>'$}}
+// CHECK: {{^kind:[ ]+TemplateInstantiation$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:171:29'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:171:42'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'d<true>'$}}
+// CHECK: {{^kind:[ ]+TemplateInstantiation$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:171:29'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:171:42'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'unnamed function parameter 0 of d<true>'$}}
+// CHECK: {{^kind:[ ]+DefaultFunctionArgumentInstantiation$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:171:35'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:171:42'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'unnamed function parameter 0 of d<true>'$}}
+// CHECK: {{^kind:[ ]+DefaultFunctionArgumentInstantiation$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:171:35'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:171:42'$}}

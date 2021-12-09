@@ -505,14 +505,14 @@ private:
       return;
     }
 
-    //if (const auto *Decl = dyn_cast<ParmVarDecl>(NamedTemplate)) {
-    //  OS << "function parameter " << Decl->getFunctionScopeIndex() << " ";
-    //  if (Decl->getFunctionScopeDepth() > 0)
-    //    OS << "(at depth " << Decl->getFunctionScopeDepth() << ") ";
-    //  OS << "of ";
-    //  NamedCtx->getNameForDiagnostic(OS, TheSema.getLangOpts(), true);
-    //  return;
-    //}
+    if (const auto *Decl = dyn_cast<ParmVarDecl>(NamedTemplate)) {
+      OS << "unnamed function parameter " << Decl->getFunctionScopeIndex() << " ";
+      if (Decl->getFunctionScopeDepth() > 0)
+        OS << "(at depth " << Decl->getFunctionScopeDepth() << ") ";
+      OS << "of ";
+      NamedCtx->getNameForDiagnostic(OS, TheSema.getLangOpts(), true);
+      return;
+    }
 
     if (const auto *Decl = dyn_cast<TemplateTypeParmDecl>(NamedTemplate)) {
       const Type *Ty = Decl->getTypeForDecl();
@@ -520,7 +520,7 @@ private:
         const TemplateTypeParmType *TTPT =
             dyn_cast_or_null<TemplateTypeParmType>(Ty);
         if (TTPT) {
-          OS << "anonymous template type parameter " << TTPT->getIndex() << " ";
+          OS << "unnamed template type parameter " << TTPT->getIndex() << " ";
           if (TTPT->getDepth() > 0)
             OS << "(at depth " << TTPT->getDepth() << ") ";
           OS << "of ";
@@ -531,7 +531,7 @@ private:
     }
 
     if (const auto *Decl = dyn_cast<NonTypeTemplateParmDecl>(NamedTemplate)) {
-      OS << "anonymous template non-type parameter " << Decl->getIndex() << " ";
+      OS << "unnamed template non-type parameter " << Decl->getIndex() << " ";
       if (Decl->getDepth() > 0)
         OS << "(at depth " << Decl->getDepth() << ") ";
       OS << "of ";
