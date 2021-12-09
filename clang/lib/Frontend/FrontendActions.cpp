@@ -543,15 +543,6 @@ private:
       return;
     }
 
-    //if (const auto *Decl = dyn_cast<TemplateTemplateParmDecl>(NamedTemplate)) {
-    //  OS << "template template parameter " << Decl->getIndex() << " ";
-    //  if (Decl->getDepth() > 0)
-    //    OS << "(at depth " << Decl->getDepth() << ") ";
-    //  OS << "of ";
-    //  NamedCtx->getNameForDiagnostic(OS, TheSema.getLangOpts(), true);
-    //  return;
-    //}
-    NamedTemplate->dump();
     llvm_unreachable("Failed to retrieve a name for this entry!");
   }
 
