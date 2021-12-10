@@ -260,3 +260,74 @@ void e() {
 // CHECK: {{^event:[ ]+End$}}
 // CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:223:3'$}}
 // CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:223:3'$}}
+
+
+template <template<typename> typename>
+void d();
+
+template <typename T> struct C;
+
+void foo() {
+  d<C>();
+}
+
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+d$}}
+// CHECK: {{^kind:[ ]+ExplicitTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:266:6'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:271:3'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+unnamed template template parameter 0 of d$}}
+// CHECK: {{^kind:[ ]+PriorTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:265:38'$}}
+// CHECK: {{^poi:[ ]+''$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+unnamed template template parameter 0 of d$}}
+// CHECK: {{^kind:[ ]+PriorTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:265:38'$}}
+// CHECK: {{^poi:[ ]+''$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+d$}}
+// CHECK: {{^kind:[ ]+ExplicitTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:266:6'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:271:3'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+d$}}
+// CHECK: {{^kind:[ ]+DeducedTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:266:6'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:271:3'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+d$}}
+// CHECK: {{^kind:[ ]+DeducedTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:266:6'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:271:3'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'d<C>'$}}
+// CHECK: {{^kind:[ ]+TemplateInstantiation$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:266:6'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:271:3'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+'d<C>'$}}
+// CHECK: {{^kind:[ ]+TemplateInstantiation$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:266:6'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:271:3'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+d$}}
+// CHECK: {{^kind:[ ]+ExplicitTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+Begin$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:171:29'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:271:3'$}}
+// CHECK-LABEL: {{^---$}}
+// CHECK: {{^name:[ ]+d$}}
+// CHECK: {{^kind:[ ]+ExplicitTemplateArgumentSubstitution$}}
+// CHECK: {{^event:[ ]+End$}}
+// CHECK: {{^orig:[ ]+'.*templight-empty-entries-fix.cpp:171:29'$}}
+// CHECK: {{^poi:[ ]+'.*templight-empty-entries-fix.cpp:271:3'$}}

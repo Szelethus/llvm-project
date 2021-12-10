@@ -8,6 +8,7 @@
 
 #include "clang/Frontend/FrontendActions.h"
 #include "clang/AST/ASTConsumer.h"
+#include "clang/AST/Decl.h"
 #include "clang/Basic/FileManager.h"
 #include "clang/Basic/LangStandard.h"
 #include "clang/Basic/TargetInfo.h"
@@ -520,11 +521,8 @@ private:
     }
 
     if (const auto *Decl = dyn_cast<TemplateTypeParmDecl>(NamedTemplate)) {
-      const Type *Ty = Decl->getTypeForDecl();
-      if (Ty) {
-        const TemplateTypeParmType *TTPT =
-            dyn_cast_or_null<TemplateTypeParmType>(Ty);
-        if (TTPT) {
+      if (const Type *Ty = Decl->getTypeForDecl()) {
+        if (const auto *TTPT = dyn_cast_or_null<TemplateTypeParmType>(Ty)) {
           OS << "unnamed template type parameter " << TTPT->getIndex() << " ";
           if (TTPT->getDepth() > 0)
             OS << "(at depth " << TTPT->getDepth() << ") ";
@@ -544,6 +542,15 @@ private:
       return;
     }
 
+    if (const auto *Decl = dyn_cast<TemplateTemplateParmDecl>(NamedTemplate)) {
+      OS << "unnamed template template parameter " << Decl->getIndex() << " ";
+      if (Decl->getDepth() > 0)
+        OS << "(at depth " << Decl->getDepth() << ") ";
+      OS << "of ";
+      NamedCtx->getNameForDiagnostic(OS, TheSema.getLangOpts(), true);
+      return;
+    }
+
     llvm_unreachable("Failed to retrieve a name for this entry!");
   }
 
@@ -555,7 +562,6 @@ private:
     Entry.Event = BeginInstantiation ? "Begin" : "End";
     llvm::raw_string_ostream OS(Entry.Name);
     printEntryName(TheSema, Inst.Entity, OS);
-    assert(!OS.str().empty());
     const PresumedLoc DefLoc =
         TheSema.getSourceManager().getPresumedLoc(Inst.Entity->getLocation());
     if (!DefLoc.isInvalid())
