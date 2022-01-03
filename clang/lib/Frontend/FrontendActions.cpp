@@ -552,6 +552,7 @@ private:
     }
 
     llvm_unreachable("Failed to retrieve a name for this entry!");
+    OS << "unnamed identifier";
   }
 
   template <bool BeginInstantiation>
