@@ -98,6 +98,7 @@ public:
   /// \note This function is not intended to be used to match Obj-C method
   /// calls.
   bool matches(const CallEvent &Call) const;
+  bool matchesImprecise(const CallExpr &Call) const;
 
   /// Returns true whether the CallEvent matches on any of the CallDescriptions
   /// supplied.
@@ -152,6 +153,16 @@ public:
     // TODO: Implement some sort of fast path.
     for (const std::pair<CallDescription, T> &I : LinearMap)
       if (I.first.matches(Call))
+        return &I.second;
+
+    return nullptr;
+  }
+
+  LLVM_NODISCARD const T *lookupImprecise(const CallExpr &Call) const {
+    // Slow path: linear lookup.
+    // TODO: Implement some sort of fast path.
+    for (const std::pair<CallDescription, T> &I : LinearMap)
+      if (I.first.matchesImprecise(Call))
         return &I.second;
 
     return nullptr;

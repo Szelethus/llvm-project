@@ -123,6 +123,24 @@ void foo() {
 
 } // namespace memory_passed_into_fn_that_doesnt_intend_to_free
 
+namespace memory_passed_into_fn_that_doesnt_intend_to_free2 {
+
+void bar();
+
+void sink(int *P) {
+  // Correctly realize that calling bar() doesn't mean that this function would
+  // like to deallocate anything.
+  bar();
+}
+
+void foo() {
+  int *ptr = new int(5); // expected-note {{Memory is allocated}}
+  sink(ptr);
+} // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
+// expected-note@-1 {{Potential leak}}
+
+} // namespace memory_passed_into_fn_that_doesnt_intend_to_free2
+
 namespace refkind_from_unoallocated_to_allocated {
 
 // RefKind of the symbol changed from nothing to Allocated. We don't want to

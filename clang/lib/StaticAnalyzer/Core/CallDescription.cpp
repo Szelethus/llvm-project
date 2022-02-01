@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallDescription.h"
+#include "clang/AST/Decl.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -91,6 +92,85 @@ bool ento::CallDescription::matches(const CallEvent &Call) const {
         !CD.RequiredArgs || *CD.RequiredArgs == Call.getNumArgs();
     const bool ParamsMatch =
         !CD.RequiredParams || *CD.RequiredParams == Call.parameters().size();
+    return ArgsMatch && ParamsMatch;
+  };
+
+  const auto MatchQualifiedNameParts = [](const CallDescription &CD,
+                                          const Decl *D) -> bool {
+    const auto FindNextNamespaceOrRecord =
+        [](const DeclContext *Ctx) -> const DeclContext * {
+      while (Ctx && !isa<NamespaceDecl, RecordDecl>(Ctx))
+        Ctx = Ctx->getParent();
+      return Ctx;
+    };
+
+    auto QualifierPartsIt = CD.begin_qualified_name_parts();
+    const auto QualifierPartsEndIt = CD.end_qualified_name_parts();
+
+    // Match namespace and record names. Skip unrelated names if they don't
+    // match.
+    const DeclContext *Ctx = FindNextNamespaceOrRecord(D->getDeclContext());
+    for (; Ctx && QualifierPartsIt != QualifierPartsEndIt;
+         Ctx = FindNextNamespaceOrRecord(Ctx->getParent())) {
+      // If not matched just continue and try matching for the next one.
+      if (cast<NamedDecl>(Ctx)->getName() != *QualifierPartsIt)
+        continue;
+      ++QualifierPartsIt;
+    }
+
+    // We matched if we consumed all expected qualifier segments.
+    return QualifierPartsIt == QualifierPartsEndIt;
+  };
+
+  // Let's start matching...
+  if (!ExactMatchArgAndParamCounts(Call, *this))
+    return false;
+
+  if (!MatchNameOnly(*this, FD))
+    return false;
+
+  if (!hasQualifiedNameParts())
+    return true;
+
+  return MatchQualifiedNameParts(*this, FD);
+}
+
+bool ento::CallDescription::matchesImprecise(const CallExpr &Call) const {
+  // TODO: Maybe add a few asserts that this function is intended for easy C
+  // function-like cases?
+  const auto *FD = dyn_cast_or_null<FunctionDecl>(Call.getCalleeDecl());
+  if (!FD)
+    return false;
+
+  if (Flags & CDF_MaybeBuiltin) {
+    return CheckerContext::isCLibraryFunction(FD, getFunctionName()) &&
+           (!RequiredArgs || *RequiredArgs <= Call.getNumArgs()) &&
+           (!RequiredParams || *RequiredParams <= FD->param_size());
+  }
+
+  if (!II.hasValue()) {
+    II = &FD->getASTContext().Idents.get(getFunctionName());
+  }
+
+  const auto MatchNameOnly = [](const CallDescription &CD,
+                                const NamedDecl *ND) -> bool {
+    DeclarationName Name = ND->getDeclName();
+    if (const auto *II = Name.getAsIdentifierInfo())
+      return II == CD.II.getValue(); // Fast case.
+
+    // Fallback to the slow stringification and comparison for:
+    // C++ overloaded operators, constructors, destructors, etc.
+    // FIXME This comparison is way SLOWER than comparing pointers.
+    // At some point in the future, we should compare FunctionDecl pointers.
+    return Name.getAsString() == CD.getFunctionName();
+  };
+
+  const auto ExactMatchArgAndParamCounts =
+      [](const CallExpr &Call, const CallDescription &CD) -> bool {
+    const bool ArgsMatch =
+        !CD.RequiredArgs || *CD.RequiredArgs == Call.getNumArgs();
+    const bool ParamsMatch =
+        !CD.RequiredParams || *CD.RequiredParams == cast<FunctionDecl>(Call.getCalleeDecl())->param_size();
     return ArgsMatch && ParamsMatch;
   };
 
