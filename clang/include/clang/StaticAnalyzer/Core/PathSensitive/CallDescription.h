@@ -98,8 +98,13 @@ public:
   /// \note This function is not intended to be used to match Obj-C method
   /// calls.
   bool matches(const CallEvent &Call) const;
-  bool matchesImprecise(const CallExpr &Call) const;
+  bool matchesImprecise(const CallExpr &CE) const;
 
+private:
+  bool matchesImpl(const FunctionDecl *Callee, size_t ArgCount,
+                   size_t ParamCount) const;
+
+public:
   /// Returns true whether the CallEvent matches on any of the CallDescriptions
   /// supplied.
   ///

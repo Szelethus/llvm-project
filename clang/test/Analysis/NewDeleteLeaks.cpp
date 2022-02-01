@@ -35,7 +35,9 @@ void foo() {
 
 } // namespace memory_allocated_in_fn_call
 
-namespace memory_passed_to_fn_call {
+// Realize that sink() intends to deallocate memory, assume that it should've
+// taken care of the leaked object as well.
+namespace memory_passed_to_fn_call_delete {
 
 void sink(int *P) {
   if (coin()) // ownership-note {{Assuming the condition is false}}
@@ -50,7 +52,24 @@ void foo() {
 } // expected-warning {{Potential leak of memory pointed to by 'ptr' [cplusplus.NewDeleteLeaks]}}
 // expected-note@-1 {{Potential leak}}
 
-} // namespace memory_passed_to_fn_call
+} // namespace memory_passed_to_fn_call_delete
+
+namespace memory_passed_to_fn_call_free {
+
+void sink(int *P) {
+  if (coin()) // ownership-note {{Assuming the condition is false}}
+              // ownership-note@-1 {{Taking false branch}}
+    free(P);
+} // ownership-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
+
+void foo() {
+  int *ptr = (int*)malloc(sizeof(int)); // expected-note {{Memory is allocated}}
+  sink(ptr);             // ownership-note {{Calling 'sink'}}
+                         // ownership-note@-1 {{Returning from 'sink'}}
+} // expected-warning {{Potential leak of memory pointed to by 'ptr' [unix.Malloc]}}
+// expected-note@-1 {{Potential leak}}
+
+} // namespace memory_passed_to_fn_call_free
 
 namespace memory_shared_with_ptr_of_shorter_lifetime {
 
