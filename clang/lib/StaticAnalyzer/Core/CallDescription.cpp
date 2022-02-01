@@ -61,7 +61,7 @@ bool ento::CallDescription::matches(const CallEvent &Call) const {
   const auto *FD = dyn_cast_or_null<FunctionDecl>(Call.getDecl());
   if (!FD)
     return false;
-  
+
   return matchesImpl(FD, Call.getNumArgs(), Call.parameters().size());
 }
 
@@ -69,7 +69,7 @@ bool ento::CallDescription::matchesImprecise(const CallExpr &CE) const {
   const auto *FD = dyn_cast_or_null<FunctionDecl>(CE.getCalleeDecl());
   if (!FD)
     return false;
-  
+
   return matchesImpl(FD, CE.getNumArgs(), FD->param_size());
 }
 

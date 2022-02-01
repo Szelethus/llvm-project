@@ -889,8 +889,8 @@ protected:
 
 public:
   NoOwnershipChangeVisitor(SymbolRef Sym, const MallocChecker *Checker)
-      : NoStateChangeFuncVisitor(bugreporter::TrackingKind::Thorough),
-        Sym(Sym), Checker(Checker) {}
+      : NoStateChangeFuncVisitor(bugreporter::TrackingKind::Thorough), Sym(Sym),
+        Checker(Checker) {}
 
   void Profile(llvm::FoldingSetNodeID &ID) const override {
     static int Tag = 0;

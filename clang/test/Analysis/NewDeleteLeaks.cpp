@@ -63,9 +63,9 @@ void sink(int *P) {
 } // ownership-note {{Returning without deallocating memory or storing the pointer for later deallocation}}
 
 void foo() {
-  int *ptr = (int*)malloc(sizeof(int)); // expected-note {{Memory is allocated}}
-  sink(ptr);             // ownership-note {{Calling 'sink'}}
-                         // ownership-note@-1 {{Returning from 'sink'}}
+  int *ptr = (int *)malloc(sizeof(int)); // expected-note {{Memory is allocated}}
+  sink(ptr);                             // ownership-note {{Calling 'sink'}}
+                                         // ownership-note@-1 {{Returning from 'sink'}}
 } // expected-warning {{Potential leak of memory pointed to by 'ptr' [unix.Malloc]}}
 // expected-note@-1 {{Potential leak}}
 

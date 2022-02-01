@@ -98,6 +98,20 @@ public:
   /// \note This function is not intended to be used to match Obj-C method
   /// calls.
   bool matches(const CallEvent &Call) const;
+
+  /// Returns true if the CallEvent is a call to a function that matches
+  /// the CallDescription.
+  ///
+  /// When available, always prefer matching with a CallEvent! This function
+  /// exists only when that is not available, for example, when _only_
+  /// syntactic check is done on a piece of code.
+  ///
+  /// Also, StdLibraryFunctionsChecker::Signature is likely a better candicade
+  /// for syntactic only matching if you are writing a new checker. This is
+  /// handy if a CallDescriptionMap is already there.
+  ///
+  /// The function is imprecise because CallEvent understands the precise
+  /// argument count better (see comments for CallEvent::getNumArgs).
   bool matchesImprecise(const CallExpr &CE) const;
 
 private:
@@ -163,6 +177,8 @@ public:
     return nullptr;
   }
 
+  /// ALWAYS prefer lookup with a CallEvent, when available. See comments above
+  /// CallDescription::matchesImprecise.
   LLVM_NODISCARD const T *lookupImprecise(const CallExpr &Call) const {
     // Slow path: linear lookup.
     // TODO: Implement some sort of fast path.
