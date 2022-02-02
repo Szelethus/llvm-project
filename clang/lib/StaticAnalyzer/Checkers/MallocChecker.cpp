@@ -398,9 +398,9 @@ private:
   };
 
   bool isFreeingCall(const CallEvent &Call) const;
+  static bool isFreeingOwnershipAttrCall(const FunctionDecl *Func);
 
   friend class NoOwnershipChangeVisitor;
-  bool isFreeingCallImprecise(const CallExpr &Call) const;
 
   CallDescriptionMap<CheckFn> AllocatingMemFnMap{
       {{"alloca", 1}, &MallocChecker::checkAlloca},
@@ -799,12 +799,23 @@ protected:
     return "";
   }
 
+  bool isFreeingCallImprecise(const CallExpr &Call) const {
+    if (Checker->FreeingMemFnMap.lookupImprecise(Call) ||
+        Checker->ReallocatingMemFnMap.lookupImprecise(Call))
+      return true;
+
+    if (const auto *Func = dyn_cast<FunctionDecl>(Call.getCalleeDecl()))
+      return MallocChecker::isFreeingOwnershipAttrCall(Func);
+
+    return false;
+  }
+
   bool doesFnIntendToHandleOwnership(const Decl *Callee, ASTContext &ACtx) {
     using namespace clang::ast_matchers;
     const FunctionDecl *FD = dyn_cast<FunctionDecl>(Callee);
     if (!FD)
       return false;
-    // TODO: Operator delete is hardly the only deallocator -- Can we reuse
+    // TODO: Operator delete is hardly the only deallocatr -- Can we reuse
     // isFreeingCall() or something thats already here?
     auto Matches = match(findAll(stmt(anyOf(cxxDeleteExpr().bind("delete"),
                                             callExpr().bind("call")))),
@@ -814,7 +825,7 @@ protected:
         return true;
       }
       if (const auto *Call = Match.getNodeAs<CallExpr>("call")) {
-        if (Checker->isFreeingCallImprecise(*Call))
+        if (isFreeingCallImprecise(*Call))
           return true;
       }
     }
@@ -1075,7 +1086,7 @@ static bool isStandardNewDelete(const FunctionDecl *FD) {
 // Methods of MallocChecker and MallocBugVisitor.
 //===----------------------------------------------------------------------===//
 
-static bool isFreeingOwnershipAttrCall(const FunctionDecl *Func) {
+bool MallocChecker::isFreeingOwnershipAttrCall(const FunctionDecl *Func) {
   if (Func->hasAttrs()) {
     for (const auto *I : Func->specific_attrs<OwnershipAttr>()) {
       OwnershipAttr::OwnershipKind OwnKind = I->getOwnKind();
@@ -1083,17 +1094,6 @@ static bool isFreeingOwnershipAttrCall(const FunctionDecl *Func) {
         return true;
     }
   }
-  return false;
-}
-
-bool MallocChecker::isFreeingCallImprecise(const CallExpr &Call) const {
-  if (FreeingMemFnMap.lookupImprecise(Call) ||
-      ReallocatingMemFnMap.lookupImprecise(Call))
-    return true;
-
-  if (const auto *Func = dyn_cast<FunctionDecl>(Call.getCalleeDecl()))
-    return isFreeingOwnershipAttrCall(Func);
-
   return false;
 }
 
