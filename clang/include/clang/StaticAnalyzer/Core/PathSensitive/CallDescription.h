@@ -203,6 +203,7 @@ public:
   CallDescriptionSet &operator=(const CallDescription &) = delete;
 
   LLVM_NODISCARD bool contains(const CallEvent &Call) const;
+  LLVM_NODISCARD bool containsImprecise(const CallExpr &CE) const;
 };
 
 } // namespace ento

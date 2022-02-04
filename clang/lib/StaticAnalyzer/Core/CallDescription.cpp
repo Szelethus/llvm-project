@@ -162,3 +162,7 @@ ento::CallDescriptionSet::CallDescriptionSet(
 bool ento::CallDescriptionSet::contains(const CallEvent &Call) const {
   return static_cast<bool>(Impl.lookup(Call));
 }
+
+bool ento::CallDescriptionSet::containsImprecise(const CallExpr &CE) const {
+  return static_cast<bool>(Impl.lookupImprecise(CE));
+}
