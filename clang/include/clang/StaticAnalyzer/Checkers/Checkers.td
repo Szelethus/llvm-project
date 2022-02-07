@@ -298,6 +298,10 @@ def C11LockChecker : Checker<"C11Lock">,
   Dependencies<[PthreadLockBase]>,
   Documentation<HasAlphaDocumentation>;
 
+def NullPtrInterferenceChecker : Checker<"NullPtrInterference">,
+  HelpText<"Annoy users about checking a pointers value after dereferencing">,
+  Documentation<NotDocumented>;
+
 } // end "alpha.core"
 
 //===----------------------------------------------------------------------===//
