@@ -74,6 +74,7 @@ add_clang_library(clangStaticAnalyzerCheckers
   NonNullParamChecker.cpp
   NonnullGlobalConstantsChecker.cpp
   NullabilityChecker.cpp
+  NullPtrInterferenceChecker.cpp
   NumberObjectConversionChecker.cpp
   ObjCAtSyncChecker.cpp
   ObjCAutoreleaseWriteChecker.cpp
