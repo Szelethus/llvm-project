@@ -99,8 +99,8 @@ public:
   /// calls.
   bool matches(const CallEvent &Call) const;
 
-  /// Returns true if the CallEvent is a call to a function that matches
-  /// the CallDescription.
+  /// Returns true if the CallExpr is a call to a function that matches the
+  /// CallDescription.
   ///
   /// When available, always prefer matching with a CallEvent! This function
   /// exists only when that is not available, for example, when _only_
@@ -110,11 +110,11 @@ public:
   /// for syntactic only matching if you are writing a new checker. This is
   /// handy if a CallDescriptionMap is already there.
   ///
-  /// The function is imprecise because CallEvent understands the precise
-  /// argument count better (see comments for CallEvent::getNumArgs), may
-  /// know the called function if it was called through a function pointer,
-  /// and other information not available syntactically.
-  bool matchesImprecise(const CallExpr &CE) const;
+  /// The function is imprecise because CallEvent may know path sensitive
+  /// information, such as the precise argument count (see comments for
+  /// CallEvent::getNumArgs), the called function if it was called through a
+  /// function pointer, and other information not available syntactically.
+  bool matchesAsWritten(const CallExpr &CE) const;
 
 private:
   bool matchesImpl(const FunctionDecl *Callee, size_t ArgCount,
@@ -179,13 +179,23 @@ public:
     return nullptr;
   }
 
-  /// ALWAYS prefer lookup with a CallEvent, when available. See comments above
-  /// CallDescription::matchesImprecise.
-  LLVM_NODISCARD const T *lookupImprecise(const CallExpr &Call) const {
+  /// When available, always prefer lookup with a CallEvent! This function
+  /// exists only when that is not available, for example, when _only_
+  /// syntactic check is done on a piece of code.
+  ///
+  /// Also, StdLibraryFunctionsChecker::Signature is likely a better candicade
+  /// for syntactic only matching if you are writing a new checker. This is
+  /// handy if a CallDescriptionMap is already there.
+  ///
+  /// The function is imprecise because CallEvent may know path sensitive
+  /// information, such as the precise argument count (see comments for
+  /// CallEvent::getNumArgs), the called function if it was called through a
+  /// function pointer, and other information not available syntactically.
+  LLVM_NODISCARD const T *lookupAsWritten(const CallExpr &Call) const {
     // Slow path: linear lookup.
     // TODO: Implement some sort of fast path.
     for (const std::pair<CallDescription, T> &I : LinearMap)
-      if (I.first.matchesImprecise(Call))
+      if (I.first.matchesAsWritten(Call))
         return &I.second;
 
     return nullptr;
@@ -205,7 +215,20 @@ public:
   CallDescriptionSet &operator=(const CallDescription &) = delete;
 
   LLVM_NODISCARD bool contains(const CallEvent &Call) const;
-  LLVM_NODISCARD bool containsImprecise(const CallExpr &CE) const;
+
+  /// When available, always prefer lookup with a CallEvent! This function
+  /// exists only when that is not available, for example, when _only_
+  /// syntactic check is done on a piece of code.
+  ///
+  /// Also, StdLibraryFunctionsChecker::Signature is likely a better candicade
+  /// for syntactic only matching if you are writing a new checker. This is
+  /// handy if a CallDescriptionMap is already there.
+  ///
+  /// The function is imprecise because CallEvent may know path sensitive
+  /// information, such as the precise argument count (see comments for
+  /// CallEvent::getNumArgs), the called function if it was called through a
+  /// function pointer, and other information not available syntactically.
+  LLVM_NODISCARD bool containsAsWritten(const CallExpr &CE) const;
 };
 
 } // namespace ento

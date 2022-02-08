@@ -65,7 +65,7 @@ bool ento::CallDescription::matches(const CallEvent &Call) const {
   return matchesImpl(FD, Call.getNumArgs(), Call.parameters().size());
 }
 
-bool ento::CallDescription::matchesImprecise(const CallExpr &CE) const {
+bool ento::CallDescription::matchesAsWritten(const CallExpr &CE) const {
   const auto *FD = dyn_cast_or_null<FunctionDecl>(CE.getCalleeDecl());
   if (!FD)
     return false;
@@ -163,6 +163,6 @@ bool ento::CallDescriptionSet::contains(const CallEvent &Call) const {
   return static_cast<bool>(Impl.lookup(Call));
 }
 
-bool ento::CallDescriptionSet::containsImprecise(const CallExpr &CE) const {
-  return static_cast<bool>(Impl.lookupImprecise(CE));
+bool ento::CallDescriptionSet::containsAsWritten(const CallExpr &CE) const {
+  return static_cast<bool>(Impl.lookupAsWritten(CE));
 }
