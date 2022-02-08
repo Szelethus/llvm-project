@@ -521,7 +521,7 @@ public:
   }
 
   void checkPreStmt(const CallExpr *CE, CheckerContext &C) const {
-    if (Set.containsImprecise(*CE)) {
+    if (Set.containsAsWritten(*CE)) {
       C.getBugReporter().EmitBasicReport(
           CE->getCalleeDecl(), this, "CallExpr match", categories::LogicError,
           "CallExpr match",
