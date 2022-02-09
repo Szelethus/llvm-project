@@ -99,6 +99,26 @@ public:
   /// calls.
   bool matches(const CallEvent &Call) const;
 
+  /// Returns true whether the CallEvent matches on any of the CallDescriptions
+  /// supplied.
+  ///
+  /// \note This function is not intended to be used to match Obj-C method
+  /// calls.
+  friend bool matchesAny(const CallEvent &Call, const CallDescription &CD1) {
+    return CD1.matches(Call);
+  }
+
+  /// \copydoc clang::ento::CallDescription::matchesAny(const CallEvent &, const CallDescription &)
+  template <typename... Ts>
+  friend bool matchesAny(const CallEvent &Call, const CallDescription &CD1,
+                         const Ts &...CDs) {
+    return CD1.matches(Call) || matchesAny(Call, CDs...);
+  }
+  /// @}
+
+  /// @name Matching CallDescriptions against a CallExpr
+  /// @{
+
   /// Returns true if the CallExpr is a call to a function that matches the
   /// CallDescription.
   ///
@@ -116,27 +136,27 @@ public:
   /// function pointer, and other information not available syntactically.
   bool matchesAsWritten(const CallExpr &CE) const;
 
-private:
-  bool matchesImpl(const FunctionDecl *Callee, size_t ArgCount,
-                   size_t ParamCount) const;
-
-public:
-  /// Returns true whether the CallEvent matches on any of the CallDescriptions
+  /// Returns true whether the CallExpr matches on any of the CallDescriptions
   /// supplied.
   ///
   /// \note This function is not intended to be used to match Obj-C method
   /// calls.
-  friend bool matchesAny(const CallEvent &Call, const CallDescription &CD1) {
-    return CD1.matches(Call);
+  friend bool matchesAnyAsWritten(const CallExpr &CE, const CallDescription &CD1) {
+    return CD1.matchesAsWritten(CE);
   }
 
-  /// \copydoc clang::ento::matchesAny(const CallEvent &, const CallDescription &)
+  /// \copydoc clang::ento::CallDescription::matchesAnyAsWritten(const CallExpr &, const CallDescription &)
   template <typename... Ts>
-  friend bool matchesAny(const CallEvent &Call, const CallDescription &CD1,
+  friend bool matchesAnyAsWritten(const CallExpr &CE, const CallDescription &CD1,
                          const Ts &...CDs) {
-    return CD1.matches(Call) || matchesAny(Call, CDs...);
+    return CD1.matchesAsWritten(CE) || matchesAnyAsWritten(CE, CDs...);
   }
   /// @}
+
+private:
+  bool matchesImpl(const FunctionDecl *Callee, size_t ArgCount,
+                   size_t ParamCount) const;
+
 };
 
 /// An immutable map from CallDescriptions to arbitrary data. Provides a unified
