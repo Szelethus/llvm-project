@@ -141,14 +141,16 @@ public:
   ///
   /// \note This function is not intended to be used to match Obj-C method
   /// calls.
-  friend bool matchesAnyAsWritten(const CallExpr &CE, const CallDescription &CD1) {
+  friend bool matchesAnyAsWritten(const CallExpr &CE,
+                                  const CallDescription &CD1) {
     return CD1.matchesAsWritten(CE);
   }
 
   /// \copydoc clang::ento::CallDescription::matchesAnyAsWritten(const CallExpr &, const CallDescription &)
   template <typename... Ts>
-  friend bool matchesAnyAsWritten(const CallExpr &CE, const CallDescription &CD1,
-                         const Ts &...CDs) {
+  friend bool matchesAnyAsWritten(const CallExpr &CE,
+                                  const CallDescription &CD1,
+                                  const Ts &...CDs) {
     return CD1.matchesAsWritten(CE) || matchesAnyAsWritten(CE, CDs...);
   }
   /// @}
@@ -156,7 +158,6 @@ public:
 private:
   bool matchesImpl(const FunctionDecl *Callee, size_t ArgCount,
                    size_t ParamCount) const;
-
 };
 
 /// An immutable map from CallDescriptions to arbitrary data. Provides a unified
