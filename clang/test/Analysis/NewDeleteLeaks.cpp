@@ -71,6 +71,23 @@ void foo() {
 
 } // namespace memory_passed_to_fn_call_free
 
+// Function pointers cannot be resolved syntactically.
+namespace memory_passed_to_fn_call_free_through_fn_ptr {
+void (*freeFn)(void *) = free;
+
+void sink(int *P) {
+  if (coin())
+    freeFn(P);
+}
+
+void foo() {
+  int *ptr = (int *)malloc(sizeof(int)); // expected-note {{Memory is allocated}}
+  sink(ptr);
+} // expected-warning {{Potential leak of memory pointed to by 'ptr' [unix.Malloc]}}
+// expected-note@-1 {{Potential leak}}
+
+} // namespace memory_passed_to_fn_call_free_through_fn_ptr
+
 namespace memory_shared_with_ptr_of_shorter_lifetime {
 
 void sink(int *P) {
