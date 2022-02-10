@@ -16,6 +16,7 @@
 
 #include "clang/AST/Stmt.h"
 #include "clang/Analysis/AnalysisDeclContext.h"
+#include "clang/Analysis/ProgramPoint.h"
 #include "clang/Basic/AttrKinds.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
@@ -27,7 +28,10 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ExplodedGraph.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/MemRegion.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState_Fwd.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -52,12 +56,13 @@ REGISTER_MAP_WITH_PROGRAMSTATE(NonNullConstrainedPtrs, const SymbolRef,
 namespace {
 
 class NullPtrInterferenceVisitor : public BugReporterVisitor {
-  SymbolRef Sym;
+  const MemRegion *MR;
   const LocationContext *LCtx;
+  bool IsSatisfied = false;
 
 public:
-  NullPtrInterferenceVisitor(SymbolRef Sym, const LocationContext *LCtx)
-      : Sym(Sym), LCtx(LCtx) {}
+  NullPtrInterferenceVisitor(const MemRegion *MR, const LocationContext *LCtx)
+      : MR(MR), LCtx(LCtx) {}
 
   void Profile(llvm::FoldingSetNodeID &ID) const override {
     static int x = 0;
@@ -69,8 +74,21 @@ public:
     return static_cast<void *>(&Tag);
   }
 
-  PathDiagnosticPieceRef VisitNode(const ExplodedNode *, BugReporterContext &,
-                                   PathSensitiveBugReport &) override {
+  PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
+                                   BugReporterContext &BC,
+                                   PathSensitiveBugReport &R) override {
+    if (IsSatisfied)
+      return nullptr;
+
+    if (auto CE = N->getLocationAs<CallEnter>())
+      if (CE->getLocationContext() == LCtx)
+        IsSatisfied = true;
+
+    ProgramStateRef State = N->getState();
+
+    if (!State->isNull(State->getSVal(MR)).isConstrainedTrue())
+      if (LCtx->isParentOf(N->getLocationContext()))
+        R.markInvalid(getTag(), "Constrained in another LC");
     return nullptr;
   }
 };
@@ -87,20 +105,17 @@ public:
     auto Cond = Ctx.getSVal(Condition).getAs<DefinedOrUnknownSVal>();
     if (!Cond)
       return;
-    SymbolRef Sym = Cond->getAsSymbol();
-    if (!Sym)
+    const MemRegion *MR = Cond->getAsRegion();
+    if (!MR)
       return;
-    if (!Sym->getType()->isAnyPointerType())
-      return;
-    Sym->dump();
 
-    if (Ctx.getState()->isNonNull(*Cond).isConstrainedTrue()) {
+    if (Ctx.getState()->isNonNull(loc::MemRegionVal(MR)).isConstrainedTrue()) {
       const ExplodedNode *N = Ctx.generateNonFatalErrorNode(Ctx.getState());
       if (!N)
         return;
       std::unique_ptr<PathSensitiveBugReport> R(
           std::make_unique<PathSensitiveBugReport>(BT, BT.getDescription(), N));
-      R->addVisitor<NullPtrInterferenceVisitor>(Sym, Ctx.getLocationContext());
+      R->addVisitor<NullPtrInterferenceVisitor>(MR, Ctx.getLocationContext());
       Ctx.emitReport(std::move(R));
     }
   }
