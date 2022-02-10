@@ -19,3 +19,20 @@ void top() {
   }
   clang_analyzer_warnIfReached();
 }
+
+void nested(int *p) {
+  *p = 5;
+}
+
+void top2() {
+  int *p = get();
+  nested(p);
+  // some code, but still within this function.
+
+  // p is in a condition!
+  if (p) {
+    clang_analyzer_warnIfReached();
+    return;
+  }
+  clang_analyzer_warnIfReached();
+}
