@@ -38,7 +38,7 @@ class AnalysisOrderChecker
           check::PostStmt<OffsetOfExpr>, check::PreCall, check::PostCall,
           check::EndFunction, check::EndAnalysis, check::NewAllocator,
           check::Bind, check::PointerEscape, check::RegionChanges,
-          check::LiveSymbols, eval::Call> {
+          check::LiveSymbols, eval::Call, eval::Assume> {
 
   bool isCallbackEnabled(const AnalyzerOptions &Opts,
                          StringRef CallbackName) const {
@@ -211,6 +211,13 @@ public:
                                      PointerEscapeKind Kind) const {
     if (isCallbackEnabled(State, "PointerEscape"))
       llvm::errs() << "PointerEscape\n";
+    return State;
+  }
+
+  ProgramStateRef evalAssume(ProgramStateRef State, SVal Cond,
+                             bool Assumption) const {
+    if (isCallbackEnabled(State, "Assume"))
+      llvm::errs() << "Assume\n";
     return State;
   }
 };

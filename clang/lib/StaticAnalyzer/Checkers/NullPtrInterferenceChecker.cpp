@@ -14,20 +14,29 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "clang/AST/Stmt.h"
+#include "clang/Analysis/AnalysisDeclContext.h"
+#include "clang/Basic/AttrKinds.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
+#include "clang/StaticAnalyzer/Core/BugReporter/BugReporterVisitors.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
 #include "clang/StaticAnalyzer/Core/CheckerManager.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallDescription.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/ExplodedGraph.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
 #include "llvm/Support/ErrorHandling.h"
+#include <memory>
 
 using namespace clang;
 using namespace ento;
 
-static SymbolRef getSymbolFromBinarySymExpr(BinarySymExpr *BSE) {
+static SymbolRef getSymbolFromBinarySymExpr(const BinarySymExpr *BSE) {
   if (auto *SIE = dyn_cast<SymIntExpr>(BSE))
     return SIE->getLHS();
 
@@ -37,19 +46,63 @@ static SymbolRef getSymbolFromBinarySymExpr(BinarySymExpr *BSE) {
   return nullptr;
 }
 
+REGISTER_MAP_WITH_PROGRAMSTATE(NonNullConstrainedPtrs, const SymbolRef,
+                               const LocationContext *)
+
 namespace {
 
-class NullPtrInterferenceChecker : public Checker<eval::Assume> {
+class NullPtrInterferenceVisitor : public BugReporterVisitor {
+  SymbolRef Sym;
+  const LocationContext *LCtx;
+
 public:
-  ProgramStateRef evalAssume(ProgramStateRef State, SVal Cond,
-                             bool Assumption) const {
-    Cond.dump();
-    llvm::errs() << '\n';
-    auto *CondBSE = dyn_cast_or_null<BinarySymExpr>(Cond.getAsSymbol());
-    if (!CondBSE)
-      return State;
-    assert(!Cond.getAsSymbol());
-    return State;
+  NullPtrInterferenceVisitor(SymbolRef Sym, const LocationContext *LCtx)
+      : Sym(Sym), LCtx(LCtx) {}
+
+  void Profile(llvm::FoldingSetNodeID &ID) const override {
+    static int x = 0;
+    ID.AddPointer(&x);
+  }
+
+  static void *getTag() {
+    static int Tag = 0;
+    return static_cast<void *>(&Tag);
+  }
+
+  PathDiagnosticPieceRef VisitNode(const ExplodedNode *, BugReporterContext &,
+                                   PathSensitiveBugReport &) override {
+    return nullptr;
+  }
+};
+
+class NullPtrInterferenceChecker : public Checker<check::BranchCondition> {
+  BugType BT;
+
+public:
+  NullPtrInterferenceChecker()
+      : BT(this, "Null pointer already constrained nonnull",
+           "Nullptr inference") {}
+
+  void checkBranchCondition(const Stmt *Condition, CheckerContext &Ctx) const {
+    auto Cond = Ctx.getSVal(Condition).getAs<DefinedOrUnknownSVal>();
+    if (!Cond)
+      return;
+    SymbolRef Sym = Cond->getAsSymbol();
+    if (!Sym)
+      return;
+    if (!Sym->getType()->isAnyPointerType())
+      return;
+    Sym->dump();
+
+    if (Ctx.getState()->isNonNull(*Cond).isConstrainedTrue()) {
+      const ExplodedNode *N = Ctx.generateNonFatalErrorNode(Ctx.getState());
+      if (!N)
+        return;
+      std::unique_ptr<PathSensitiveBugReport> R(
+          std::make_unique<PathSensitiveBugReport>(BT, BT.getDescription(), N));
+      R->addVisitor<NullPtrInterferenceVisitor>(Sym, Ctx.getLocationContext());
+      Ctx.emitReport(std::move(R));
+    }
   }
 };
 
