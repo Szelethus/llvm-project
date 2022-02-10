@@ -16,6 +16,7 @@
 
 #include "clang/AST/Stmt.h"
 #include "clang/Analysis/AnalysisDeclContext.h"
+#include "clang/Analysis/PathDiagnostic.h"
 #include "clang/Analysis/ProgramPoint.h"
 #include "clang/Basic/AttrKinds.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
@@ -53,16 +54,20 @@ static SymbolRef getSymbolFromBinarySymExpr(const BinarySymExpr *BSE) {
 REGISTER_MAP_WITH_PROGRAMSTATE(NonNullConstrainedPtrs, const SymbolRef,
                                const LocationContext *)
 
+static bool isConstrainedNonNull(ProgramStateRef State, const MemRegion *MR) {
+  return State->isNonNull(loc::MemRegionVal(MR)).isConstrainedTrue();
+}
+
 namespace {
 
 class NullPtrInterferenceVisitor : public BugReporterVisitor {
   const MemRegion *MR;
-  const LocationContext *LCtx;
+  const LocationContext *OriginLCtx;
   bool IsSatisfied = false;
 
 public:
   NullPtrInterferenceVisitor(const MemRegion *MR, const LocationContext *LCtx)
-      : MR(MR), LCtx(LCtx) {}
+      : MR(MR), OriginLCtx(LCtx) {}
 
   void Profile(llvm::FoldingSetNodeID &ID) const override {
     static int x = 0;
@@ -81,14 +86,26 @@ public:
       return nullptr;
 
     if (auto CE = N->getLocationAs<CallEnter>())
-      if (CE->getLocationContext() == LCtx)
+      if (CE->getLocationContext() == OriginLCtx)
         IsSatisfied = true;
 
     ProgramStateRef State = N->getState();
+    ProgramStateRef SuccState = N->getFirstSucc()->getState();
 
-    if (!State->isNull(State->getSVal(MR)).isConstrainedTrue())
-      if (LCtx->isParentOf(N->getLocationContext()))
+    if (!isConstrainedNonNull(State, MR) &&
+        isConstrainedNonNull(SuccState, MR)) {
+      IsSatisfied = true;
+
+      if (OriginLCtx != N->getLocationContext()) {
         R.markInvalid(getTag(), "Constrained in another LC");
+        return nullptr;
+      }
+      return std::make_shared<PathDiagnosticEventPiece>(
+          PathDiagnosticLocation(N->getNextStmtForDiagnostics(),
+                                 BC.getSourceManager(),
+                                 N->getLocationContext()),
+          "Pointer assumed non-null here");
+    }
     return nullptr;
   }
 };
@@ -98,8 +115,7 @@ class NullPtrInterferenceChecker : public Checker<check::BranchCondition> {
 
 public:
   NullPtrInterferenceChecker()
-      : BT(this, "Null pointer already constrained nonnull",
-           "Nullptr inference") {}
+      : BT(this, "Pointer already constrained nonnull", "Nullptr inference") {}
 
   void checkBranchCondition(const Stmt *Condition, CheckerContext &Ctx) const {
     auto Cond = Ctx.getSVal(Condition).getAs<DefinedOrUnknownSVal>();
@@ -109,7 +125,7 @@ public:
     if (!MR)
       return;
 
-    if (Ctx.getState()->isNonNull(loc::MemRegionVal(MR)).isConstrainedTrue()) {
+    if (isConstrainedNonNull(Ctx.getState(), MR)) {
       const ExplodedNode *N = Ctx.generateNonFatalErrorNode(Ctx.getState());
       if (!N)
         return;
