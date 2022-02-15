@@ -4,7 +4,7 @@
 
 int *get();
 void top() {
-  int *p = get();
+  int *p = get(); // expected-note{{'p' initialized here}}
   int x = *p;
   // expected-note@-1{{Pointer assumed non-null here}}
   if (p)
