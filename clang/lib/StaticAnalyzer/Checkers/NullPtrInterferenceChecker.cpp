@@ -131,7 +131,11 @@ public:
         return;
       std::unique_ptr<PathSensitiveBugReport> R(
           std::make_unique<PathSensitiveBugReport>(BT, BT.getDescription(), N));
+
       R->addVisitor<NullPtrInterferenceVisitor>(MR, Ctx.getLocationContext());
+      assert(isa<Expr>(Condition));
+
+      bugreporter::trackExpressionValue(N, cast<Expr>(Condition), *R);
       Ctx.emitReport(std::move(R));
     }
   }
