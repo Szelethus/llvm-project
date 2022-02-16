@@ -42,15 +42,15 @@
 using namespace clang;
 using namespace ento;
 
-static SymbolRef getSymbolFromBinarySymExpr(const BinarySymExpr *BSE) {
-  if (auto *SIE = dyn_cast<SymIntExpr>(BSE))
-    return SIE->getLHS();
-
-  if (auto *SIE = dyn_cast<IntSymExpr>(BSE))
-    return SIE->getRHS();
-
-  return nullptr;
-}
+// static SymbolRef getSymbolFromBinarySymExpr(const BinarySymExpr *BSE) {
+//   if (auto *SIE = dyn_cast<SymIntExpr>(BSE))
+//     return SIE->getLHS();
+//
+//   if (auto *SIE = dyn_cast<IntSymExpr>(BSE))
+//     return SIE->getRHS();
+//
+//   return nullptr;
+// }
 
 REGISTER_MAP_WITH_PROGRAMSTATE(NonNullConstrainedPtrs, const SymbolRef,
                                const LocationContext *)
@@ -111,6 +111,35 @@ public:
   }
 };
 
+static bool isNodeBeforeNonNullConstraint(const ExplodedNode *N,
+                                          const MemRegion *MR) {
+  return !isConstrainedNonNull(N->getFirstPred()->getState(), MR) &&
+         isConstrainedNonNull(N->getState(), MR);
+}
+
+static void climbGraph(const ExplodedNode *N, const MemRegion *MR) {
+  assert(!N->getFirstSucc() &&
+         "This should be a leaf of the ExplodedGraph (at this point in the "
+         "analysisi)!");
+
+  N = N->getFirstPred();
+
+  assert(isConstrainedNonNull(N->getFirstSucc()->getState(), MR) &&
+         "This pointer should be non-null!");
+
+  // Look for the node where the constraint was imposed.
+  while (N && !isNodeBeforeNonNullConstraint(N, MR)) {
+    N = N->getFirstPred();
+  }
+  N = N->getFirstPred();
+  assert(N && !isConstrainedNonNull(N->getState(), MR) &&
+         "Failed to find the node that constrained MR!");
+  
+  // ...
+  
+
+}
+
 class NullPtrInterferenceChecker : public Checker<check::BranchCondition> {
   BugType BT;
 
@@ -119,8 +148,8 @@ public:
       : BT(this, "Pointer already constrained nonnull", "Nullptr inference") {}
 
   void checkBranchCondition(const Stmt *Condition, CheckerContext &Ctx) const {
-   if (isa<ObjCForCollectionStmt>(Condition))
-     return;
+    if (isa<ObjCForCollectionStmt>(Condition))
+      return;
     auto Cond = Ctx.getSVal(Condition).getAs<DefinedOrUnknownSVal>();
     if (!Cond)
       return;
@@ -129,6 +158,7 @@ public:
       return;
 
     if (isConstrainedNonNull(Ctx.getState(), MR)) {
+      climbGraph(Ctx.getPredecessor(), MR);
       const ExplodedNode *N = Ctx.generateNonFatalErrorNode(Ctx.getState());
       if (!N)
         return;
