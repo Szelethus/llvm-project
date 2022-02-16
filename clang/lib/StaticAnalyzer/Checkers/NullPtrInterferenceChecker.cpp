@@ -36,7 +36,6 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState_Fwd.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <memory>
 
@@ -112,20 +111,11 @@ public:
   }
 };
 
-static const ExplodedNode *getNonNullPred(const ExplodedNode *N) {
-  for (const ExplodedNode *Pred : N->preds())
-    if (Pred)
-      return Pred;
-
-  llvm_unreachable("");
-  return nullptr;
-}
-
 static bool isNodeBeforeNonNullConstraint(const ExplodedNode *N,
                                           const MemRegion *MR) {
   assert(N);
-  assert(getNonNullPred(N));
-  return !isConstrainedNonNull(getNonNullPred(N)->getState(), MR) &&
+  assert(N->getFirstPred());
+  return !isConstrainedNonNull(N->getFirstPred()->getState(), MR) &&
          isConstrainedNonNull(N->getState(), MR);
 }
 
@@ -134,33 +124,33 @@ static bool isNonNullConstraintTautological(const ExplodedNode *N,
   const LocationContext *OriginLCtx = N->getLocationContext();
   assert(!N->getFirstSucc() &&
          "This should be a leaf of the ExplodedGraph (at this point in the "
-         "analysisi)!");
+         "analysis)!");
 
   assert(isConstrainedNonNull(N->getState(), MR) &&
          "This pointer should be non-null!");
 
-  N = getNonNullPred(N);
+  N = N->getFirstPred();
 
   // Look for the node where the constraint was imposed.
-  while (!isNodeBeforeNonNullConstraint(N, MR)) {
-    assert(isConstrainedNonNull(N->getState(), MR));
-    N = getNonNullPred(N);
+  while (N->getFirstPred() && !isNodeBeforeNonNullConstraint(N, MR)) {
+    N = N->getFirstPred();
   }
-
   const ExplodedNode *NonNullConstrainedN = N;
-  N = getNonNullPred(N);
+  N = N->getFirstPred();
+  if (!N)
+    return false;
+  assert(!isConstrainedNonNull(N->getState(), MR) &&
+         "Failed to find the node that constrained MR!");
 
   // ...
 
-  assert(N->succ_size() == 2);
   for (const ExplodedNode *Succ : N->succs()) {
     if (Succ == NonNullConstrainedN)
       continue;
-    if (Succ->isSink())
-      return OriginLCtx == N->getLocationContext();
+    if (!Succ->isSink())
+      return false;
   }
-  llvm_unreachable("");
-  return false;
+  return OriginLCtx == N->getLocationContext();
 }
 
 class NullPtrInterferenceChecker : public Checker<check::BranchCondition> {
