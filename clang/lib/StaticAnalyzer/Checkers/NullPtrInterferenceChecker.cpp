@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/Stmt.h"
+#include "clang/AST/StmtObjC.h"
 #include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Analysis/PathDiagnostic.h"
 #include "clang/Analysis/ProgramPoint.h"
@@ -118,6 +119,8 @@ public:
       : BT(this, "Pointer already constrained nonnull", "Nullptr inference") {}
 
   void checkBranchCondition(const Stmt *Condition, CheckerContext &Ctx) const {
+   if (isa<ObjCForCollectionStmt>(Condition))
+     return;
     auto Cond = Ctx.getSVal(Condition).getAs<DefinedOrUnknownSVal>();
     if (!Cond)
       return;

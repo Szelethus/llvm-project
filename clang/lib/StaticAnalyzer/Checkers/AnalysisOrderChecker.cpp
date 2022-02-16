@@ -216,8 +216,8 @@ public:
 
   ProgramStateRef evalAssume(ProgramStateRef State, SVal Cond,
                              bool Assumption) const {
-    if (isCallbackEnabled(State, "Assume"))
-      llvm::errs() << "Assume\n";
+    if (isCallbackEnabled(State, "EvalAssume"))
+      llvm::errs() << "EvalAssume\n";
     return State;
   }
 };
