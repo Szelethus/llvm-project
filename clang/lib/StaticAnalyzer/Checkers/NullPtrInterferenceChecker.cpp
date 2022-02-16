@@ -36,6 +36,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramState_Fwd.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <memory>
 
@@ -111,33 +112,55 @@ public:
   }
 };
 
+static const ExplodedNode *getNonNullPred(const ExplodedNode *N) {
+  for (const ExplodedNode *Pred : N->preds())
+    if (Pred)
+      return Pred;
+
+  llvm_unreachable("");
+  return nullptr;
+}
+
 static bool isNodeBeforeNonNullConstraint(const ExplodedNode *N,
                                           const MemRegion *MR) {
-  return !isConstrainedNonNull(N->getFirstPred()->getState(), MR) &&
+  assert(N);
+  assert(getNonNullPred(N));
+  return !isConstrainedNonNull(getNonNullPred(N)->getState(), MR) &&
          isConstrainedNonNull(N->getState(), MR);
 }
 
-static void climbGraph(const ExplodedNode *N, const MemRegion *MR) {
+static bool isNonNullConstraintTautological(const ExplodedNode *N,
+                                            const MemRegion *MR) {
+  const LocationContext *OriginLCtx = N->getLocationContext();
   assert(!N->getFirstSucc() &&
          "This should be a leaf of the ExplodedGraph (at this point in the "
          "analysisi)!");
 
-  N = N->getFirstPred();
-
-  assert(isConstrainedNonNull(N->getFirstSucc()->getState(), MR) &&
+  assert(isConstrainedNonNull(N->getState(), MR) &&
          "This pointer should be non-null!");
 
-  // Look for the node where the constraint was imposed.
-  while (N && !isNodeBeforeNonNullConstraint(N, MR)) {
-    N = N->getFirstPred();
-  }
-  N = N->getFirstPred();
-  assert(N && !isConstrainedNonNull(N->getState(), MR) &&
-         "Failed to find the node that constrained MR!");
-  
-  // ...
-  
+  N = getNonNullPred(N);
 
+  // Look for the node where the constraint was imposed.
+  while (!isNodeBeforeNonNullConstraint(N, MR)) {
+    assert(isConstrainedNonNull(N->getState(), MR));
+    N = getNonNullPred(N);
+  }
+
+  const ExplodedNode *NonNullConstrainedN = N;
+  N = getNonNullPred(N);
+
+  // ...
+
+  assert(N->succ_size() == 2);
+  for (const ExplodedNode *Succ : N->succs()) {
+    if (Succ == NonNullConstrainedN)
+      continue;
+    if (Succ->isSink())
+      return OriginLCtx == N->getLocationContext();
+  }
+  llvm_unreachable("");
+  return false;
 }
 
 class NullPtrInterferenceChecker : public Checker<check::BranchCondition> {
@@ -158,14 +181,16 @@ public:
       return;
 
     if (isConstrainedNonNull(Ctx.getState(), MR)) {
-      climbGraph(Ctx.getPredecessor(), MR);
+      if (!isNonNullConstraintTautological(Ctx.getPredecessor(), MR))
+        return;
       const ExplodedNode *N = Ctx.generateNonFatalErrorNode(Ctx.getState());
       if (!N)
         return;
       std::unique_ptr<PathSensitiveBugReport> R(
           std::make_unique<PathSensitiveBugReport>(BT, BT.getDescription(), N));
 
-      R->addVisitor<NullPtrInterferenceVisitor>(MR, Ctx.getLocationContext());
+      // R->addVisitor<NullPtrInterferenceVisitor>(MR,
+      // Ctx.getLocationContext());
       assert(isa<Expr>(Condition));
 
       bugreporter::trackExpressionValue(N, cast<Expr>(Condition), *R);
