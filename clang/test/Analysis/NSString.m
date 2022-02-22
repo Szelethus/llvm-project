@@ -15,9 +15,9 @@
 
 // RUN: %clang_analyze_cc1 -verify %s -DTEST_64 \
 // RUN:   -triple x86_64-apple-darwin10 -Wno-objc-root-class \
-// RUN:   -analyzer-checker=core
-// RUN:   -analyzer-checker=osx.cocoa.NilArg
-// RUN:   -analyzer-checker=osx.cocoa.RetainCount
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=osx.cocoa.NilArg \
+// RUN:   -analyzer-checker=osx.cocoa.RetainCount \
 // RUN:   -analyzer-checker=alpha.core
 
 // RUN: %clang_analyze_cc1 -verify %s -DOSATOMIC_USE_INLINED \

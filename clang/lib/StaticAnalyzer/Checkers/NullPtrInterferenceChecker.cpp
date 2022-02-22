@@ -42,66 +42,6 @@
 using namespace clang;
 using namespace ento;
 
-// static SymbolRef getSymbolFromBinarySymExpr(const BinarySymExpr *BSE) {
-//   if (auto *SIE = dyn_cast<SymIntExpr>(BSE))
-//     return SIE->getLHS();
-//
-//   if (auto *SIE = dyn_cast<IntSymExpr>(BSE))
-//     return SIE->getRHS();
-//
-//   return nullptr;
-// }
-
-//class NullPtrInterferenceVisitor : public BugReporterVisitor {
-//  const MemRegion *MR;
-//  const LocationContext *OriginLCtx;
-//  bool IsSatisfied = false;
-//
-//public:
-//  NullPtrInterferenceVisitor(const MemRegion *MR, const LocationContext *LCtx)
-//      : MR(MR), OriginLCtx(LCtx) {}
-//
-//  void Profile(llvm::FoldingSetNodeID &ID) const override {
-//    static int x = 0;
-//    ID.AddPointer(&x);
-//  }
-//
-//  static void *getTag() {
-//    static int Tag = 0;
-//    return static_cast<void *>(&Tag);
-//  }
-//
-//  PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
-//                                   BugReporterContext &BC,
-//                                   PathSensitiveBugReport &R) override {
-//    if (IsSatisfied)
-//      return nullptr;
-//
-//    if (auto CE = N->getLocationAs<CallEnter>())
-//      if (CE->getLocationContext() == OriginLCtx)
-//        IsSatisfied = true;
-//
-//    ProgramStateRef State = N->getState();
-//    ProgramStateRef SuccState = N->getFirstSucc()->getState();
-//
-//    if (!isConstrainedNonNull(State, MR) &&
-//        isConstrainedNonNull(SuccState, MR)) {
-//      IsSatisfied = true;
-//
-//      if (OriginLCtx != N->getLocationContext()) {
-//        R.markInvalid(getTag(), "Constrained in another LC");
-//        return nullptr;
-//      }
-//      return std::make_shared<PathDiagnosticEventPiece>(
-//          PathDiagnosticLocation(N->getNextStmtForDiagnostics(),
-//                                 BC.getSourceManager(),
-//                                 N->getLocationContext()),
-//          "Pointer assumed non-null here");
-//    }
-//    return nullptr;
-//  }
-//};
-
 REGISTER_MAP_WITH_PROGRAMSTATE(NonNullConstrainedPtrs, const SymbolRef,
                                const LocationContext *)
 
@@ -116,6 +56,43 @@ static bool isNodeBeforeNonNullConstraint(const ExplodedNode *N,
   return !isConstrainedNonNull(N->getFirstPred()->getState(), MR) &&
          isConstrainedNonNull(N->getState(), MR);
 }
+
+class NullPtrInterferenceVisitor : public BugReporterVisitor {
+  const MemRegion *MR;
+  const LocationContext *OriginLCtx;
+  bool IsSatisfied = false;
+
+public:
+  NullPtrInterferenceVisitor(const MemRegion *MR, const LocationContext *LCtx)
+      : MR(MR), OriginLCtx(LCtx) {}
+
+  void Profile(llvm::FoldingSetNodeID &ID) const override {
+    static int x = 0;
+    ID.AddPointer(&x);
+  }
+
+  static void *getTag() {
+    static int Tag = 0;
+    return static_cast<void *>(&Tag);
+  }
+
+  PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
+                                   BugReporterContext &BC,
+                                   PathSensitiveBugReport &R) override {
+    if (IsSatisfied)
+      return nullptr;
+
+    if (!isNodeBeforeNonNullConstraint(N, MR))
+      return nullptr;
+
+    IsSatisfied = true;
+
+    return std::make_shared<PathDiagnosticEventPiece>(
+        PathDiagnosticLocation(N->getNextStmtForDiagnostics(),
+                               BC.getSourceManager(), N->getLocationContext()),
+        "Pointer assumed non-null here");
+  }
+};
 
 static bool isNonNullConstraintTautological(const ExplodedNode *N,
                                             const MemRegion *MR,
@@ -149,16 +126,7 @@ static bool isNonNullConstraintTautological(const ExplodedNode *N,
     if (!Succ->isSink())
       return false;
   }
-  if (OriginLCtx == N->getLocationContext()) {
-    R.addNote("Pointer assumed non-null here",
-              PathDiagnosticLocation(
-                  N->getNextStmtForDiagnostics(),
-                  N->getState()->getAnalysisManager().getSourceManager(),
-                  N->getLocationContext()));
-    return true;
-  }
-
-  return false;
+  return OriginLCtx == N->getLocationContext();
 }
 
 namespace {
@@ -189,8 +157,8 @@ public:
       if (!isNonNullConstraintTautological(N, MR, *R))
         return;
 
-      // R->addVisitor<NullPtrInterferenceVisitor>(MR,
-      // Ctx.getLocationContext());
+      R->addVisitor<NullPtrInterferenceVisitor>(MR,
+       Ctx.getLocationContext());
       assert(isa<Expr>(Condition));
 
       bugreporter::trackExpressionValue(N, cast<Expr>(Condition), *R);
