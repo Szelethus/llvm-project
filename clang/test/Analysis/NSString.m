@@ -1,7 +1,31 @@
-// RUN: %clang_analyze_cc1 -triple i386-apple-darwin10 -analyzer-checker=core,osx.cocoa.NilArg,osx.cocoa.RetainCount,alpha.core -analyzer-store=region -verify -Wno-objc-root-class %s
-// RUN: %clang_analyze_cc1 -triple i386-apple-darwin10 -analyzer-checker=core,osx.cocoa.NilArg,osx.cocoa.RetainCount,alpha.core -analyzer-store=region -analyzer-config mode=shallow -verify -Wno-objc-root-class %s
-// RUN: %clang_analyze_cc1 -DTEST_64 -triple x86_64-apple-darwin10 -analyzer-checker=core,osx.cocoa.NilArg,osx.cocoa.RetainCount,alpha.core -analyzer-store=region -verify -Wno-objc-root-class %s
-// RUN: %clang_analyze_cc1 -DOSATOMIC_USE_INLINED -triple i386-apple-darwin10 -analyzer-checker=core,osx.cocoa.NilArg,osx.cocoa.RetainCount,alpha.core -analyzer-store=region -verify -Wno-objc-root-class %s
+// RUN: %clang_analyze_cc1 -verify %s\
+// RUN:   -triple i386-apple-darwin10 -Wno-objc-root-class \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=osx.cocoa.NilArg \
+// RUN:   -analyzer-checker=osx.cocoa.RetainCount \
+// RUN:   -analyzer-checker=alpha.core
+
+// RUN: %clang_analyze_cc1 -verify %s \
+// RUN:   -triple i386-apple-darwin10 -Wno-objc-root-class \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=osx.cocoa.NilArg \
+// RUN:   -analyzer-checker=osx.cocoa.RetainCount \
+// RUN:   -analyzer-checker=alpha.core \
+// RUN:   -analyzer-config mode=shallow
+
+// RUN: %clang_analyze_cc1 -verify %s -DTEST_64 \
+// RUN:   -triple x86_64-apple-darwin10 -Wno-objc-root-class \
+// RUN:   -analyzer-checker=core
+// RUN:   -analyzer-checker=osx.cocoa.NilArg
+// RUN:   -analyzer-checker=osx.cocoa.RetainCount
+// RUN:   -analyzer-checker=alpha.core
+
+// RUN: %clang_analyze_cc1 -verify %s -DOSATOMIC_USE_INLINED \
+// RUN:   -triple i386-apple-darwin10 -Wno-objc-root-class \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=osx.cocoa.NilArg \
+// RUN:   -analyzer-checker=osx.cocoa.RetainCount \
+// RUN:   -analyzer-checker=alpha.core
 
 //===----------------------------------------------------------------------===//
 // The following code is reduced using delta-debugging from

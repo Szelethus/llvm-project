@@ -52,64 +52,62 @@ using namespace ento;
 //   return nullptr;
 // }
 
+//class NullPtrInterferenceVisitor : public BugReporterVisitor {
+//  const MemRegion *MR;
+//  const LocationContext *OriginLCtx;
+//  bool IsSatisfied = false;
+//
+//public:
+//  NullPtrInterferenceVisitor(const MemRegion *MR, const LocationContext *LCtx)
+//      : MR(MR), OriginLCtx(LCtx) {}
+//
+//  void Profile(llvm::FoldingSetNodeID &ID) const override {
+//    static int x = 0;
+//    ID.AddPointer(&x);
+//  }
+//
+//  static void *getTag() {
+//    static int Tag = 0;
+//    return static_cast<void *>(&Tag);
+//  }
+//
+//  PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
+//                                   BugReporterContext &BC,
+//                                   PathSensitiveBugReport &R) override {
+//    if (IsSatisfied)
+//      return nullptr;
+//
+//    if (auto CE = N->getLocationAs<CallEnter>())
+//      if (CE->getLocationContext() == OriginLCtx)
+//        IsSatisfied = true;
+//
+//    ProgramStateRef State = N->getState();
+//    ProgramStateRef SuccState = N->getFirstSucc()->getState();
+//
+//    if (!isConstrainedNonNull(State, MR) &&
+//        isConstrainedNonNull(SuccState, MR)) {
+//      IsSatisfied = true;
+//
+//      if (OriginLCtx != N->getLocationContext()) {
+//        R.markInvalid(getTag(), "Constrained in another LC");
+//        return nullptr;
+//      }
+//      return std::make_shared<PathDiagnosticEventPiece>(
+//          PathDiagnosticLocation(N->getNextStmtForDiagnostics(),
+//                                 BC.getSourceManager(),
+//                                 N->getLocationContext()),
+//          "Pointer assumed non-null here");
+//    }
+//    return nullptr;
+//  }
+//};
+
 REGISTER_MAP_WITH_PROGRAMSTATE(NonNullConstrainedPtrs, const SymbolRef,
                                const LocationContext *)
 
 static bool isConstrainedNonNull(ProgramStateRef State, const MemRegion *MR) {
   return State->isNonNull(loc::MemRegionVal(MR)).isConstrainedTrue();
 }
-
-namespace {
-
-class NullPtrInterferenceVisitor : public BugReporterVisitor {
-  const MemRegion *MR;
-  const LocationContext *OriginLCtx;
-  bool IsSatisfied = false;
-
-public:
-  NullPtrInterferenceVisitor(const MemRegion *MR, const LocationContext *LCtx)
-      : MR(MR), OriginLCtx(LCtx) {}
-
-  void Profile(llvm::FoldingSetNodeID &ID) const override {
-    static int x = 0;
-    ID.AddPointer(&x);
-  }
-
-  static void *getTag() {
-    static int Tag = 0;
-    return static_cast<void *>(&Tag);
-  }
-
-  PathDiagnosticPieceRef VisitNode(const ExplodedNode *N,
-                                   BugReporterContext &BC,
-                                   PathSensitiveBugReport &R) override {
-    if (IsSatisfied)
-      return nullptr;
-
-    if (auto CE = N->getLocationAs<CallEnter>())
-      if (CE->getLocationContext() == OriginLCtx)
-        IsSatisfied = true;
-
-    ProgramStateRef State = N->getState();
-    ProgramStateRef SuccState = N->getFirstSucc()->getState();
-
-    if (!isConstrainedNonNull(State, MR) &&
-        isConstrainedNonNull(SuccState, MR)) {
-      IsSatisfied = true;
-
-      if (OriginLCtx != N->getLocationContext()) {
-        R.markInvalid(getTag(), "Constrained in another LC");
-        return nullptr;
-      }
-      return std::make_shared<PathDiagnosticEventPiece>(
-          PathDiagnosticLocation(N->getNextStmtForDiagnostics(),
-                                 BC.getSourceManager(),
-                                 N->getLocationContext()),
-          "Pointer assumed non-null here");
-    }
-    return nullptr;
-  }
-};
 
 static bool isNodeBeforeNonNullConstraint(const ExplodedNode *N,
                                           const MemRegion *MR) {
@@ -120,7 +118,8 @@ static bool isNodeBeforeNonNullConstraint(const ExplodedNode *N,
 }
 
 static bool isNonNullConstraintTautological(const ExplodedNode *N,
-                                            const MemRegion *MR) {
+                                            const MemRegion *MR,
+                                            PathSensitiveBugReport &R) {
   const LocationContext *OriginLCtx = N->getLocationContext();
   assert(!N->getFirstSucc() &&
          "This should be a leaf of the ExplodedGraph (at this point in the "
@@ -150,8 +149,19 @@ static bool isNonNullConstraintTautological(const ExplodedNode *N,
     if (!Succ->isSink())
       return false;
   }
-  return OriginLCtx == N->getLocationContext();
+  if (OriginLCtx == N->getLocationContext()) {
+    R.addNote("Pointer assumed non-null here",
+              PathDiagnosticLocation(
+                  N->getNextStmtForDiagnostics(),
+                  N->getState()->getAnalysisManager().getSourceManager(),
+                  N->getLocationContext()));
+    return true;
+  }
+
+  return false;
 }
+
+namespace {
 
 class NullPtrInterferenceChecker : public Checker<check::BranchCondition> {
   BugType BT;
@@ -171,13 +181,13 @@ public:
       return;
 
     if (isConstrainedNonNull(Ctx.getState(), MR)) {
-      if (!isNonNullConstraintTautological(Ctx.getPredecessor(), MR))
-        return;
       const ExplodedNode *N = Ctx.generateNonFatalErrorNode(Ctx.getState());
       if (!N)
         return;
       std::unique_ptr<PathSensitiveBugReport> R(
           std::make_unique<PathSensitiveBugReport>(BT, BT.getDescription(), N));
+      if (!isNonNullConstraintTautological(N, MR, *R))
+        return;
 
       // R->addVisitor<NullPtrInterferenceVisitor>(MR,
       // Ctx.getLocationContext());
