@@ -92,6 +92,14 @@ public:
                                BC.getSourceManager(), N->getLocationContext()),
         "Pointer assumed non-null here");
   }
+
+  /// Last function called on the visitor, no further calls to VisitNode
+  /// would follow.
+  virtual void finalizeVisitor(BugReporterContext &BRC,
+                               const ExplodedNode *EndPathNode,
+                               PathSensitiveBugReport &BR) override {
+    assert(IsSatisfied);
+  }
 };
 
 static bool isNonNullConstraintTautological(const ExplodedNode *N,
