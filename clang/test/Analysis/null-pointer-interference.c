@@ -6,7 +6,7 @@ int *get();
 void top() {
   int *p = get(); // expected-note{{'p' initialized here}}
   int x = *p;
-  // xpected-note@-1{{Pointer assumed non-null here}}
+  // expected-note@-1{{Pointer assumed non-null here}}
   if (p)
     // expected-note@-1{{Pointer already constrained nonnull}}
     // expected-warning@-2{{Pointer already constrained nonnull [alpha.core.NullPtrInterference]}}
