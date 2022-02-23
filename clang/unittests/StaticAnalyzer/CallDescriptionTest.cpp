@@ -47,7 +47,6 @@ public:
     // If it's a function we expected to find, remember that we've found it.
     if (Result && *Result)
       ++Found;
-
     return Result;
   }
 
