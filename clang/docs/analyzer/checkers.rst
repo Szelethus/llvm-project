@@ -1699,6 +1699,21 @@ Check for pointer subtractions on two pointers pointing to different memory chun
    int d = &y - &x; // warn
  }
 
+alpha.core.ReverseNull (C)
+"""""""""""""""""""""""""
+Checks whether a dereferenced (and as such, assumed to be non-null) pointer is
+present in a condition.
+
+.. code-block:: c
+
+  int *get();
+  void top() {
+    int *p = get();
+    int x = *p; // note: pointer assumed non-null here
+    if (p) // warn: pointer already constrained nonnull
+      return;
+  }
+
 .. _alpha-core-SizeofPtr:
 
 alpha.core.SizeofPtr (C)

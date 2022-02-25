@@ -1,4 +1,4 @@
-//===- NullPtrInterferenceChecker.cpp -------------------------- -*- C++ -*--=//
+//===--- ReverseNullChecker.cpp ----------------------------- -*- C++ -*---===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,11 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This checker defines the attack surface for generic taint propagation.
-//
-// The taint information produced by it might be useful to other checkers. For
-// example, checkers should report errors which involve tainted data more
-// aggressively, even if the involved symbols are under constrained.
+// TODO
 //
 //===----------------------------------------------------------------------===//
 
@@ -57,14 +53,15 @@ static bool isNodeBeforeNonNullConstraint(const ExplodedNode *N,
          isConstrainedNonNull(N->getState(), MR);
 }
 
-class NullPtrInterferenceVisitor : public BugReporterVisitor {
+/// Leave a note about where the constraint to null/non-null was imposed.
+class ReverseNullVisitor : public BugReporterVisitor {
+  /// The memory region that was a part of a condition where its value was
+  /// already known.
   const MemRegion *MR;
-  const LocationContext *OriginLCtx;
   bool IsSatisfied = false;
 
 public:
-  NullPtrInterferenceVisitor(const MemRegion *MR, const LocationContext *LCtx)
-      : MR(MR), OriginLCtx(LCtx) {}
+  ReverseNullVisitor(const MemRegion *MR) : MR(MR) {}
 
   void Profile(llvm::FoldingSetNodeID &ID) const override {
     static int x = 0;
@@ -93,18 +90,49 @@ public:
         "Pointer assumed non-null here");
   }
 
-  /// Last function called on the visitor, no further calls to VisitNode
-  /// would follow.
+  /// The checker must have made sure that this node actually exists. If we did
+  /// not find it, we must've messed up the visitor. Are we sure that we used
+  /// the same machinery to find the exploded here AND in the checker?
   virtual void finalizeVisitor(BugReporterContext &BRC,
                                const ExplodedNode *EndPathNode,
                                PathSensitiveBugReport &BR) override {
-    assert(IsSatisfied);
+    assert(IsSatisfied &&
+           "Failed to find the ExplodedNode where the constaint was imposed on "
+           "the condition whose value was known!");
   }
 };
 
+/// Climb up the ExplodedGraph, and check whether the point where the condition
+/// was contrained to be null/non-null was a state split to analyze two new
+/// paths of execution, or only one.
+/// For example, here, p is null on one path, and non-null on another where the
+/// constraints are imposed:
+///
+///   int *p = get();
+///   if (p) // state split, this ExplodedNode will have two children
+///     // p assumed non-null
+///   else
+///     // p assumed non-null
+///   //...
+///   if (p) // Don't warn here, this is a totally valid condition
+///     // ...
+///
+/// But here, on all paths immediately after p's dereference, p is non-null:
+///
+///   int *p = get();
+///   *p = 5; // This ExplodedNode will have a single child
+///   if (p) // Warn here!
+///     // ...
+///
+/// Ideally, this would be done with a BugReporterVisitor, but the ExplodedGraph
+/// it has access to is NOT the same as the ExplodedGraph that is constructed
+/// during analysis (see https://reviews.llvm.org/D65379). In fact, it is a
+/// linear graph, and we're specifically interested in branches, hence the
+/// unusual approach.
 static bool isNonNullConstraintTautological(const ExplodedNode *N,
-                                            const MemRegion *MR,
-                                            PathSensitiveBugReport &R) {
+                                            const MemRegion *MR) {
+
+  // The location context of the condition point.
   const LocationContext *OriginLCtx = N->getLocationContext();
   assert(!N->getFirstSucc() &&
          "This should be a leaf of the ExplodedGraph (at this point in the "
@@ -116,58 +144,73 @@ static bool isNonNullConstraintTautological(const ExplodedNode *N,
   N = N->getFirstPred();
 
   // Look for the node where the constraint was imposed.
-  while (N->getFirstPred() && !isNodeBeforeNonNullConstraint(N, MR)) {
+  while (N->getFirstPred() && !isNodeBeforeNonNullConstraint(N, MR))
     N = N->getFirstPred();
-  }
-  const ExplodedNode *NonNullConstrainedN = N;
-  N = N->getFirstPred();
+
+  // We failed to find the node. This can happen with ObjC self, which may not
+  // have a node where its non-null, even if it can be non-null.
   if (!N)
     return false;
-  assert(!isConstrainedNonNull(N->getState(), MR) &&
-         "Failed to find the node that constrained MR!");
 
-  // ...
+  const ExplodedNode *NonNullConstrainedN = N;
+  const ExplodedNode *BeforeNonNullConstraintN = N->getFirstPred();
 
-  for (const ExplodedNode *Succ : N->succs()) {
+  assert(!isConstrainedNonNull(BeforeNonNullConstraintN->getState(), MR) &&
+         "This is supposed to be the node where the constraint is not yet "
+         "imposed!");
+
+  // How many children does the pre-constraint node have? Does it have any that
+  // does not unconditionally lead to a sink node?
+  for (const ExplodedNode *Succ : BeforeNonNullConstraintN->succs()) {
     if (Succ == NonNullConstrainedN)
       continue;
+
+    // Yes, it does. The condition was likely fine, or not necesserily a sign
+    // of code smell.
     if (!Succ->isSink())
       return false;
   }
-  return OriginLCtx == N->getLocationContext();
+
+  // We want to be sure that the constraint and the condition are in the same
+  // stackframe. Inlined functions' pre/post conditions may not apply to the
+  // caller stackframe. A similar issue is discussed here:
+  // https://discourse.llvm.org/t/static-analyzer-query-why-is-suppress-null-return-paths-enabled-by-default/
+  return OriginLCtx == BeforeNonNullConstraintN->getLocationContext();
 }
 
 namespace {
 
-class NullPtrInterferenceChecker : public Checker<check::BranchCondition> {
+class ReverseNullChecker : public Checker<check::BranchCondition> {
   BugType BT;
 
 public:
-  NullPtrInterferenceChecker()
+  ReverseNullChecker()
       : BT(this, "Pointer already constrained nonnull", "Nullptr inference") {}
 
   void checkBranchCondition(const Stmt *Condition, CheckerContext &Ctx) const {
     if (isa<ObjCForCollectionStmt>(Condition))
       return;
+
     auto Cond = Ctx.getSVal(Condition).getAs<DefinedOrUnknownSVal>();
     if (!Cond)
       return;
+
     const MemRegion *MR = Cond->getAsRegion();
     if (!MR)
       return;
 
     if (isConstrainedNonNull(Ctx.getState(), MR)) {
+      if (!isNonNullConstraintTautological(Ctx.getPredecessor(), MR))
+        return;
+
       const ExplodedNode *N = Ctx.generateNonFatalErrorNode(Ctx.getState());
       if (!N)
         return;
+
       std::unique_ptr<PathSensitiveBugReport> R(
           std::make_unique<PathSensitiveBugReport>(BT, BT.getDescription(), N));
-      if (!isNonNullConstraintTautological(N, MR, *R))
-        return;
 
-      R->addVisitor<NullPtrInterferenceVisitor>(MR,
-       Ctx.getLocationContext());
-      assert(isa<Expr>(Condition));
+      R->addVisitor<ReverseNullVisitor>(MR);
 
       bugreporter::trackExpressionValue(N, cast<Expr>(Condition), *R);
       Ctx.emitReport(std::move(R));
@@ -177,10 +220,10 @@ public:
 
 } // namespace
 
-void ento::registerNullPtrInterferenceChecker(CheckerManager &Mgr) {
-  Mgr.registerChecker<NullPtrInterferenceChecker>();
+void clang::ento::registerReverseNullChecker(CheckerManager &Mgr) {
+  Mgr.registerChecker<ReverseNullChecker>();
 }
 
-bool ento::shouldRegisterNullPtrInterferenceChecker(const CheckerManager &mgr) {
+bool clang::ento::shouldRegisterReverseNullChecker(const CheckerManager &mgr) {
   return true;
 }

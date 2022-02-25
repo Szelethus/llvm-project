@@ -298,9 +298,10 @@ def C11LockChecker : Checker<"C11Lock">,
   Dependencies<[PthreadLockBase]>,
   Documentation<HasAlphaDocumentation>;
 
-def NullPtrInterferenceChecker : Checker<"NullPtrInterference">,
-  HelpText<"Annoy users about checking a pointers value after dereferencing">,
-  Documentation<NotDocumented>;
+def ReverseNullChecker : Checker<"ReverseNull">,
+  HelpText<"Checks whether a pointer that is already known to null or non-null "
+           "is present in a condition.">,
+  Documentation<HasAlphaDocumentation>;
 
 } // end "alpha.core"
 
