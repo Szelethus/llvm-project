@@ -188,7 +188,7 @@ NSString* f11(CFDictionaryRef dict, const char* key) {
   NSString* s = (NSString*) CFDictionaryGetValue(dict, key);
   [s retain];
   if (s) {
-    // expected-warning@-1{{Pointer already constrained nonnull [alpha.core.NullPtrInterference]}}
+    // expected-warning@-1{{Pointer is unconditionally non-null here [alpha.core.ReverseNull]}}
     [s release];
   }
   return 0;

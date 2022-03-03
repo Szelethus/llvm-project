@@ -85,8 +85,8 @@ public:
     IsSatisfied = true;
 
     return std::make_shared<PathDiagnosticEventPiece>(
-        PathDiagnosticLocation(N->getNextStmtForDiagnostics(),
-                               BC.getSourceManager(), N->getLocationContext()),
+        PathDiagnosticLocation{N->getNextStmtForDiagnostics(),
+                               BC.getSourceManager(), N->getLocationContext()},
         "Pointer assumed non-null here");
   }
 
@@ -129,11 +129,9 @@ public:
 /// during analysis (see https://reviews.llvm.org/D65379). In fact, it is a
 /// linear graph, and we're specifically interested in branches, hence the
 /// unusual approach.
-static bool isNonNullConstraintTautological(const ExplodedNode *N,
-                                            const MemRegion *MR) {
+static const ExplodedNode *getNBeforeNonNullConstraint(const ExplodedNode *N,
+                                                       const MemRegion *MR) {
 
-  // The location context of the condition point.
-  const LocationContext *OriginLCtx = N->getLocationContext();
   assert(!N->getFirstSucc() &&
          "This should be a leaf of the ExplodedGraph (at this point in the "
          "analysis)!");
@@ -150,34 +148,34 @@ static bool isNonNullConstraintTautological(const ExplodedNode *N,
   // We failed to find the node. This can happen with ObjC self, which may not
   // have a node where its non-null, even if it can be non-null.
   if (!N)
-    return false;
-  const ExplodedNode *NonNullConstrainedN = N;
+    return nullptr;
 
-  if (!N->getFirstPred())
-    return false;
   const ExplodedNode *BeforeNonNullConstraintN = N->getFirstPred();
+  if (!BeforeNonNullConstraintN)
+    return nullptr;
 
   assert(!isConstrainedNonNull(BeforeNonNullConstraintN->getState(), MR) &&
          "This is supposed to be the node where the constraint is not yet "
          "imposed!");
 
-  // How many children does the pre-constraint node have? Does it have any that
-  // does not unconditionally lead to a sink node?
-  for (const ExplodedNode *Succ : BeforeNonNullConstraintN->succs()) {
-    if (Succ == NonNullConstrainedN)
-      continue;
+  return BeforeNonNullConstraintN;
+}
 
-    // Yes, it does. The condition was likely fine, or not necesserily a sign
-    // of code smell.
-    if (!Succ->isSink())
-      return false;
-  }
+// How many children does the pre-constraint node have? Does it have more than
+// one that does not unconditionally lead to a sink node?
+// If so, than the pointer likely doesn't unconditionally reach the condition
+// being null or non-null.
+static bool unconditionallyLeadsHere(const ExplodedNode *N) {
+  size_t NonSinkNodeCount = llvm::count_if(
+      N->succs(), [](const ExplodedNode *N) { return !N->isSink(); });
 
-  // We want to be sure that the constraint and the condition are in the same
-  // stackframe. Inlined functions' pre/post conditions may not apply to the
-  // caller stackframe. A similar issue is discussed here:
-  // https://discourse.llvm.org/t/static-analyzer-query-why-is-suppress-null-return-paths-enabled-by-default/
-  return OriginLCtx == BeforeNonNullConstraintN->getLocationContext();
+  assert(NonSinkNodeCount != 0 &&
+         "At least one node should be non-sinking, because one leads to the "
+         "path of execution the checker currently analyses!");
+
+  // TODO: Actually assert whether this child leads to the node where the currnt
+  // analysis is.
+  return NonSinkNodeCount == 1;
 }
 
 namespace {
@@ -203,7 +201,20 @@ public:
 
     // TODO: Altough not as interesting, we could also check the null case.
     if (isConstrainedNonNull(Ctx.getState(), MR)) {
-      if (!isNonNullConstraintTautological(Ctx.getPredecessor(), MR))
+
+      const ExplodedNode *NBeforeConstraint =
+          getNBeforeNonNullConstraint(Ctx.getPredecessor(), MR);
+      if (!NBeforeConstraint)
+        return;
+
+      if (!unconditionallyLeadsHere(NBeforeConstraint))
+        return;
+
+      // We want to be sure that the constraint and the condition are in the
+      // same stackframe. Inlined functions' pre/post conditions may not apply
+      // to the caller stackframe. A similar issue is discussed here:
+      // https://discourse.llvm.org/t/static-analyzer-query-why-is-suppress-null-return-paths-enabled-by-default/
+      if (NBeforeConstraint->getLocationContext() != Ctx.getLocationContext())
         return;
 
       const ExplodedNode *N = Ctx.generateNonFatalErrorNode(Ctx.getState());
@@ -212,6 +223,12 @@ public:
 
       std::unique_ptr<PathSensitiveBugReport> R(
           std::make_unique<PathSensitiveBugReport>(BT, BT.getDescription(), N));
+
+      R->addNote(
+          "Consider moving the condition here",
+          PathDiagnosticLocation{NBeforeConstraint->getNextStmtForDiagnostics(),
+                                 Ctx.getSourceManager(),
+                                 NBeforeConstraint->getLocationContext()});
 
       R->addVisitor<ReverseNullVisitor>(MR);
       bugreporter::trackExpressionValue(N, cast<Expr>(Condition), *R);

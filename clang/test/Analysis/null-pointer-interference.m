@@ -4,7 +4,7 @@
 // RUN:   -analyzer-checker=core \
 // RUN:   -analyzer-checker=osx.cocoa.NilArg \
 // RUN:   -analyzer-checker=osx.cocoa.RetainCount \
-// RUN:   -analyzer-checker=alpha.core
+// RUN:   -analyzer-checker=alpha.core.ReverseNull
 
 #include "Inputs/system-header-simulator-objc.h"
 
@@ -18,7 +18,7 @@ NSString* f11(CFDictionaryRef dict, const char* key) {
   [s retain];
   // expected-note@-1{{Pointer assumed non-null here}}
   if (s) {
-    // expected-warning@-1{{Pointer already constrained nonnull [alpha.core.NullPtrInterference]}}
+    // expected-warning@-1{{Pointer is unconditionally non-null here [alpha.core.ReverseNull]}}
     // expected-note@-2{{Pointer already constrained nonnull}}
     [s release];
   }

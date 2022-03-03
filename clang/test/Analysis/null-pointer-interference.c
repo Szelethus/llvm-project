@@ -1,6 +1,6 @@
 // RUN: %clang_analyze_cc1 -verify %s -analyzer-output=text\
 // RUN:   -analyzer-checker=core \
-// RUN:   -analyzer-checker=alpha.core.NullPtrInterference
+// RUN:   -analyzer-checker=alpha.core.ReverseNull
 
 //===----------------------------------------------------------------------===//
 // True positive test cases.
@@ -10,7 +10,7 @@ void tp1(int *p) {
   // expected-note@-1{{Pointer assumed non-null here}}
   if (p)
     // expected-note@-1{{Pointer already constrained nonnull}}
-    // expected-warning@-2{{Pointer already constrained nonnull [alpha.core.NullPtrInterference]}}
+    // expected-warning@-2{{Pointer is unconditionally non-null here [alpha.core.ReverseNull]}}
     return;
 }
 
