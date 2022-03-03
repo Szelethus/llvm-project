@@ -16,6 +16,18 @@ void tp1(int *p) {
     return;
 }
 
+void tp2(int *p) {
+  *p = 5;
+  // expected-note@-1{{Pointer assumed non-null here}}
+  // expected-note@-2{{Consider moving the condition here}}
+  int *x = p;
+  // expected-note@-1{{'x' initialized here}}
+  if (x)
+    // expected-note@-1{{Pointer is unconditionally non-null here}}
+    // expected-warning@-2{{Pointer is unconditionally non-null here [alpha.core.ReverseNull]}}
+    return;
+}
+
 //===----------------------------------------------------------------------===//
 // True negative test cases.
 //===----------------------------------------------------------------------===//
