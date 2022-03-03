@@ -223,13 +223,11 @@ public:
 
       std::unique_ptr<PathSensitiveBugReport> R(
           std::make_unique<PathSensitiveBugReport>(BT, BT.getDescription(), N));
-
       R->addNote(
           "Consider moving the condition here",
           PathDiagnosticLocation{NBeforeConstraint->getNextStmtForDiagnostics(),
                                  Ctx.getSourceManager(),
                                  NBeforeConstraint->getLocationContext()});
-
       R->addVisitor<ReverseNullVisitor>(MR);
       bugreporter::trackExpressionValue(N, cast<Expr>(Condition), *R);
       Ctx.emitReport(std::move(R));
