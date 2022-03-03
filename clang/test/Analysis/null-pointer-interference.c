@@ -2,10 +2,11 @@
 // RUN:   -analyzer-checker=core \
 // RUN:   -analyzer-checker=alpha.core.NullPtrInterference
 
-int *get();
-void top() {
-  int *p = get(); // expected-note{{'p' initialized here}}
-  int x = *p;
+//===----------------------------------------------------------------------===//
+// True positive test cases.
+//===----------------------------------------------------------------------===//
+
+void tp1(int *p) {
   // expected-note@-1{{Pointer assumed non-null here}}
   if (p)
     // expected-note@-1{{Pointer already constrained nonnull}}
@@ -13,13 +14,16 @@ void top() {
     return;
 }
 
-void nested(int *p) {
+//===----------------------------------------------------------------------===//
+// True negative test cases.
+//===----------------------------------------------------------------------===//
+
+void tn1_nested(int *p) {
   *p = 5;
 }
 
-void top2() {
-  int *p = get();
-  nested(p);
+void tn1(int *p) {
+  tn1_nested(p);
   if (p)
     return;
 }

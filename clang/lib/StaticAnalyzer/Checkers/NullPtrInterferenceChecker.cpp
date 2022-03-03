@@ -151,8 +151,10 @@ static bool isNonNullConstraintTautological(const ExplodedNode *N,
   // have a node where its non-null, even if it can be non-null.
   if (!N)
     return false;
-
   const ExplodedNode *NonNullConstrainedN = N;
+
+  if (!N->getFirstPred())
+    return false;
   const ExplodedNode *BeforeNonNullConstraintN = N->getFirstPred();
 
   assert(!isConstrainedNonNull(BeforeNonNullConstraintN->getState(), MR) &&
@@ -185,7 +187,7 @@ class ReverseNullChecker : public Checker<check::BranchCondition> {
 
 public:
   ReverseNullChecker()
-      : BT(this, "Pointer already constrained nonnull", "Nullptr inference") {}
+      : BT(this, "Pointer is unconditionally non-null here", "Reverse null") {}
 
   void checkBranchCondition(const Stmt *Condition, CheckerContext &Ctx) const {
     if (isa<ObjCForCollectionStmt>(Condition))
@@ -199,6 +201,7 @@ public:
     if (!MR)
       return;
 
+    // TODO: Altough not as interesting, we could also check the null case.
     if (isConstrainedNonNull(Ctx.getState(), MR)) {
       if (!isNonNullConstraintTautological(Ctx.getPredecessor(), MR))
         return;
@@ -211,7 +214,6 @@ public:
           std::make_unique<PathSensitiveBugReport>(BT, BT.getDescription(), N));
 
       R->addVisitor<ReverseNullVisitor>(MR);
-
       bugreporter::trackExpressionValue(N, cast<Expr>(Condition), *R);
       Ctx.emitReport(std::move(R));
     }
