@@ -2,7 +2,9 @@
 // RUN:   -analyzer-checker=core,apiModeling \
 // RUN:   -analyzer-checker=debug.ExprInspection \
 // RUN:   -analyzer-checker=alpha.core.ReverseNull \
-// RUN:   -analyzer-config apiModeling.StdCLibraryFunctions:ModelPOSIX=true
+// RUN:   -analyzer-config apiModeling.StdCLibraryFunctions:ModelPOSIX=true \
+// RUN:   -analyzer-config apiModeling.StdCLibraryFunctions:DisplayLoadedSummaries=true \
+// RUN:   2>&1 | FileCheck %s
 
 void clang_analyzer_warnIfReached();
 //===----------------------------------------------------------------------===//
@@ -31,7 +33,10 @@ void tp2(int *p) {
     return;
 }
 
+char *getenv(const char *name);
 long a64l(const char *str64);
+// CHECK: Loaded summary for: char *getenv(const char *name)
+// CHECK: Loaded summary for: long a64l(const char *str64)
 
 void tp3_posix_nonnull_constraint(const char *p) {
   a64l(p);
@@ -42,8 +47,6 @@ void tp3_posix_nonnull_constraint(const char *p) {
     // expected-warning@-2{{Pointer is unconditionally non-null here [alpha.core.ReverseNull]}}
     return;
 }
-
-char* getenv (const char* name);
 
 void tp4_nonnull_constraint(const char *p) {
   getenv(p);
