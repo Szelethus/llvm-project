@@ -102,33 +102,12 @@ public:
   }
 };
 
-/// Climb up the ExplodedGraph, and check whether the point where the condition
-/// was contrained to be null/non-null was a state split to analyze two new
-/// paths of execution, or only one.
-/// For example, here, p is null on one path, and non-null on another where the
-/// constraints are imposed:
-///
-///   int *p = get();
-///   if (p) // state split, this ExplodedNode will have two children
-///     // p assumed non-null
-///   else
-///     // p assumed non-null
-///   //...
-///   if (p) // Don't warn here, this is a totally valid condition
-///     // ...
-///
-/// But here, on all paths immediately after p's dereference, p is non-null:
-///
-///   int *p = get();
-///   *p = 5; // This ExplodedNode will have a single child
-///   if (p) // Warn here!
-///     // ...
-///
-/// Ideally, this would be done with a BugReporterVisitor, but the ExplodedGraph
-/// it has access to is NOT the same as the ExplodedGraph that is constructed
-/// during analysis (see https://reviews.llvm.org/D65379). In fact, it is a
-/// linear graph, and we're specifically interested in branches, hence the
-/// unusual approach.
+/// Climb up the ExplodedGraph, and find the ExplodedNode where \p MR was
+/// constrained to be non-null. Ideally, this would be done with a
+/// BugReporterVisitor, but the ExplodedGraph it has access to is NOT the same
+/// as the ExplodedGraph that is constructed during analysis
+/// (see https://reviews.llvm.org/D65379). In fact, it is a linear graph, and
+/// we're specifically interested in branches, hence the unusual approach.
 static const ExplodedNode *getNBeforeNonNullConstraint(const ExplodedNode *N,
                                                        const MemRegion *MR) {
 
@@ -161,10 +140,29 @@ static const ExplodedNode *getNBeforeNonNullConstraint(const ExplodedNode *N,
   return BeforeNonNullConstraintN;
 }
 
-// How many children does the pre-constraint node have? Does it have more than
-// one that does not unconditionally lead to a sink node?
-// If so, than the pointer likely doesn't unconditionally reach the condition
-// being null or non-null.
+/// Check whether the point where the condition was contrained to be
+/// null/non-null was a state split to analyze (at least) two new paths of
+/// execution, or only one. For example, here, p is null on one path, and
+/// non-null on another where the constraints are imposed:
+///
+///   int *p = get();
+///   if (p) // state split, this ExplodedNode will have two children
+///     // p assumed non-null
+///   else
+///     // p assumed non-null
+///   //...
+///   if (p) // Don't warn here, this is a totally valid condition
+///     // ...
+///
+/// But here, on all paths immediately after p's dereference, p is non-null:
+///
+///   int *p = get();
+///   *p = 5; // This ExplodedNode will have a single child
+///   if (p) // Warn here!
+///     // ...
+///
+/// Mind that the node unconditionally leads down a single path, if all but one
+/// child is a sink node.
 static bool unconditionallyLeadsHere(const ExplodedNode *N) {
   size_t NonSinkNodeCount = llvm::count_if(
       N->succs(), [](const ExplodedNode *N) { return !N->isSink(); });
@@ -211,8 +209,8 @@ public:
         return;
 
       // We want to be sure that the constraint and the condition are in the
-      // same stackframe. Inlined functions' pre/post conditions may not apply
-      // to the caller stackframe. A similar issue is discussed here:
+      // same stackframe. Caller and callee functions' pre/post conditions may
+      // not apply to the caller stackframe. A similar issue is discussed here:
       // https://discourse.llvm.org/t/static-analyzer-query-why-is-suppress-null-return-paths-enabled-by-default/
       if (NBeforeConstraint->getLocationContext() != Ctx.getLocationContext())
         return;

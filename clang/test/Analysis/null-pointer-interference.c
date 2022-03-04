@@ -1,5 +1,6 @@
 // RUN: %clang_analyze_cc1 -verify %s -analyzer-output=text\
-// RUN:   -analyzer-checker=core,apiModeling \
+// RUN:   -analyzer-checker=core \
+// RUN:   -analyzer-checker=apiModeling \
 // RUN:   -analyzer-checker=debug.ExprInspection \
 // RUN:   -analyzer-checker=alpha.core.ReverseNull \
 // RUN:   -analyzer-config apiModeling.StdCLibraryFunctions:ModelPOSIX=true \
@@ -21,6 +22,8 @@ void tp1(int *p) {
     return;
 }
 
+//===----------------------------------------------------------------------===//
+
 void tp2(int *p) {
   *p = 5;
   // expected-note@-1{{Pointer assumed non-null here}}
@@ -32,6 +35,8 @@ void tp2(int *p) {
     // expected-warning@-2{{Pointer is unconditionally non-null here [alpha.core.ReverseNull]}}
     return;
 }
+
+//===----------------------------------------------------------------------===//
 
 char *getenv(const char *name);
 long a64l(const char *str64);
@@ -48,6 +53,8 @@ void tp3_posix_nonnull_constraint(const char *p) {
     return;
 }
 
+//===----------------------------------------------------------------------===//
+
 void tp4_nonnull_constraint(const char *p) {
   getenv(p);
   // expected-note@-1{{Pointer assumed non-null here}}
@@ -62,12 +69,24 @@ void tp4_nonnull_constraint(const char *p) {
 // True negative test cases.
 //===----------------------------------------------------------------------===//
 
-void tn1_nested(int *p) {
+void tn1_constrain_arg(int *p) {
   *p = 5;
 }
 
 void tn1_constraint_in_nested_stackframe(int *p) {
-  tn1_nested(p);
+  tn1_constrain_arg(p);
   if (p)
     return;
+}
+
+//===----------------------------------------------------------------------===//
+
+void tn2_constraint_in_parent_stackframe(int *p) {
+  if (p)
+    return;
+}
+
+void tn2_caller(int *p) {
+  *p = 5;
+  tn2_constraint_in_parent_stackframe(p);
 }
