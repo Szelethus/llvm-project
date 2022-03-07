@@ -135,7 +135,7 @@ void tn2_caller(int *p) {
 //===----------------------------------------------------------------------===//
 
 // Say this 3 times fast.
-void tn_3_constraint_does_not_dominate_condition_and_condition_doesnt_postdominate_constraint(int *p) {
+void tn3_constraint_does_not_dominate_condition_and_condition_doesnt_postdominate_constraint(int *p) {
   if (coin()) {
     *p = 5;
   }
@@ -143,4 +143,14 @@ void tn_3_constraint_does_not_dominate_condition_and_condition_doesnt_postdomina
     if (p)
       return;
   }
+}
+
+//===----------------------------------------------------------------------===//
+
+void tn4_constraint_point_before_dereference(int *p) {
+  if (!p)
+    return;
+  *p = 5;
+  if (p)
+    return;
 }
