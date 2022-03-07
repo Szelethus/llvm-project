@@ -186,7 +186,7 @@ NSString* f10(void) {
 // This exercises the 'EvalAssume' logic in GRTransferFuncs (CFRefCount.cpp).
 NSString* f11(CFDictionaryRef dict, const char* key) {
   NSString* s = (NSString*) CFDictionaryGetValue(dict, key);
-  [s retain];
+  [s retain]; // expected-note{{Consider moving the condition here}}
   if (s) {
     // expected-warning@-1{{Pointer is unconditionally non-null here [alpha.core.ReverseNull]}}
     [s release];

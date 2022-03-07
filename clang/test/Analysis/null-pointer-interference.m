@@ -17,9 +17,10 @@ NSString* f11(CFDictionaryRef dict, const char* key) {
   // expected-note@-1{{'s' initialized here}}
   [s retain];
   // expected-note@-1{{Pointer assumed non-null here}}
+  // expected-note@-2{{Consider moving the condition here}}
   if (s) {
     // expected-warning@-1{{Pointer is unconditionally non-null here [alpha.core.ReverseNull]}}
-    // expected-note@-2{{Pointer already constrained nonnull}}
+    // expected-note@-2{{Pointer is unconditionally non-null here}}
     [s release];
   }
   return 0;

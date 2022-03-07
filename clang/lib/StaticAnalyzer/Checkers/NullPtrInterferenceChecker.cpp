@@ -12,6 +12,7 @@
 
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtObjC.h"
+#include "clang/Analysis/Analyses/Dominators.h"
 #include "clang/Analysis/AnalysisDeclContext.h"
 #include "clang/Analysis/PathDiagnostic.h"
 #include "clang/Analysis/ProgramPoint.h"
@@ -33,6 +34,7 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/SymExpr.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/raw_ostream.h"
 #include <memory>
 
 using namespace clang;
@@ -179,12 +181,10 @@ static bool unconditionallyLeadsHere(const ExplodedNode *N) {
 namespace {
 
 class ReverseNullChecker : public Checker<check::BranchCondition> {
-  BugType BT;
+  BuiltinBug BT;
 
 public:
-  ReverseNullChecker()
-      : BT(this, "Pointer is unconditionally non-null here", "Reverse null") {}
-
+  ReverseNullChecker() : BT(this, "Reverse null") {}
   void checkBranchCondition(const Stmt *Condition, CheckerContext &Ctx) const {
     if (isa<ObjCForCollectionStmt>(Condition))
       return;
@@ -200,36 +200,69 @@ public:
     // TODO: Altough not as interesting, we could also check the null case.
     if (isConstrainedNonNull(Ctx.getState(), MR)) {
 
-      const ExplodedNode *NBeforeConstraint =
+      const ExplodedNode *BeforeConstraintN =
           getNBeforeNonNullConstraint(Ctx.getPredecessor(), MR);
-      if (!NBeforeConstraint)
+      if (!BeforeConstraintN)
         return;
 
-      if (!unconditionallyLeadsHere(NBeforeConstraint))
+      if (!unconditionallyLeadsHere(BeforeConstraintN))
         return;
 
       // We want to be sure that the constraint and the condition are in the
       // same stackframe. Caller and callee functions' pre/post conditions may
       // not apply to the caller stackframe. A similar issue is discussed here:
       // https://discourse.llvm.org/t/static-analyzer-query-why-is-suppress-null-return-paths-enabled-by-default/
-      if (NBeforeConstraint->getLocationContext() != Ctx.getLocationContext())
+      if (BeforeConstraintN->getLocationContext() != Ctx.getLocationContext())
         return;
 
-      const ExplodedNode *N = Ctx.generateNonFatalErrorNode(Ctx.getState());
-      if (!N)
-        return;
-
-      std::unique_ptr<PathSensitiveBugReport> R(
-          std::make_unique<PathSensitiveBugReport>(BT, BT.getDescription(), N));
-      R->addNote(
-          "Consider moving the condition here",
-          PathDiagnosticLocation{NBeforeConstraint->getNextStmtForDiagnostics(),
-                                 Ctx.getSourceManager(),
-                                 NBeforeConstraint->getLocationContext()});
-      R->addVisitor<ReverseNullVisitor>(MR);
-      bugreporter::trackExpressionValue(N, cast<Expr>(Condition), *R);
-      Ctx.emitReport(std::move(R));
+      reportBug(Condition, MR, BeforeConstraintN, Ctx);
     }
+  }
+
+  void reportBug(const Stmt *Condition, const MemRegion *MR,
+                 const ExplodedNode *BeforeConstraintN,
+                 CheckerContext &Ctx) const {
+    const ExplodedNode *ConditionN =
+        Ctx.generateNonFatalErrorNode(Ctx.getState());
+    if (!ConditionN)
+      return;
+
+    SmallString<256> WarningMsg;
+    llvm::raw_svector_ostream OS(WarningMsg);
+    OS << "Pointer is";
+
+    const Decl *FnDecl = Ctx.getStackFrame()->getDecl();
+    AnalysisManager &AMgr = Ctx.getAnalysisManager();
+    const CFGDomTree *DomTree = AMgr.getAnalysis<CFGDomTree>(FnDecl);
+    const CFGPostDomTree *PostDomTree =
+        AMgr.getAnalysis<CFGPostDomTree>(FnDecl);
+
+    assert(DomTree);
+    assert(PostDomTree);
+
+    if (DomTree->dominates(BeforeConstraintN->getCFGBlock(),
+                           ConditionN->getCFGBlock())) {
+      OS << " unconditionally";
+    } else if (!PostDomTree->dominates(ConditionN->getCFGBlock(),
+                                       BeforeConstraintN->getCFGBlock())) {
+      // If the condition point doesn't dominate the constraint point, nor does
+      // the constraint point post dominate the condition point, we likely bit
+      // more than we can chew.
+      return;
+    }
+
+    OS << " non-null here";
+
+    std::unique_ptr<PathSensitiveBugReport> R(
+        std::make_unique<PathSensitiveBugReport>(BT, OS.str(), ConditionN));
+    R->addNote(
+        "Consider moving the condition here",
+        PathDiagnosticLocation{BeforeConstraintN->getNextStmtForDiagnostics(),
+                               Ctx.getSourceManager(),
+                               BeforeConstraintN->getLocationContext()});
+    R->addVisitor<ReverseNullVisitor>(MR);
+    bugreporter::trackExpressionValue(ConditionN, cast<Expr>(Condition), *R);
+    Ctx.emitReport(std::move(R));
   }
 };
 
