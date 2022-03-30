@@ -1058,3 +1058,19 @@ void f(int *x) {
 }
 
 } // namespace funcion_call_negated_in_condition_point
+
+namespace funcion_call_part_of_logical_expr_in_condition_point {
+
+int alwaysFalse() {
+  return false;
+}
+
+void f(int *x) {
+  x = nullptr;        // expected-note {{Null pointer value stored to 'x'}}
+  if (!alwaysFalse() && true) // expected-note {{Taking true branch}}
+                              // expected-note@-1 {{Left side of '&&' is true}}
+    *x = 5;           // expected-warning {{Dereference of null pointer (loaded from variable 'x') [core.NullDereference]}}
+                      // expected-note@-1 {{Dereference}}
+}
+
+} // namespace funcion_call_part_of_logical_expr_in_condition_point
