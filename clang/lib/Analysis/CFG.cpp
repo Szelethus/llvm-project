@@ -5904,8 +5904,6 @@ void CFG::dump(const LangOptions &LO, bool ShowColors) const {
   print(llvm::errs(), LO, ShowColors);
 }
 
-void CFG::dump(bool ShowColors) const { dump(LangOptions{}, ShowColors); }
-
 /// print - A simple pretty printer of a CFG that outputs to an ostream.
 void CFG::print(raw_ostream &OS, const LangOptions &LO, bool ShowColors) const {
   StmtPrinterHelper Helper(this, LO);

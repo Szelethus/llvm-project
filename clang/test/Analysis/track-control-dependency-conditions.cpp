@@ -1,10 +1,10 @@
-// RUN: %clang_analyze_cc1 %s -std=c++14 \
+// RUN: %clang_analyze_cc1 %s -std=c++17 \
 // RUN:   -verify=expected,tracking \
 // RUN:   -analyzer-config track-conditions=true \
 // RUN:   -analyzer-output=text \
 // RUN:   -analyzer-checker=core
 
-// RUN: not %clang_analyze_cc1 -std=c++14 -verify %s \
+// RUN: not %clang_analyze_cc1 -std=c++17 -verify %s \
 // RUN:   -analyzer-checker=core \
 // RUN:   -analyzer-config track-conditions=false \
 // RUN:   -analyzer-config track-conditions-debug=true \
@@ -14,14 +14,14 @@
 // CHECK-INVALID-DEBUG-SAME:        'track-conditions-debug', that expects
 // CHECK-INVALID-DEBUG-SAME:        'track-conditions' to also be enabled
 //
-// RUN: %clang_analyze_cc1 %s -std=c++14 \
+// RUN: %clang_analyze_cc1 %s -std=c++17 \
 // RUN:   -verify=expected,tracking,debug \
 // RUN:   -analyzer-config track-conditions=true \
 // RUN:   -analyzer-config track-conditions-debug=true \
 // RUN:   -analyzer-output=text \
 // RUN:   -analyzer-checker=core
 
-// RUN: %clang_analyze_cc1 %s -std=c++14 -verify \
+// RUN: %clang_analyze_cc1 %s -std=c++17 -verify \
 // RUN:   -analyzer-output=text \
 // RUN:   -analyzer-config track-conditions=false \
 // RUN:   -analyzer-checker=core
@@ -1009,6 +1009,25 @@ void f(int *x) {
 }
 
 } // namespace operator_call_in_condition_point
+
+namespace cxx17_ifinit__operator_call_in_condition_point {
+
+struct Error {
+  explicit operator bool() {
+    return true;
+  }
+};
+
+Error couldFail();
+
+void f(int *x) {
+  x = nullptr;              // expected-note {{Null pointer value stored to 'x'}}
+  if (auto e = couldFail(); e) // expected-note {{Taking true branch}}
+    *x = 5;                 // expected-warning {{Dereference of null pointer (loaded from variable 'x') [core.NullDereference]}}
+                            // expected-note@-1 {{Dereference}}
+}
+
+} // namespace cxx17_ifinit__operator_call_in_condition_point
 
 namespace funcion_call_in_condition_point {
 
