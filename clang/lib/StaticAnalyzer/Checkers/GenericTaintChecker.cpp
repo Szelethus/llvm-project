@@ -866,7 +866,7 @@ void GenericTaintRule::process(const GenericTaintChecker &Checker,
     return;
 
   const auto WouldEscape = [](SVal V, QualType Ty) -> bool {
-    if (!V.getAs<Loc>())
+    if (!isa<Loc>(V))
       return false;
 
     const bool IsNonConstRef = Ty->isReferenceType() && !Ty.isConstQualified();
