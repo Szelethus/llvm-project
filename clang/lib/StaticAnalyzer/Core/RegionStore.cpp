@@ -48,24 +48,29 @@ private:
 
   llvm::PointerIntPair<const MemRegion *, 2> P;
   uint64_t Data;
+  uint64_t Extent;
 
   /// Create a key for a binding to region \p r, which has a symbolic offset
   /// from region \p Base.
-  explicit BindingKey(const SubRegion *r, const SubRegion *Base, Kind k)
-    : P(r, k | Symbolic), Data(reinterpret_cast<uintptr_t>(Base)) {
+  explicit BindingKey(const SubRegion *r, const SubRegion *Base, Kind k,
+                      uint64_t extent)
+      : P(r, k | Symbolic), Data(reinterpret_cast<uintptr_t>(Base)),
+        Extent(extent) {
     assert(r && Base && "Must have known regions.");
     assert(getConcreteOffsetRegion() == Base && "Failed to store base region");
   }
 
   /// Create a key for a binding at \p offset from base region \p r.
-  explicit BindingKey(const MemRegion *r, uint64_t offset, Kind k)
-    : P(r, k), Data(offset) {
+  explicit BindingKey(const MemRegion *r, uint64_t offset, Kind k,
+                      uint64_t extent)
+      : P(r, k), Data(offset), Extent(extent) {
     assert(r && "Must have known regions.");
     assert(getOffset() == offset && "Failed to store offset");
     assert((r == r->getBaseRegion() ||
             isa<ObjCIvarRegion, CXXDerivedObjectRegion>(r)) &&
            "Not a base");
   }
+
 public:
 
   bool isDirect() const { return P.getInt() & Direct; }
@@ -76,6 +81,8 @@ public:
     assert(!hasSymbolicOffset());
     return Data;
   }
+
+  uint64_t getExtent() const { return Extent; }
 
   const SubRegion *getConcreteOffsetRegion() const {
     assert(hasSymbolicOffset());
@@ -91,6 +98,7 @@ public:
   void Profile(llvm::FoldingSetNodeID& ID) const {
     ID.AddPointer(P.getOpaqueValue());
     ID.AddInteger(Data);
+    ID.AddInteger(Extent);
   }
 
   static BindingKey Make(const MemRegion *R, Kind k);
@@ -100,12 +108,37 @@ public:
       return true;
     if (P.getOpaqueValue() > X.P.getOpaqueValue())
       return false;
-    return Data < X.Data;
+
+    if (Data < X.Data)
+      return true;
+    if (Data > X.Data)
+      return false;
+
+    return Extent < X.Extent;
+  }
+
+  bool isInsideOrEqual(const BindingKey &X) const {
+    if (hasSymbolicOffset() || X.hasSymbolicOffset())
+      return false;
+
+    if (P.getOpaqueValue() != X.P.getOpaqueValue())
+      return false;
+
+    return getOffset() >= X.getOffset() &&
+           getOffset() <=
+               X.getOffset() +
+                   X.getExtent() && // The offset can be negative and in that
+                                    // case we might hit an overflow.
+           getOffset() + getExtent() <= X.getOffset() + X.getExtent();
+  }
+
+  bool isSameWithoutExtent(const BindingKey &X) const {
+    return P.getOpaqueValue() == X.P.getOpaqueValue() &&
+           Data == X.Data;
   }
 
   bool operator==(const BindingKey &X) const {
-    return P.getOpaqueValue() == X.P.getOpaqueValue() &&
-           Data == X.Data;
+    return isSameWithoutExtent(X) && Extent == X.Extent;
   }
 
   LLVM_DUMP_METHOD void dump() const;
@@ -115,9 +148,10 @@ public:
 BindingKey BindingKey::Make(const MemRegion *R, Kind k) {
   const RegionOffset &RO = R->getAsOffset();
   if (RO.hasSymbolicOffset())
-    return BindingKey(cast<SubRegion>(R), cast<SubRegion>(RO.getRegion()), k);
+    return BindingKey(cast<SubRegion>(R), cast<SubRegion>(RO.getRegion()), k,
+                      R->getExtent());
 
-  return BindingKey(RO.getRegion(), RO.getOffset(), k);
+  return BindingKey(RO.getRegion(), RO.getOffset(), k, R->getExtent());
 }
 
 namespace llvm {
@@ -129,6 +163,9 @@ static inline raw_ostream &operator<<(raw_ostream &Out, BindingKey K) {
     Out << K.getOffset();
   else
     Out << "null";
+
+  Out << ", \"extent\": ";
+  Out << K.getExtent();
 
   return Out;
 }
@@ -143,7 +180,60 @@ void BindingKey::dump() const { llvm::errs() << *this; }
 // Actual Store type.
 //===----------------------------------------------------------------------===//
 
-typedef llvm::ImmutableMap<BindingKey, SVal>    ClusterBindings;
+class ClusterBindings : public llvm::ImmutableMap<BindingKey, SVal> {
+public:
+  ClusterBindings(const llvm::ImmutableMap<BindingKey, SVal> &m)
+      : llvm::ImmutableMap<BindingKey, SVal>(m) {}
+  ClusterBindings(llvm::ImmutableMap<BindingKey, SVal> &&m)
+      : llvm::ImmutableMap<BindingKey, SVal>(m) {}
+
+public:
+  const SVal *lookup(const BindingKey &K) const {
+    const auto lookupInBase = [this](const BindingKey &K) {
+      return llvm::ImmutableMap<BindingKey, SVal>::lookup(K);
+    };
+
+    // Try to lookup the value by comparing everything.
+    const auto *ResVal = lookupInBase(K);
+
+    // We might have failed to lookup the value because
+    // the extent of the current region is smaller than the extent
+    // of the stored region. In this case we try to find the
+    // smallest sub-region that contains the region we are searching
+    // for.
+    if (!ResVal) {
+      uint64_t lowerBound = 0;
+      uint64_t upperBound = UINT64_MAX;
+      for (auto &&B : *this) {
+        if (K.isInsideOrEqual(B.first) && B.first.getOffset() >= lowerBound &&
+            B.first.getOffset() + B.first.getExtent() <= upperBound) {
+          // FIXME: Handle other overlapping regions as well.
+          if (isa<nonloc::LazyCompoundVal>(B.second)) {
+            upperBound = B.first.getOffset() + B.first.getExtent();
+            lowerBound = B.first.getOffset();
+
+            ResVal = &B.second;
+          }
+        }
+      }
+    }
+
+    // If we still can't get a result, we fall back to our original
+    // lookup strategy, when only the region and the offset is compared
+    // and the first result is returned.
+    if (!ResVal) {
+      for (auto &&B : *this) {
+        if (K.isSameWithoutExtent(B.first)) {
+          ResVal = &B.second;
+          break;
+        }
+      }
+    }
+
+    return ResVal;
+  }
+};
+
 typedef llvm::ImmutableMapRef<BindingKey, SVal> ClusterBindingsRef;
 typedef std::pair<BindingKey, SVal> BindingPair;
 
@@ -275,7 +365,9 @@ RegionBindingsRef RegionBindingsRef::addBinding(BindingKey K, SVal V) const {
 
   const ClusterBindings *ExistingCluster = lookup(Base);
   ClusterBindings Cluster =
-      (ExistingCluster ? *ExistingCluster : CBFactory->getEmptyMap());
+      (ExistingCluster
+           ? *ExistingCluster
+           : static_cast<ClusterBindings>(CBFactory->getEmptyMap()));
 
   ClusterBindings NewCluster = CBFactory->add(Cluster, K, V);
   return add(Base, NewCluster);
@@ -292,7 +384,11 @@ const SVal *RegionBindingsRef::lookup(BindingKey K) const {
   const ClusterBindings *Cluster = lookup(K.getBaseRegion());
   if (!Cluster)
     return nullptr;
-  return Cluster->lookup(K);
+
+  // Try looking up the value.
+  const auto *ResVal = Cluster->lookup(K);
+
+  return ResVal;
 }
 
 const SVal *RegionBindingsRef::lookup(const MemRegion *R,
@@ -2027,23 +2123,6 @@ SVal RegionStoreManager::getLazyBinding(const SubRegion *LazyBindingRegion,
   else
     Result = getBindingForField(LazyBinding,
                                 cast<FieldRegion>(LazyBindingRegion));
-
-  // FIXME: This is a hack to deal with RegionStore's inability to distinguish a
-  // default value for /part/ of an aggregate from a default value for the
-  // /entire/ aggregate. The most common case of this is when struct Outer
-  // has as its first member a struct Inner, which is copied in from a stack
-  // variable. In this case, even if the Outer's default value is symbolic, 0,
-  // or unknown, it gets overridden by the Inner's default value of undefined.
-  //
-  // This is a general problem -- if the Inner is zero-initialized, the Outer
-  // will now look zero-initialized. The proper way to solve this is with a
-  // new version of RegionStore that tracks the extent of a binding as well
-  // as the offset.
-  //
-  // This hack only takes care of the undefined case because that can very
-  // quickly result in a warning.
-  if (Result.isUndef())
-    Result = UnknownVal();
 
   return Result;
 }
