@@ -1535,7 +1535,15 @@ PathDiagnosticPieceRef StoreSiteFinder::VisitNode(const ExplodedNode *Succ,
 
     if (hasVisibleUpdate(Pred, Pred->getState()->getSVal(R), Succ, V)) {
       Optional<PostStore> PS = Succ->getLocationAs<PostStore>();
-      if (!PS || PS->getLocationValue() != R)
+      if (!PS)
+        return nullptr;
+
+      const auto *LPtr = PS->getLocationValue();
+      if (!LPtr)
+        return nullptr;
+      const auto *L = reinterpret_cast<const MemRegion *>(LPtr);
+
+      if (PS->getLocationValue() != R && !R->isSubRegionOf(L))
         return nullptr;
     }
 
@@ -1547,7 +1555,12 @@ PathDiagnosticPieceRef StoreSiteFinder::VisitNode(const ExplodedNode *Succ,
       if (const BinaryOperator *BO = P->getStmtAs<BinaryOperator>()) {
         if (BO->isAssignmentOp())
           InitE = BO->getRHS();
+      } else if (const CXXOperatorCallExpr *CE =
+                     P->getStmtAs<CXXOperatorCallExpr>()) {
+        if (CE->isAssignmentOp())
+          InitE = CE->getArg(1);
       }
+
       // If we have a declaration like 'S s{1,2}' that needs special
       // handling, we handle it here.
       else if (const auto *DS = P->getStmtAs<DeclStmt>()) {
@@ -2165,7 +2178,7 @@ static const Expr *peelOffOuterExpr(const Expr *Ex, const ExplodedNode *N) {
       return peelOffOuterExpr(SubEx, N);
 
   if (auto *UO = dyn_cast<UnaryOperator>(Ex)) {
-    if (UO->getOpcode() == UO_LNot)
+    if (UO->getOpcode() == UO_LNot || UO->getOpcode() == clang::UO_Minus)
       return peelOffOuterExpr(UO->getSubExpr(), N);
 
     // FIXME: There's a hack in our Store implementation that always computes
