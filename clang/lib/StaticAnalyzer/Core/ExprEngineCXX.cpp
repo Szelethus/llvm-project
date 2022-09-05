@@ -627,7 +627,7 @@ void ExprEngine::handleConstructor(const Expr *E,
         return;
       }
 
-      Idx = getIndexOfElementToConstruct(State, CE, LCtx).value_or(0u);
+      Idx = getIndexOfElementToConstruct(State, CE, LCtx).getValueOr(0u);
       State = setIndexOfElementToConstruct(State, CE, LCtx, Idx + 1);
     }
 
