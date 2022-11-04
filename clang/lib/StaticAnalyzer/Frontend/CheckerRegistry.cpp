@@ -202,7 +202,7 @@ static void collectWeakDependencies(const ConstCheckerInfoList &Deps,
                                     const CheckerManager &Mgr,
                                     CheckerInfoSet &Ret, IsEnabledFn IsEnabled);
 
-void CheckerRegistry::initializeRegistry(const CheckerManager &Mgr) {
+void CheckerRegistry::initializeRegistry(CheckerManager &Mgr) {
   // First, we calculate the list of enabled checkers as specified by the
   // invocation. Weak dependencies will not enable their unspecified strong
   // depenencies, but its only after resolving strong dependencies for all
@@ -212,6 +212,7 @@ void CheckerRegistry::initializeRegistry(const CheckerManager &Mgr) {
     return !Checker->isDisabled(Mgr);
   };
   for (const CheckerInfo &Checker : Data.Checkers) {
+    Mgr.setCurrentCheckerName(CheckerNameRef(Checker.FullName));
     if (!Checker.isEnabled(Mgr))
       continue;
 
@@ -236,6 +237,7 @@ void CheckerRegistry::initializeRegistry(const CheckerManager &Mgr) {
     return llvm::is_contained(Tmp, Checker);
   };
   for (const CheckerInfo &Checker : Data.Checkers) {
+    Mgr.setCurrentCheckerName(CheckerNameRef(Checker.FullName));
     if (!Checker.isEnabled(Mgr))
       continue;
 

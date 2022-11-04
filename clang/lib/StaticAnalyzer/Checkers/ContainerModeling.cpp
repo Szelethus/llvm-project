@@ -1060,8 +1060,10 @@ bool ento::shouldRegisterContainerModeling(const CheckerManager &mgr) {
 
   if (!mgr.getAnalyzerOptions().ShouldAggressivelySimplifyBinaryOperation) {
     mgr.getASTContext().getDiagnostics().Report(
-        diag::err_analyzer_checker_incompatible_analyzer_option)
-      << "aggressive-binary-operation-simplification" << "false";
+        diag::warn_analyzer_checker_incompatible_analyzer_option)
+        << mgr.getCurrentCheckerName().getName()
+        << "aggressive-binary-operation-simplification"
+        << "false";
     return false;
   }
 

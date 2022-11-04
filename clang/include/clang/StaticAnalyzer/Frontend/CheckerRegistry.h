@@ -96,7 +96,7 @@ public:
   /// Collects all enabled checkers in the field EnabledCheckers. It preserves
   /// the order of insertion, as dependencies have to be enabled before the
   /// checkers that depend on them.
-  void initializeRegistry(const CheckerManager &Mgr);
+  void initializeRegistry(CheckerManager &Mgr);
 
 
 private:
