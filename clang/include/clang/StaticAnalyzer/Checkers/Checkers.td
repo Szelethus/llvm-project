@@ -305,8 +305,11 @@ def C11LockChecker : Checker<"C11Lock">,
   Dependencies<[PthreadLockBase]>,
   Documentation<HasDocumentation>;
 
+// Move it out of alpha (at least temporarily).
 def StdVariantChecker : Checker<"StdVariant">,
+  // Add a proper helptext.
   HelpText<"Check std::variant">,
+  // Actual documentation is not needed, this can stay.
   Documentation<NotDocumented>;
 
 def StdAnyChecker : Checker<"StdAny">,

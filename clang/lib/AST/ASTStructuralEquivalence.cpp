@@ -357,7 +357,7 @@ class StmtComparer {
     if (E1->getNumTemplateArgs() != E2->getNumTemplateArgs())
       return false;
     const TemplateArgumentLoc *Args1 = E1->getTemplateArgs();
-    const TemplateArgumentLoc *Args2 = E2->getTemplateArgs(); //aaaa
+    const TemplateArgumentLoc *Args2 = E2->getTemplateArgs();
     for (unsigned int ArgI = 0, ArgN = E1->getNumTemplateArgs(); ArgI < ArgN;
          ++ArgI)
       if (!IsStructurallyEquivalent(Context, Args1[ArgI], Args2[ArgI]))

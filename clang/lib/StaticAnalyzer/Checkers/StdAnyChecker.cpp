@@ -5,6 +5,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//  TODO
+//===----------------------------------------------------------------------===//
 
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
@@ -38,6 +40,10 @@ class StdAnyChecker : public Checker<check::PreCall,
   BugType NullAnyType{this, "NullAnyType", "NullAnyType"};
   
   public:
+  void printState(raw_ostream &Out, ProgramStateRef State,
+                          const char *NL, const char *Sep) const override {
+    // consider using this
+  }
   void checkPostStmt(const BinaryOperator *BinOp, CheckerContext &C) const {
     bindFromVariant<AnyMap>(BinOp, C, AnyCast);
   }

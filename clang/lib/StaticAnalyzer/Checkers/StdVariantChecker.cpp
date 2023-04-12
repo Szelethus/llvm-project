@@ -5,6 +5,8 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
 //===----------------------------------------------------------------------===//
+//  TODO
+//===----------------------------------------------------------------------===//
 
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
@@ -31,13 +33,15 @@ namespace ento {
 namespace variant_modeling {
 
 CallEventRef<> getCaller(const CallEvent &Call, CheckerContext &C) {
+  // should be const auto *, and everywhere else
   auto CallLocationContext = Call.getLocationContext();
   if (!CallLocationContext) {
-    return CallEventRef<>(nullptr); 
+    return nullptr; 
   }
 
   if (CallLocationContext->inTopFrame()) {
-    return CallEventRef<>(nullptr); 
+    // Consider using this trick elsewhere.
+    return nullptr; 
   }
   auto CallStackFrameContext = CallLocationContext->getStackFrame();
   if (!CallStackFrameContext) {
@@ -48,6 +52,7 @@ CallEventRef<> getCaller(const CallEvent &Call, CheckerContext &C) {
   return CEMgr.getCaller(CallStackFrameContext, C.getState());
 }
 
+// MORE COMMENTS, GRAY IS GOOD
 bool isObjectOf(QualType t, QualType to) {
   QualType canonicalTypeT = t.getCanonicalType();
   QualType canonicalTypeTo = to.getCanonicalType();
@@ -165,6 +170,7 @@ static QualType getNthTmplateTypeArgFromVariant
   return getTemplateArgsFromVariant(varType)[i].getAsType();
 }
 
+// use anonymous namespace
 class StdVariantChecker : public Checker<check::PreCall,
                                          check::RegionChanges,
                                          check::PostStmt<BinaryOperator>> {
@@ -178,6 +184,7 @@ class StdVariantChecker : public Checker<check::PreCall,
     bindFromVariant<VariantMap>(BinOp, C, StdGet);
   }
 
+  // consider moving big dunctions out-of-line
   ProgramStateRef
     checkRegionChanges(ProgramStateRef State,
                        const InvalidatedSymbols *Invalidated,
@@ -220,12 +227,15 @@ class StdVariantChecker : public Checker<check::PreCall,
                                                       VariantAsOp.matches(Call);
 
     if (IsVariantConstructor || IsVariantAssignmentOperatorCall) {
+      // default ctor
       if (IsVariantConstructor && Call.getNumArgs() == 0) {
         handleDefaultConstructor(Call, C);
         return;
       }
+      // explain this
       if (Call.getNumArgs() != 1)
         return;
+      // non-default ctor
       SVal thisSVal = [&]() {
         if (IsVariantConstructor) {
           auto AsConstructorCall = dyn_cast<CXXConstructorCall>(&Call);
@@ -243,7 +253,7 @@ class StdVariantChecker : public Checker<check::PreCall,
     }
   }
 
-  private:
+private:
   void handleDefaultConstructor(const CallEvent &Call,
                                 CheckerContext &C) const {
     auto State = Call.getState();
@@ -257,14 +267,15 @@ class StdVariantChecker : public Checker<check::PreCall,
     if (!MemRegion) {
       return;
     }
+    auto VariantType = getNthTmplateTypeArgFromVariant(
+        getPointeeType(ThisSVal.getType(C.getASTContext())), 0);
 
-    State = State->set<VariantHeldMap>(MemRegion,
-          getNthTmplateTypeArgFromVariant(getPointeeType
-                                      (ThisSVal.getType(C.getASTContext())),0));
+    State = State->set<VariantHeldMap>(MemRegion, VariantType);
     C.addTransition(State);
   }
 
   void handleStdGetCall(const CallEvent &Call, CheckerContext &C) const {
+    // neither of these is the time of place for auto
     auto State = Call.getState();
     auto TypeOut = getFirstTemplateArgument(Call);
     auto ArgType = Call.getArgSVal(0).getType(C.getASTContext()).getTypePtr()->

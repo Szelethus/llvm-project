@@ -1,3 +1,13 @@
+//===- VariantLikeTypeModeling.h ---------------------------------*- C++ -*-==//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//  TODO
+//===----------------------------------------------------------------------===//
+
 #ifndef LLVM_CLANG_LIB_STATICANALYZER_CHECKER_VARIANTLIKETYPEMODELING_H
 #define LLVM_CLANG_LIB_STATICANALYZER_CHECKER_VARIANTLIKETYPEMODELING_H
 
@@ -27,6 +37,7 @@ bool isStdAny(const Type *Type);
 
 template <class T>
 void bindFromVariant(const BinaryOperator *BinOp, CheckerContext &C, const CallDescription &StdGet) {
+  // consider removing these prints
   llvm::errs() << "Bin op ok\n";
   if (!BinOp->isAssignmentOp()) {
     return;

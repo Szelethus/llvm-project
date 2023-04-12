@@ -3,6 +3,8 @@
 // RUN:   -Xclang -analyzer-checker=debug.ExprInspection \
 // RUN:   -Xclang -analyzer-checker=core,alpha.core.StdAny
 
+// use // FIXME when a warning is expected, but is not present
+
 #include <any>
 
 class DummyClass{
