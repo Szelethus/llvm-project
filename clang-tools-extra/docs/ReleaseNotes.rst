@@ -175,6 +175,11 @@ New checks
   extracted from an optional-like type and then used to create a new instance
   of the same optional-like type.
 
+- New :doc:`bugprone-tagged-union-member-count
+  <clang-tidy/checks/bugprone/tagged-union-member-count>` check.
+
+  FIXME: add release notes.
+
 - New :doc:`bugprone-unused-local-non-trivial-variable
   <clang-tidy/checks/bugprone/unused-local-non-trivial-variable>` check.
 

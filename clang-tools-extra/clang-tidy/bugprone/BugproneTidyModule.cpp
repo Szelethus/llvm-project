@@ -73,6 +73,7 @@
 #include "SuspiciousStringCompareCheck.h"
 #include "SwappedArgumentsCheck.h"
 #include "SwitchMissingDefaultCaseCheck.h"
+#include "TaggedUnionMemberCountCheck.h"
 #include "TerminatingContinueCheck.h"
 #include "ThrowKeywordMissingCheck.h"
 #include "TooSmallLoopVariableCheck.h"
@@ -216,6 +217,8 @@ public:
         "bugprone-suspicious-string-compare");
     CheckFactories.registerCheck<SwappedArgumentsCheck>(
         "bugprone-swapped-arguments");
+    CheckFactories.registerCheck<TaggedUnionMemberCountCheck>(
+        "bugprone-tagged-union-member-count");
     CheckFactories.registerCheck<TerminatingContinueCheck>(
         "bugprone-terminating-continue");
     CheckFactories.registerCheck<ThrowKeywordMissingCheck>(
