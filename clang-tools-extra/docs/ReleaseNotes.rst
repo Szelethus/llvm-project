@@ -126,8 +126,86 @@ New checks
 - New :doc:`readability-use-std-min-max
   <clang-tidy/checks/readability/use-std-min-max>` check.
 
+<<<<<<< HEAD
   Replaces certain conditional statements with equivalent calls to
   ``std::min`` or ``std::max``.
+=======
+  Detects incorrect usages of ``std::enable_if`` that don't name the nested
+  ``type`` type.
+
+- New :doc:`bugprone-multi-level-implicit-pointer-conversion
+  <clang-tidy/checks/bugprone/multi-level-implicit-pointer-conversion>` check.
+
+  Detects implicit conversions between pointers of different levels of
+  indirection.
+
+- New :doc:`bugprone-optional-value-conversion
+  <clang-tidy/checks/bugprone/optional-value-conversion>` check.
+
+  Detects potentially unintentional and redundant conversions where a value is
+  extracted from an optional-like type and then used to create a new instance
+  of the same optional-like type.
+
+- New :doc:`bugprone-tagged-union-member-count
+  <clang-tidy/checks/bugprone/tagged-union-member-count>` check.
+
+  FIXME: add release notes.
+
+- New :doc:`bugprone-unused-local-non-trivial-variable
+  <clang-tidy/checks/bugprone/unused-local-non-trivial-variable>` check.
+
+  Warns when a local non trivial variable is unused within a function.
+
+- New :doc:`cppcoreguidelines-no-suspend-with-lock
+  <clang-tidy/checks/cppcoreguidelines/no-suspend-with-lock>` check.
+
+  Flags coroutines that suspend while a lock guard is in scope at the
+  suspension point.
+
+- New :doc:`hicpp-ignored-remove-result
+  <clang-tidy/checks/hicpp/ignored-remove-result>` check.
+
+  Ensure that the result of ``std::remove``, ``std::remove_if`` and
+  ``std::unique`` are not ignored according to rule 17.5.1.
+
+- New :doc:`misc-coroutine-hostile-raii
+  <clang-tidy/checks/misc/coroutine-hostile-raii>` check.
+
+  Detects when objects of certain hostile RAII types persists across suspension
+  points in a coroutine. Such hostile types include scoped-lockable types and
+  types belonging to a configurable denylist.
+
+- New :doc:`modernize-use-constraints
+  <clang-tidy/checks/modernize/use-constraints>` check.
+
+  Replace ``enable_if`` with C++20 requires clauses.
+
+- New :doc:`modernize-use-starts-ends-with
+  <clang-tidy/checks/modernize/use-starts-ends-with>` check.
+
+  Checks whether a ``find`` or ``rfind`` result is compared with 0 and suggests
+  replacing with ``starts_with`` when the method exists in the class. Notably,
+  this will work with ``std::string`` and ``std::string_view``.
+
+- New :doc:`modernize-use-std-numbers
+  <clang-tidy/checks/modernize/use-std-numbers>` check.
+
+  Finds constants and function calls to math functions that can be replaced
+  with C++20's mathematical constants from the ``numbers`` header and
+  offers fix-it hints.
+
+- New :doc:`performance-enum-size
+  <clang-tidy/checks/performance/enum-size>` check.
+
+  Recommends the smallest possible underlying type for an ``enum`` or ``enum``
+  class based on the range of its enumerators.
+
+- New :doc:`readability-reference-to-constructed-temporary
+  <clang-tidy/checks/readability/reference-to-constructed-temporary>` check.
+
+  Detects C++ code where a reference variable is used to extend the lifetime
+  of a temporary object that has just been constructed.
+>>>>>>> 945dc0214399 (version 0 of bugprone-tagged-union-member-count clangtidy check)
 
 New check aliases
 ^^^^^^^^^^^^^^^^^
