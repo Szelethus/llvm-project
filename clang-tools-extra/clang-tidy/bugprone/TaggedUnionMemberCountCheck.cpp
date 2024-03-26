@@ -11,23 +11,37 @@
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 
 #include "clang/AST/PrettyPrinter.h"
-#include <algorithm>
+#include "llvm/Support/Casting.h"
+#include <iterator>
 
 using namespace clang::ast_matchers;
 
 namespace clang::tidy::bugprone {
 
 void TaggedUnionMemberCountCheck::registerMatchers(MatchFinder *Finder) {
-  Finder->addMatcher(recordDecl(allOf(isStruct(), has(recordDecl(isUnion()).bind("union")), has(fieldDecl(hasType(enumDecl().bind("tags")))))), this);
+  Finder->addMatcher(recordDecl(allOf(isStruct(), has(fieldDecl(hasType(recordDecl(isUnion()).bind("union")))), has(fieldDecl(hasType(enumDecl().bind("tags")))))).bind("root"), this);
 }
 
 void TaggedUnionMemberCountCheck::check(const MatchFinder::MatchResult &Result) {
+  const auto *root = Result.Nodes.getNodeAs<RecordDecl>("root");
+  int tags = 0;
+  int unions = 0;
+  for (RecordDecl::field_iterator it = root->field_begin(); it != root->field_end(); it++) {
+    if (auto *r = llvm::dyn_cast<FieldDecl>(*it)) {
+      TypeSourceInfo *info = r->getTypeSourceInfo();
+      QualType qualtype = info->getType();
+      const Type *type = qualtype.getTypePtr();
+      if (type->isUnionType()) unions += 1;
+      else if (type->isEnumeralType()) tags += 1;
+      if (tags > 1 || unions > 1) return;
+    }
+  }
   const auto *unionMatch = Result.Nodes.getNodeAs<RecordDecl>("union");
   const auto *tagMatch  = Result.Nodes.getNodeAs<EnumDecl>("tags");
-  int tagCount    = std::distance(tagMatch->enumerator_begin(), tagMatch->enumerator_end());
-  int memberCount = std::distance(unionMatch->field_begin(), unionMatch->field_end());
+  const int tagCount    = std::distance(tagMatch->enumerator_begin(), tagMatch->enumerator_end());
+  const int memberCount = std::distance(unionMatch->field_begin(), unionMatch->field_end());
   if (memberCount > tagCount) {
-  	diag(unionMatch->getLocation(), "%0 has more data members than tags! Union member count: %1 Tag count: %2") << unionMatch << memberCount << tagCount;
+    diag(root->getLocation(), "Tagged union has more data members than tags! Data members: %0 Tags: %1") << memberCount << tagCount;
   }
 }
 
