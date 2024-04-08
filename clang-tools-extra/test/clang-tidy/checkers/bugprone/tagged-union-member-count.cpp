@@ -34,9 +34,30 @@ union union4 {
 	float *floats;
 };
 
-// ----- Warnings -----
+// ----- No warnings -----
 
-// TODO: Implement check messages
+// Which enum is meant to be the tag for the data?
+struct taggedunion2 {
+	enum tags3 tagA;
+	enum tags4 tagB;
+	union union4 data;
+};
+
+// What if the tag is used for both unions?
+struct taggedunion3 {
+	enum tags4 tag;
+	union union3 dataA;
+	union union4 dataB;
+};
+
+// What if the tag is used for multiple unions?
+struct taggedunion4 {
+	enum tags3 tag;
+	union union3 dataB;
+	union union3 dataA;
+};
+
+// ----- Warnings -----
 
 struct taggedunion1 { // CHECK-MESSAGES: :[[@LINE]]:8: warning: Tagged union has more data members than tags! Data members: 4 Tags: 3 [bugprone-tagged-union-member-count]
 	enum tags3 tag;
@@ -88,7 +109,7 @@ struct nested1 { // CHECK-MESSAGES: :[[@LINE]]:8: warning: Tagged union has more
 		char c;
 		short s;
 		int i;
-		struct {
+		struct { // CHECK-MESSAGES: :[[@LINE]]:3: warning: Tagged union has less data members than tags! Data members: 4 Tags: 5 [bugprone-tagged-union-member-count]
 			enum tags5 tag;
 			union union4 data;
 		} inner;
@@ -107,7 +128,7 @@ struct nested2 {
 	} data;
 };
 
-struct nested3 {
+struct nested3 { // CHECK-MESSAGES: :[[@LINE]]:8: warning: Tagged union has less data members than tags! Data members: 2 Tags: 3 [bugprone-tagged-union-member-count]
 	enum tags3 tag;
 	union {
 		float f;
@@ -119,32 +140,36 @@ struct nested3 {
 	} data;
 };
 
-// ----- No warnings -----
+// The last enum value may be used to keep track of the number enum constants defined
+// If that is the case, then the number of valid enum values are decreased by 1 
+enum tag_with_counter {
+	node_type_loop,
+	node_type_branch,
+	node_type_function,
+	node_type_count,
+};
 
-// Which enum is meant to be the tag for the data?
-struct taggedunion2 {
-	enum tags3 tagA;
-	enum tags4 tagB;
+struct taggedunion10 { // CHECK-MESSAGES: :[[@LINE]]:8: warning: Tagged union has more data members than tags! Data members: 4 Tags: 3 [bugprone-tagged-union-member-count]
+	enum tag_with_counter tag;
 	union union4 data;
 };
 
-// What if the tag is used for both unions?
-struct taggedunion3 {
-	enum tags4 tag;
-	union union3 dataA;
-	union union4 dataB;
+// Technically this means that every enum value is defined from 0-128 and therefore a warning is given
+enum mycolor {
+	mycolor_black = 0x00,
+	mycolor_gray  = 0xcc,
+	mycolor_white = 0xff,
 };
 
-// What if the valid member of union3 specifies the valid member of union4?
-struct taggedunion4 {
-	enum tags3 tag;
-	union union4 dataB;
-	union union3 dataA;
-};
-
-// There are valid use cases for more enum values, than data members.
-struct taggedunion6 {
-	enum tags5 tag;
-	union union4 data;
+struct taggedunion9 { // CHECK-MESSAGES: :[[@LINE]]:8: warning: Tagged union has less data members than tags! Data members: 3 Tags: 256 [bugprone-tagged-union-member-count]
+	enum mycolor tag;
+	union {
+		int a;
+		float b;
+		struct {
+			double re;
+			double im;
+		} complex;
+	} data;
 };
 
