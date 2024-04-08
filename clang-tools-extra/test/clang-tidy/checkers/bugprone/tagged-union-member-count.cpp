@@ -141,7 +141,7 @@ struct nested3 { // CHECK-MESSAGES: :[[@LINE]]:8: warning: Tagged union has less
 };
 
 // The last enum value may be used to keep track of the number enum constants defined
-// If that is the case, then the number of valid enum values are decreased by 1 
+// If that is the case, then the number of valid enum values is decreased by 1 
 enum tag_with_counter {
 	node_type_loop,
 	node_type_branch,
@@ -154,7 +154,7 @@ struct taggedunion10 { // CHECK-MESSAGES: :[[@LINE]]:8: warning: Tagged union ha
 	union union4 data;
 };
 
-// Technically this means that every enum value is defined from 0-128 and therefore a warning is given
+// Technically this means that every enum value is defined from 0-256 and therefore a warning is given
 enum mycolor {
 	mycolor_black = 0x00,
 	mycolor_gray  = 0xcc,
