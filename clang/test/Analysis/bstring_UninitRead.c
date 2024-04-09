@@ -38,14 +38,6 @@ void mempcpy13() {
 
   clang_analyzer_eval(p == &dst[4]); // no-warning (above is fatal)
 }
-void mempcpy14(char *ResolverWorkingMem) {
-  const unsigned int ResolverCode[] = {
-       //resolver_entry:
-      0x67bdff30,                     // 0x00: daddiu $sp,$sp,-208
-  };
-
-  memcpy(ResolverWorkingMem, ResolverCode, sizeof(ResolverCode));
-}
 
 struct st {
   int i;
@@ -64,4 +56,9 @@ void mempcpy15() {
   // FIXME: It seems same as mempcpy14() case.
   
   clang_analyzer_eval(p1 == p2); // no-warning (above is fatal)
+}
+
+void initialized(int *dest) {
+  int t[] = {1, 2, 3};
+  memcpy(dest, t, sizeof(t));
 }

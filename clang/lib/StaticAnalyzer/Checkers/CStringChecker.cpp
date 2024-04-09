@@ -441,22 +441,8 @@ ProgramStateRef CStringChecker::CheckLocation(CheckerContext &C,
 
   // Ensure that we wouldn't read uninitialized value.
   if (Access == AccessKind::read) {
-      Buffer.Expression->IgnoreImpCasts()->dump();
-      llvm::errs() << '\n';
-    if (!Buffer.Expression->IgnoreImpCasts()->getType()->getPointeeOrArrayElementType()->isAnyCharacterType())
-      return nullptr;
     if (Filter.CheckCStringUninitializedRead &&
-        StInBound->getSVal(ER, ER->getValueType()).isUndef()) {
-      Idx.dump();
-      llvm::errs() << '\n';
-      Size.dump();
-      llvm::errs() << '\n';
-      ER->dump();
-      llvm::errs() << '\n';
-      superReg->dump();
-      llvm::errs() << '\n';
-      Element.dump();
-      llvm::errs() << '\n';
+        StInBound->getSVal(ER).isUndef()) {
       emitUninitializedReadBug(C, StInBound, Buffer.Expression);
       return nullptr;
     }
@@ -478,12 +464,8 @@ CStringChecker::CheckBufferAccess(CheckerContext &C, ProgramStateRef State,
   SValBuilder &svalBuilder = C.getSValBuilder();
   ASTContext &Ctx = svalBuilder.getContext();
 
-  const Type *OriginalBufferTy = Buffer.Expression->IgnoreParenImpCasts()->getType()->getPointeeOrArrayElementType();
-
   QualType SizeTy = Size.Expression->getType();
   QualType PtrTy = getCharPtrType(Ctx, CK);
-  CharUnits OriginalSize = C.getASTContext().getTypeSizeInChars(OriginalBufferTy);
-  // * C.getASTContext().getTypeSizeInChars(PtrTy->getPointeeType()).getQuantity();
 
   // Check that the first buffer is non-null.
   SVal BufVal = C.getSVal(Buffer.Expression);
@@ -522,7 +504,7 @@ CStringChecker::CheckBufferAccess(CheckerContext &C, ProgramStateRef State,
   if (std::optional<Loc> BufLoc = BufStart.getAs<Loc>()) {
 
     SVal BufEnd =
-        svalBuilder.evalBinOpLN(State, BO_Add, *BufLoc, LastOffset, Buffer.Expression->getType());
+        svalBuilder.evalBinOpLN(State, BO_Add, *BufLoc, LastOffset, PtrTy);
     State = CheckLocation(C, State, Buffer, BufEnd, Access, CK);
 
     // If the buffer isn't large enough, abort.
