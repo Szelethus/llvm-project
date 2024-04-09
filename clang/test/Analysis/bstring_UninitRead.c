@@ -26,7 +26,7 @@ void top(char *dst) {
 
 void *mempcpy(void *restrict s1, const void *restrict s2, size_t n);
 
-void mempcpy14() {
+void mempcpy13() {
   int src[] = {1, 2, 3, 4};
   int dst[5] = {0};
   int *p;
@@ -37,6 +37,14 @@ void mempcpy14() {
    // and returning undef unfortunately. It should have returned unknown or a conjured value instead.
 
   clang_analyzer_eval(p == &dst[4]); // no-warning (above is fatal)
+}
+void mempcpy14(char *ResolverWorkingMem) {
+  const unsigned int ResolverCode[] = {
+       //resolver_entry:
+      0x67bdff30,                     // 0x00: daddiu $sp,$sp,-208
+  };
+
+  memcpy(ResolverWorkingMem, ResolverCode, sizeof(ResolverCode));
 }
 
 struct st {

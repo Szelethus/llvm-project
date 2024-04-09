@@ -357,6 +357,11 @@ void strcpy_fn(char *x) {
   strcpy(x, (char*)&strcpy_fn); // expected-warning{{Argument to string copy function is the address of the function 'strcpy_fn', which is not a null-terminated string}}
 }
 
+void strcpy_nonnull_terminated(char *c) {
+  char str[] = {'H', 'e', 'l', 'l', 'o'};
+  strcpy(c, str); // expected-warning{{Argument to string copy function is the address of the function 'strcpy_fn', which is not a null-terminated string}}
+}
+
 void strcpy_fn_const(char *x) {
   strcpy(x, (const char*)&strcpy_fn); // expected-warning{{Argument to string copy function is the address of the function 'strcpy_fn', which is not a null-terminated string}}
 }
