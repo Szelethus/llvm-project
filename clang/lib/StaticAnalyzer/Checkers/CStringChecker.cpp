@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "InterCheckerAPI.h"
+#include "clang/AST/OperationKinds.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
@@ -26,6 +27,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include <functional>
 #include <optional>
@@ -438,11 +440,15 @@ ProgramStateRef CStringChecker::CheckLocation(CheckerContext &C,
     emitOutOfBoundsBug(C, StOutBound, Buffer.Expression, Message);
     return nullptr;
   }
-
+StInBound->getSVal(ER).dump();
+llvm::errs() << '\n';
+  llvm_unreachable("");
   // Ensure that we wouldn't read uninitialized value.
   if (Access == AccessKind::read) {
     if (Filter.CheckCStringUninitializedRead &&
         StInBound->getSVal(ER).isUndef()) {
+      Buffer.Expression->dump();
+      llvm::errs() << '\n';
       emitUninitializedReadBug(C, StInBound, Buffer.Expression);
       return nullptr;
     }
@@ -466,6 +472,11 @@ CStringChecker::CheckBufferAccess(CheckerContext &C, ProgramStateRef State,
 
   QualType SizeTy = Size.Expression->getType();
   QualType PtrTy = getCharPtrType(Ctx, CK);
+  QualType OriginalTy = Buffer.Expression->IgnoreParenImpCasts()->getType();
+  const Type *OriginalBufferTy = Buffer.Expression->IgnoreParenImpCasts()->getType()->getPointeeOrArrayElementType();
+
+  CharUnits OriginalSize = C.getASTContext().getTypeSizeInChars(OriginalBufferTy);
+  // * C.getASTContext().getTypeSizeInChars(PtrTy->getPointeeType()).getQuantity();
 
   // Check that the first buffer is non-null.
   SVal BufVal = C.getSVal(Buffer.Expression);
@@ -478,7 +489,9 @@ CStringChecker::CheckBufferAccess(CheckerContext &C, ProgramStateRef State,
     return State;
 
   SVal BufStart =
-      svalBuilder.evalCast(BufVal, PtrTy, Buffer.Expression->getType());
+      svalBuilder.evalCast(BufVal, OriginalTy, Buffer.Expression->getType());
+  BufStart.dump();
+  llvm::errs() << "LOL\n";
 
   // Check if the first byte of the buffer is accessible.
   State = CheckLocation(C, State, Buffer, BufStart, Access, CK);
@@ -492,7 +505,16 @@ CStringChecker::CheckBufferAccess(CheckerContext &C, ProgramStateRef State,
   std::optional<NonLoc> Length = LengthVal.getAs<NonLoc>();
   if (!Length)
     return State;
+  LengthVal = svalBuilder.evalBinOpNN(State, clang::BO_Div, *Length,
+      svalBuilder.makeIntVal(OriginalSize.getQuantity(), SizeTy).castAs<NonLoc>(), SizeTy);
+   Length = LengthVal.getAs<NonLoc>();
+  if (!Length)
+    return State;
 
+  Length->dump();
+  llvm::errs() << '\n';
+  Buffer.Expression->dump();
+  llvm::errs() << '\n';
   // Compute the offset of the last element to be accessed: size-1.
   NonLoc One = svalBuilder.makeIntVal(1, SizeTy).castAs<NonLoc>();
   SVal Offset = svalBuilder.evalBinOpNN(State, BO_Sub, *Length, One, SizeTy);
