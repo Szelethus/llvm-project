@@ -64,12 +64,8 @@ void TaggedUnionMemberCountCheck::check(
     int64_t EnumValue = R->getInitVal().getExtValue();
 
     auto IsLikelyCountValue = [](EnumConstantDecl *R) -> bool {
-      char countStr[] = "count";
-      const char *EnumConstantIdentifier = R->getIdentifier()->getNameStart();
-      return strlen(EnumConstantIdentifier) >= strlen(countStr) &&
-             0 == strcmp(EnumConstantIdentifier +
-                             R->getIdentifier()->getLength() - strlen(countStr),
-                         countStr);
+      llvm::StringLiteral countStr = "count";
+      return R->getIdentifier()->getName().ends_with_insensitive(countStr);
     };
 
     if (IsLikelyCountValue(R)) {
