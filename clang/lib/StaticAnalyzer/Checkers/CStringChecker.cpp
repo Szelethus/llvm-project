@@ -12,7 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "InterCheckerAPI.h"
-#include "clang/AST/OperationKinds.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
@@ -23,7 +23,9 @@
 #include "clang/StaticAnalyzer/Core/PathSensitive/CallEvent.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/CheckerContext.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/DynamicExtent.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/MemRegion.h"
 #include "clang/StaticAnalyzer/Core/PathSensitive/ProgramStateTrait.h"
+#include "clang/StaticAnalyzer/Core/PathSensitive/SVals.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringExtras.h"
@@ -375,6 +377,18 @@ ProgramStateRef CStringChecker::checkNonNull(CheckerContext &C,
   return stateNonNull;
 }
 
+static const MemRegion *getOriginRegion(const MemRegion *MR) {
+  if (const auto *sym = MR->getAs<SymbolicRegion>()) {
+    SymbolRef sym2 = sym->getSymbol();
+    assert(sym2);
+    return sym2->getOriginRegion();
+  }
+  if (const auto *element = MR->getAs<ElementRegion>()) {
+    return element->getBaseRegion();
+  }
+  return MR;
+}
+
 // FIXME: This was originally copied from ArrayBoundChecker.cpp. Refactor?
 ProgramStateRef CStringChecker::CheckLocation(CheckerContext &C,
                                               ProgramStateRef state,
@@ -422,6 +436,26 @@ ProgramStateRef CStringChecker::CheckLocation(CheckerContext &C,
 
   // Get the size of the array.
   const auto *superReg = cast<SubRegion>(ER->getSuperRegion());
+  superReg->dump();
+  llvm::errs() << ' ' << superReg->getKindStr() << '\n';
+  const auto *orig = getOriginRegion(superReg);
+  assert(orig);
+  llvm::errs() << "orig: ";
+  orig->dump();
+  llvm::errs() << '\n';
+  llvm::errs() << "firstelemetn: ";
+  SVal FirstElement = state->getLValue(state->getAnalysisManager().getASTContext().getBaseElementType(orig->getAs<TypedValueRegion>()->getValueType()), svalBuilder.makeArrayIndex(0), loc::MemRegionVal(orig));
+  FirstElement.dump();
+  llvm::errs() << '\n';
+
+  llvm::errs() << "firstlement type: ";
+  orig->getAs<TypedValueRegion>()->getValueType()->dump();
+  llvm::errs() << '\n';
+
+  llvm::errs() << "firstlement value: ";
+  state->getSVal(FirstElement.castAs<Loc>()).dump();
+  llvm::errs() << '\n';
+
   DefinedOrUnknownSVal Size =
       getDynamicExtent(state, superReg, C.getSValBuilder());
 
@@ -440,15 +474,15 @@ ProgramStateRef CStringChecker::CheckLocation(CheckerContext &C,
     emitOutOfBoundsBug(C, StOutBound, Buffer.Expression, Message);
     return nullptr;
   }
-StInBound->getSVal(ER).dump();
-llvm::errs() << '\n';
-  llvm_unreachable("");
+
+  llvm::errs() << "origval: ";
+  StInBound->getSVal(orig).dump();
+  llvm::errs() << '\n';
+
   // Ensure that we wouldn't read uninitialized value.
   if (Access == AccessKind::read) {
     if (Filter.CheckCStringUninitializedRead &&
-        StInBound->getSVal(ER).isUndef()) {
-      Buffer.Expression->dump();
-      llvm::errs() << '\n';
+        StInBound->getSVal(FirstElement.castAs<Loc>()).isUndef()) {
       emitUninitializedReadBug(C, StInBound, Buffer.Expression);
       return nullptr;
     }
@@ -472,11 +506,6 @@ CStringChecker::CheckBufferAccess(CheckerContext &C, ProgramStateRef State,
 
   QualType SizeTy = Size.Expression->getType();
   QualType PtrTy = getCharPtrType(Ctx, CK);
-  QualType OriginalTy = Buffer.Expression->IgnoreParenImpCasts()->getType();
-  const Type *OriginalBufferTy = Buffer.Expression->IgnoreParenImpCasts()->getType()->getPointeeOrArrayElementType();
-
-  CharUnits OriginalSize = C.getASTContext().getTypeSizeInChars(OriginalBufferTy);
-  // * C.getASTContext().getTypeSizeInChars(PtrTy->getPointeeType()).getQuantity();
 
   // Check that the first buffer is non-null.
   SVal BufVal = C.getSVal(Buffer.Expression);
@@ -489,9 +518,14 @@ CStringChecker::CheckBufferAccess(CheckerContext &C, ProgramStateRef State,
     return State;
 
   SVal BufStart =
-      svalBuilder.evalCast(BufVal, OriginalTy, Buffer.Expression->getType());
+      svalBuilder.evalCast(BufVal, PtrTy, Buffer.Expression->getType());
+
+  llvm::errs() << "bufval: ";
+  BufVal.dump();
+  llvm::errs() << '\n';
+  llvm::errs() << "bufstart: ";
   BufStart.dump();
-  llvm::errs() << "LOL\n";
+  llvm::errs() << '\n';
 
   // Check if the first byte of the buffer is accessible.
   State = CheckLocation(C, State, Buffer, BufStart, Access, CK);
@@ -505,16 +539,7 @@ CStringChecker::CheckBufferAccess(CheckerContext &C, ProgramStateRef State,
   std::optional<NonLoc> Length = LengthVal.getAs<NonLoc>();
   if (!Length)
     return State;
-  LengthVal = svalBuilder.evalBinOpNN(State, clang::BO_Div, *Length,
-      svalBuilder.makeIntVal(OriginalSize.getQuantity(), SizeTy).castAs<NonLoc>(), SizeTy);
-   Length = LengthVal.getAs<NonLoc>();
-  if (!Length)
-    return State;
 
-  Length->dump();
-  llvm::errs() << '\n';
-  Buffer.Expression->dump();
-  llvm::errs() << '\n';
   // Compute the offset of the last element to be accessed: size-1.
   NonLoc One = svalBuilder.makeIntVal(1, SizeTy).castAs<NonLoc>();
   SVal Offset = svalBuilder.evalBinOpNN(State, BO_Sub, *Length, One, SizeTy);
