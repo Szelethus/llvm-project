@@ -218,16 +218,16 @@ static bool isLinearExpr(const Expr *expr) {
 	}
 
 	const auto *b = llvm::dyn_cast_or_null<BinaryOperator>(unwrapOpaqueValueExpr(expr));
-	if (b && binaryOpIsLinear(b)) {
-		return true;
+	if (b && !binaryOpIsLinear(b)) {
+		return false;
 	}
 
 	const auto *call = llvm::dyn_cast_or_null<CallExpr>(expr);
-	if (call && callIsLinear(call)) {
-		return true;
+	if (call && !callIsLinear(call)) {
+		return false;
 	}
 
-	return false;
+	return true;
 }
 
 template <typename T>
