@@ -474,6 +474,7 @@ ProgramStateRef CStringChecker::checkInit(CheckerContext &C,
     OS << "The first element of the ";
     printIdxWithOrdinalSuffix(OS, Buffer.ArgumentIndex + 1);
     OS << " argument is undefined";
+    Buffer.Expression->dump();
     emitUninitializedReadBug(C, State, Buffer.Expression, OS.str());
     return nullptr;
   }
@@ -830,7 +831,8 @@ void CStringChecker::emitUninitializedReadBug(CheckerContext &C,
     Report->addNote("Other elements might also be undefined",
                     Report->getLocation());
     Report->addRange(E->getSourceRange());
-    bugreporter::trackExpressionValue(N, E, *Report);
+    bool result = bugreporter::trackExpressionValue(N, E, *Report);
+    assert(result);
     C.emitReport(std::move(Report));
   }
 }

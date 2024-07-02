@@ -332,16 +332,25 @@ static bool wasRegionOfInterestModifiedAt(const SubRegion *RegionOfInterest,
   if (auto PS = N->getLocationAs<PostStmt>())
     if (auto *BO = PS->getStmtAs<BinaryOperator>())
       if (BO->isAssignmentOp() && RegionOfInterest->isSubRegionOf(
-                                      N->getSVal(BO->getLHS()).getAsRegion()))
+                                      N->getSVal(BO->getLHS()).getAsRegion())) {
+        llvm::errs() << "modified\n";
         return true;
+      }
 
   // SVal after the state is possibly different.
   SVal ValueAtN = N->getState()->getSVal(RegionOfInterest);
-  if (!Mgr.getSValBuilder()
-           .areEqual(State, ValueAtN, ValueAfter)
-           .isConstrainedTrue() &&
-      (!ValueAtN.isUndef() || !ValueAfter.isUndef()))
+  if (Mgr.getSValBuilder()
+           .areEqual(State, ValueAtN, ValueAfter).isConstrainedTrue())
+    return false;
+
+  ValueAtN.dump();
+  llvm::errs() << '\n';
+  ValueAfter.dump();
+  llvm::errs() << '\n';
+  if (!ValueAtN.isUndef() || !ValueAfter.isUndef()) {
+        llvm::errs() << "modified2\n";
     return true;
+  }
 
   return false;
 }
@@ -444,8 +453,9 @@ void NoStateChangeFuncVisitor::findModifyingFrames(
 
     if (auto CE = CurrN->getLocationAs<CallEnter>()) {
       if (const ExplodedNode *CallExitEndN = getMatchingCallExitEnd(CurrN))
-        if (wasModifiedInFunction(CurrN, CallExitEndN))
+        if (wasModifiedInFunction(CurrN, CallExitEndN)) {
           markFrameAsModifying(CurrentSCtx);
+        }
 
       // We exited this inlined call, lets actualize the stack frame.
       CurrentSCtx = CurrN->getStackFrame();
@@ -776,9 +786,12 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNoteForParameters(
 
 bool NoStoreFuncVisitor::wasModifiedBeforeCallExit(
     const ExplodedNode *CurrN, const ExplodedNode *CallExitBeginN) {
-  return ::wasRegionOfInterestModifiedAt(
+  bool result = ::wasRegionOfInterestModifiedAt(
       RegionOfInterest, CurrN,
       CallExitBeginN->getState()->getSVal(RegionOfInterest));
+  llvm::errs() << "Checked\n";
+  assert(!result);
+  return result;
 }
 
 static llvm::StringLiteral WillBeUsedForACondition =
@@ -789,6 +802,7 @@ PathDiagnosticPieceRef NoStoreFuncVisitor::maybeEmitNote(
     const RegionVector &FieldChain, const MemRegion *MatchedRegion,
     StringRef FirstElement, bool FirstIsReferenceType,
     unsigned IndirectionLevel) {
+  llvm_unreachable("");
 
   PathDiagnosticLocation L =
       PathDiagnosticLocation::create(N->getLocation(), SM);
@@ -2646,6 +2660,9 @@ Tracker::Result Tracker::track(const Expr *E, const ExplodedNode *N,
     return {};
 
   const Expr *Inner = peelOffOuterExpr(E, N);
+  llvm::errs() << '\n';
+  Inner->dump();
+  llvm::errs() << '\n';
   const ExplodedNode *LVNode = findNodeForExpression(N, Inner);
   if (!LVNode)
     return {};
