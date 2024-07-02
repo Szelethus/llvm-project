@@ -9,6 +9,7 @@
 #include "CountBranchesCheck.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
+#include "clang/Basic/IdentifierTable.h"
 
 using namespace clang::ast_matchers;
 
@@ -23,228 +24,253 @@ void CountBranchesCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(forStmt().bind("ForStmt"), this);
   Finder->addMatcher(switchStmt().bind("SwitchStmt"), this);
   Finder->addMatcher(conditionalOperator().bind("ConditionalOperator"), this);
-  Finder->addMatcher(binaryConditionalOperator().bind("BinaryConditionalOperator"), this);
+  Finder->addMatcher(
+      binaryConditionalOperator().bind("BinaryConditionalOperator"), this);
 }
 
 static bool isNumberLiteral(const Expr *e) {
-	if (llvm::dyn_cast_or_null<IntegerLiteral>(e->IgnoreParenImpCasts())) return true;
-	if (llvm::dyn_cast_or_null<FloatingLiteral>(e->IgnoreParenImpCasts())) return true;
-	return false;
+  if (llvm::dyn_cast_or_null<IntegerLiteral>(e->IgnoreParenImpCasts()))
+    return true;
+  if (llvm::dyn_cast_or_null<FloatingLiteral>(e->IgnoreParenImpCasts()))
+    return true;
+  return false;
 }
 
 static bool isEssentiallyDeclRefExpr(const Expr *e) {
-	return nullptr != llvm::dyn_cast_or_null<DeclRefExpr>(e->IgnoreParenImpCasts());
+  return nullptr !=
+         llvm::dyn_cast_or_null<DeclRefExpr>(e->IgnoreParenImpCasts());
 }
 
 static bool expressionUsesVariable(const Expr *e) {
-	if (!e) return false;
-	if (isNumberLiteral(e)) {
-		return false;
-	}
-	if (isEssentiallyDeclRefExpr(e)) {
-		return true;
-	}
-	const auto *binaryOp = llvm::dyn_cast_or_null<BinaryOperator>(e->IgnoreParens());
-	if (binaryOp) {
-		return expressionUsesVariable(binaryOp->getLHS()) || expressionUsesVariable(binaryOp->getRHS());
-	}
+  if (!e)
+    return false;
+  if (isNumberLiteral(e)) {
+    return false;
+  }
+  if (isEssentiallyDeclRefExpr(e)) {
+    return true;
+  }
+  const auto *binaryOp =
+      llvm::dyn_cast_or_null<BinaryOperator>(e->IgnoreParens());
+  if (binaryOp) {
+    return expressionUsesVariable(binaryOp->getLHS()) ||
+           expressionUsesVariable(binaryOp->getRHS());
+  }
 
-	const auto *call = llvm::dyn_cast_or_null<CallExpr>(e);
-	if (call) {
-		unsigned int argCount = call->getNumArgs();
-		const Expr* const *args = call->getArgs();
-		for (unsigned int i = 0; i < argCount; i += 1) {
-			if (expressionUsesVariable(args[i])) {
-				return true;
-			}
-		}
-	}
-	return false;
+  const auto *call = llvm::dyn_cast_or_null<CallExpr>(e);
+  if (call) {
+    unsigned int argCount = call->getNumArgs();
+    const Expr *const *args = call->getArgs();
+    for (unsigned int i = 0; i < argCount; i += 1) {
+      if (expressionUsesVariable(args[i])) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 static bool callIsLinear(const CallExpr *c);
 
 static bool binaryOpIsLinear(const BinaryOperator *b) {
-	if (b == nullptr) return true;
-	if (b->isMultiplicativeOp() && expressionUsesVariable(b->getLHS()) && expressionUsesVariable(b->getRHS())) {
-		return false;
-	}
+  if (b == nullptr)
+    return true;
+  if (b->isMultiplicativeOp() && expressionUsesVariable(b->getLHS()) &&
+      expressionUsesVariable(b->getRHS())) {
+    return false;
+  }
 
-	const auto *lhsIsBinaryOp = llvm::dyn_cast_or_null<BinaryOperator>(b->getLHS());
-	if (lhsIsBinaryOp && !binaryOpIsLinear(lhsIsBinaryOp)) {
-		return false;
-	}
-	const auto *rhsIsBinaryOp = llvm::dyn_cast_or_null<BinaryOperator>(b->getRHS());
-	if (rhsIsBinaryOp && !binaryOpIsLinear(rhsIsBinaryOp)) {
-		return false;
-	}
+  const auto *lhsIsBinaryOp =
+      llvm::dyn_cast_or_null<BinaryOperator>(b->getLHS());
+  if (lhsIsBinaryOp && !binaryOpIsLinear(lhsIsBinaryOp)) {
+    return false;
+  }
+  const auto *rhsIsBinaryOp =
+      llvm::dyn_cast_or_null<BinaryOperator>(b->getRHS());
+  if (rhsIsBinaryOp && !binaryOpIsLinear(rhsIsBinaryOp)) {
+    return false;
+  }
 
-	const auto *rhsIsCall = llvm::dyn_cast_or_null<CallExpr>(b->getRHS());
-	if (rhsIsCall && !callIsLinear(rhsIsCall)) {
-		return false;
-	}
+  const auto *rhsIsCall = llvm::dyn_cast_or_null<CallExpr>(b->getRHS());
+  if (rhsIsCall && !callIsLinear(rhsIsCall)) {
+    return false;
+  }
 
-	const auto *lhsIsCall = llvm::dyn_cast_or_null<CallExpr>(b->getLHS());
-	if (lhsIsCall && !callIsLinear(lhsIsCall)) {
-		return false;
-	}
+  const auto *lhsIsCall = llvm::dyn_cast_or_null<CallExpr>(b->getLHS());
+  if (lhsIsCall && !callIsLinear(lhsIsCall)) {
+    return false;
+  }
 
-	return true;
+  return true;
 }
 
 static bool isLinearExpr(const Expr *expr);
 
 static bool callIsLinear(const CallExpr *c) {
-	const FunctionDecl *f = c->getDirectCallee();
-	if (f) f = f->getCanonicalDecl();
+  if (!c)
+    return true;
+  const FunctionDecl *f = c->getDirectCallee();
+  if (f)
+    f = f->getCanonicalDecl();
+  if (!f)
+    return true;
+  const IdentifierInfo *II = f->getIdentifier();
+  if (!II)
+    return true;
 
-	// https://en.cppreference.com/w/cpp/numeric/math
-	StringRef nonLinears[] = {
-		// Exponential functions
-		"exp",
-		"expf",
-		"expl",
-		"exp2",
-		"exp2f",
-		"exp2l",
-		"expm1",
-		"expm1f",
-		"expm1l",
-		"log",
-		"logf",
-		"logl",
-		"log10",
-		"log10f",
-		"log10l",
-		"log2",
-		"log2f",
-		"log2l",
-		"log1p",
-		"log1pf",
-		"log1pl",
+  // https://en.cppreference.com/w/cpp/numeric/math
+  StringRef nonLinears[] = {
+      // Exponential functions
+      "exp",
+      "expf",
+      "expl",
+      "exp2",
+      "exp2f",
+      "exp2l",
+      "expm1",
+      "expm1f",
+      "expm1l",
+      "log",
+      "logf",
+      "logl",
+      "log10",
+      "log10f",
+      "log10l",
+      "log2",
+      "log2f",
+      "log2l",
+      "log1p",
+      "log1pf",
+      "log1pl",
 
-		// Power functions
-		"pow",
-		"powf",
-		"powl",
-		"sqrt",
-		"sqrtf",
-		"sqrtl",
-		"cbrt",
-		"cbrtf",
-		"cbrtl",
-		"hypot",
-		"hypotf",
-		"hypotl",
+      // Power functions
+      "pow",
+      "powf",
+      "powl",
+      "sqrt",
+      "sqrtf",
+      "sqrtl",
+      "cbrt",
+      "cbrtf",
+      "cbrtl",
+      "hypot",
+      "hypotf",
+      "hypotl",
 
-		// Trigonometric functions
-		"sin",
-		"sinf",
-		"sinl",
-		"cos",
-		"cosf",
-		"cosl",
-		"tan",
-		"tanf",
-		"tanl",
-		"asin",
-		"asinf",
-		"asinl",
-		"acos",
-		"acosf",
-		"acosl",
-		"atan",
-		"atanf",
-		"atanl",
-		"atan2",
-		"atan2f",
-		"atan2l",
+      // Trigonometric functions
+      "sin",
+      "sinf",
+      "sinl",
+      "cos",
+      "cosf",
+      "cosl",
+      "tan",
+      "tanf",
+      "tanl",
+      "asin",
+      "asinf",
+      "asinl",
+      "acos",
+      "acosf",
+      "acosl",
+      "atan",
+      "atanf",
+      "atanl",
+      "atan2",
+      "atan2f",
+      "atan2l",
 
-		// Hyperbolic functions
-		"sinh",
-		"sinhf",
-		"sinhl",
-		"cosh",
-		"coshf",
-		"coshl",
-		"tanh",
-		"tanhf",
-		"tanhl",
-		"asinh",
-		"asinhf",
-		"asinhl",
-		"acosh",
-		"acoshf",
-		"acoshl",
-		"atanh",
-		"atanhf",
-		"atanhl",
-		"atan2",
-		"atan2f",
-		"atan2l",
-	};
-	for (unsigned int i = 0; i < sizeof(nonLinears) / sizeof(*nonLinears); i += 1) {
-		if (nonLinears[i] == f->getName()) return false;
-	}
+      // Hyperbolic functions
+      "sinh",
+      "sinhf",
+      "sinhl",
+      "cosh",
+      "coshf",
+      "coshl",
+      "tanh",
+      "tanhf",
+      "tanhl",
+      "asinh",
+      "asinhf",
+      "asinhl",
+      "acosh",
+      "acoshf",
+      "acoshl",
+      "atanh",
+      "atanhf",
+      "atanhl",
+      "atan2",
+      "atan2f",
+      "atan2l",
+  };
+  for (unsigned int i = 0; i < sizeof(nonLinears) / sizeof(*nonLinears);
+       i += 1) {
+    f->dump();
+    if (nonLinears[i] == II->getName())
+      return false;
+  }
 
-	unsigned int argCount = c->getNumArgs();
-	const Expr* const *args = c->getArgs();
-	for (unsigned int i = 0; i < argCount; i += 1) {
-		if (!isLinearExpr(args[i])) {
-			return false;
-		}
-	}
+  unsigned int argCount = c->getNumArgs();
+  const Expr *const *args = c->getArgs();
+  for (unsigned int i = 0; i < argCount; i += 1) {
+    if (!isLinearExpr(args[i])) {
+      return false;
+    }
+  }
 
-	return true;
+  return true;
 }
 
-static const Expr* unwrapOpaqueValueExpr(const Expr *e) {
-	const OpaqueValueExpr *o = llvm::dyn_cast_or_null<OpaqueValueExpr>(e);
-	if (o) { return o->getSourceExpr(); }
-	return e;
+static const Expr *unwrapOpaqueValueExpr(const Expr *e) {
+  const OpaqueValueExpr *o = llvm::dyn_cast_or_null<OpaqueValueExpr>(e);
+  if (o) {
+    return o->getSourceExpr();
+  }
+  return e;
 }
 
 static bool isLinearExpr(const Expr *expr) {
-	if (!expr) {
-		return false; 
-	}
+  if (!expr) {
+    return false;
+  }
 
-	if (isNumberLiteral(expr)) {
-		return true;
-	}
+  if (isNumberLiteral(expr)) {
+    return true;
+  }
 
-	if (isEssentiallyDeclRefExpr(expr)) { 
-		return true;
-	}
+  if (isEssentiallyDeclRefExpr(expr)) {
+    return true;
+  }
 
-	const auto *b = llvm::dyn_cast_or_null<BinaryOperator>(unwrapOpaqueValueExpr(expr));
-	if (b && !binaryOpIsLinear(b)) {
-		return false;
-	}
+  const auto *b =
+      llvm::dyn_cast_or_null<BinaryOperator>(unwrapOpaqueValueExpr(expr));
+  if (b && !binaryOpIsLinear(b)) {
+    return false;
+  }
 
-	const auto *call = llvm::dyn_cast_or_null<CallExpr>(expr);
-	if (call && !callIsLinear(call)) {
-		return false;
-	}
+  const auto *call = llvm::dyn_cast_or_null<CallExpr>(expr);
+  if (call && !callIsLinear(call)) {
+    return false;
+  }
 
-	return true;
+  return true;
 }
 
-template <typename T>
-void CountBranchesCheck::checkLinearity(const T *stmt) {
-	if (!stmt) return;
-	if (stmt->getCond()) {
-		if (isLinearExpr(stmt->getCond())) {
-			if (llvm::dyn_cast_or_null<DoStmt>(stmt)) {
-				diag(stmt->getEndLoc(), "Linear");
-			} else {
-				diag(stmt->getBeginLoc(), "Linear");
-			}
-			Linear += 1;
-		} else {
-			diag(stmt->getBeginLoc(), "Non-Linear");
-		}
-	}
+template <typename T> void CountBranchesCheck::checkLinearity(const T *stmt) {
+  if (!stmt)
+    return;
+  if (stmt->getCond()) {
+    if (isLinearExpr(stmt->getCond())) {
+      if (llvm::dyn_cast_or_null<DoStmt>(stmt)) {
+        diag(stmt->getEndLoc(), "Linear");
+      } else {
+        diag(stmt->getBeginLoc(), "Linear");
+      }
+      Linear += 1;
+    } else {
+      diag(stmt->getBeginLoc(), "Non-Linear");
+    }
+  }
 }
 
 void CountBranchesCheck::check(const MatchFinder::MatchResult &Result) {
@@ -254,8 +280,10 @@ void CountBranchesCheck::check(const MatchFinder::MatchResult &Result) {
   checkLinearity(Result.Nodes.getNodeAs<DoStmt>("DoStmt"));
   checkLinearity(Result.Nodes.getNodeAs<ForStmt>("ForStmt"));
   checkLinearity(Result.Nodes.getNodeAs<SwitchStmt>("SwitchStmt"));
-  checkLinearity(Result.Nodes.getNodeAs<ConditionalOperator>("ConditionalOperator"));
-  checkLinearity(Result.Nodes.getNodeAs<BinaryConditionalOperator>("BinaryConditionalOperator"));
+  checkLinearity(
+      Result.Nodes.getNodeAs<ConditionalOperator>("ConditionalOperator"));
+  checkLinearity(Result.Nodes.getNodeAs<BinaryConditionalOperator>(
+      "BinaryConditionalOperator"));
 }
 
 } // namespace bugprone

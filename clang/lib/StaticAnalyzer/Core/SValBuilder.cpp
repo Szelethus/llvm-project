@@ -499,6 +499,7 @@ SVal SValBuilder::evalBinOp(ProgramStateRef state, BinaryOperator::Opcode op,
     return UnknownVal();
 
   if (isa<nonloc::LazyCompoundVal>(lhs) || isa<nonloc::LazyCompoundVal>(rhs)) {
+    state->getStore();
     return UnknownVal();
   }
 
