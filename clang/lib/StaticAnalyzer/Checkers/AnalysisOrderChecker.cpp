@@ -185,8 +185,17 @@ public:
   }
 
   void checkBind(SVal Loc, SVal Val, const Stmt *S, CheckerContext &C) const {
-    if (isCallbackEnabled(C, "Bind"))
-      llvm::errs() << "Bind\n";
+    if (!isCallbackEnabled(C, "Bind"))
+      return;
+
+    llvm::errs() << "Bind";
+    if (auto PI = C.getLocation().getAs<PostInitializer>()) {
+      llvm::errs()
+          << " (PostInitializer for"
+          << PI->getInitializer()->getMember()->getQualifiedNameAsString();
+      llvm::errs() << ')';
+    }
+    llvm::errs() << '\n';
   }
 
   void checkLiveSymbols(ProgramStateRef State, SymbolReaper &SymReaper) const {
