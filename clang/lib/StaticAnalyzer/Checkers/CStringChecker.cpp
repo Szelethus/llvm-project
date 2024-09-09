@@ -320,13 +320,12 @@ public:
                                     AnyArgExpr Buffer, SizeArgExpr Size,
                                     AccessKind Access,
                                     CharKind CK = CharKind::Regular) const;
-  ProgramStateRef CheckOverlap(CheckerContext &C, ProgramStateRef state,
-                               SizeArgExpr Size, AnyArgExpr First,
-                               AnyArgExpr Second,
+  ProgramStateRef CheckOverlap(CheckerContext &C, const CallEvent &Call,
+                               ProgramStateRef state, SizeArgExpr Size,
+                               AnyArgExpr First, AnyArgExpr Second,
                                CharKind CK = CharKind::Regular) const;
-  void emitOverlapBug(CheckerContext &C,
-                      ProgramStateRef state,
-                      const Stmt *First,
+  void emitOverlapBug(CheckerContext &C, const CallEvent &Call,
+                      ProgramStateRef state, const Stmt *First,
                       const Stmt *Second) const;
 
   void emitNullArgBug(CheckerContext &C, ProgramStateRef State, const Stmt *S,
@@ -661,6 +660,7 @@ CStringChecker::CheckBufferAccess(CheckerContext &C, ProgramStateRef State,
 }
 
 ProgramStateRef CStringChecker::CheckOverlap(CheckerContext &C,
+                                             const CallEvent &Call,
                                              ProgramStateRef state,
                                              SizeArgExpr Size, AnyArgExpr First,
                                              AnyArgExpr Second,
@@ -703,7 +703,7 @@ ProgramStateRef CStringChecker::CheckOverlap(CheckerContext &C,
 
   if (stateTrue && !stateFalse) {
     // If the values are known to be equal, that's automatically an overlap.
-    emitOverlapBug(C, stateTrue, First.Expression, Second.Expression);
+    emitOverlapBug(C, Call, stateTrue, First.Expression, Second.Expression);
     return nullptr;
   }
 
@@ -769,7 +769,7 @@ ProgramStateRef CStringChecker::CheckOverlap(CheckerContext &C,
 
   if (stateTrue && !stateFalse) {
     // Overlap!
-    emitOverlapBug(C, stateTrue, First.Expression, Second.Expression);
+    emitOverlapBug(C, Call, stateTrue, First.Expression, Second.Expression);
     return nullptr;
   }
 
@@ -778,8 +778,9 @@ ProgramStateRef CStringChecker::CheckOverlap(CheckerContext &C,
   return stateFalse;
 }
 
-void CStringChecker::emitOverlapBug(CheckerContext &C, ProgramStateRef state,
-                                  const Stmt *First, const Stmt *Second) const {
+void CStringChecker::emitOverlapBug(CheckerContext &C, const CallEvent &Call,
+                                    ProgramStateRef state, const Stmt *First,
+                                    const Stmt *Second) const {
   ExplodedNode *N = C.generateErrorNode(state);
   if (!N)
     return;
@@ -791,8 +792,7 @@ void CStringChecker::emitOverlapBug(CheckerContext &C, ProgramStateRef state,
   // Generate a report for this bug.
   auto report = std::make_unique<PathSensitiveBugReport>(
       *BT_Overlap, "Arguments must not be overlapping buffers", N);
-  report->addRange(First->getSourceRange());
-  report->addRange(Second->getSourceRange());
+  report->addRange(Call.getSourceRange());
 
   C.emitReport(std::move(report));
 }
@@ -1488,7 +1488,7 @@ void CStringChecker::evalCopyCommon(CheckerContext &C, const CallEvent &Call,
     state = CheckBufferAccess(C, state, Source, Size, AccessKind::read, CK);
 
     if (Restricted)
-      state = CheckOverlap(C, state, Size, Dest, Source, CK);
+      state = CheckOverlap(C, Call, state, Size, Dest, Source, CK);
 
     if (!state)
       return;
@@ -1918,7 +1918,7 @@ void CStringChecker::evalStrcpyCommon(CheckerContext &C, const CallEvent &Call,
   SizeArgExpr SrcExprAsSizeDummy = {
       {srcExpr.Expression, srcExpr.ArgumentIndex}};
   state = CheckOverlap(
-      C, state,
+      C, Call, state,
       (IsBounded ? SizeArgExpr{{Call.getArgExpr(2), 2}} : SrcExprAsSizeDummy),
       Dst, srcExpr);
 
@@ -2653,7 +2653,7 @@ void CStringChecker::evalSprintfCommon(CheckerContext &C, const CallEvent &Call,
     SizeArgExpr SrcExprAsSizeDummy = {
         {Source.Expression, Source.ArgumentIndex}};
     State = CheckOverlap(
-        C, State,
+        C, Call, State,
         (IsBounded ? SizeArgExpr{{Call.getArgExpr(1), 1}} : SrcExprAsSizeDummy),
         Dest, Source);
     if (!State)
