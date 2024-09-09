@@ -72,7 +72,9 @@ def DeadCodeAlpha : Package<"deadcode">, ParentPackage<Alpha>;
 def Performance : Package<"performance">, ParentPackage<OptIn>;
 
 def Security : Package <"security">;
+def SecurityOptin : Package <"security">, ParentPackage<OptIn>;
 def InsecureAPI : Package<"insecureAPI">, ParentPackage<Security>;
+def InsecureAPIOptin : Package<"insecureAPI">, ParentPackage<SecurityOptin>;
 def SecurityAlpha : Package<"security">, ParentPackage<Alpha>;
 def Taint : Package<"taint">, ParentPackage<SecurityAlpha>;
 
@@ -978,19 +980,24 @@ def UncheckedReturn : Checker<"UncheckedReturn">,
   Dependencies<[SecuritySyntaxChecker]>,
   Documentation<HasDocumentation>;
 
-def DeprecatedOrUnsafeBufferHandling :
-  Checker<"DeprecatedOrUnsafeBufferHandling">,
-  HelpText<"Warn on uses of unsecure or deprecated buffer manipulating "
-           "functions">,
-  Dependencies<[SecuritySyntaxChecker]>,
-  Documentation<HasDocumentation>;
-
 def decodeValueOfObjCType : Checker<"decodeValueOfObjCType">,
   HelpText<"Warn on uses of the '-decodeValueOfObjCType:at:' method">,
   Dependencies<[SecuritySyntaxChecker]>,
   Documentation<HasDocumentation>;
 
 } // end "security.insecureAPI"
+
+let ParentPackage = InsecureAPIOptin in {
+
+def DeprecatedOrUnsafeBufferHandling :
+  Checker<"DeprecatedOrUnsafeBufferHandling">,
+  HelpText<"Warn on uses of unsecure or deprecated buffer manipulating "
+           "functions">,
+  Dependencies<[SecuritySyntaxChecker]>,
+  OldNames<["security.insecureAPI.DeprecatedOrUnsafeBufferHandling"]>,
+  Documentation<HasDocumentation>;
+
+} // end "optin.security.insecureAPI"
 
 let ParentPackage = Security in {
 

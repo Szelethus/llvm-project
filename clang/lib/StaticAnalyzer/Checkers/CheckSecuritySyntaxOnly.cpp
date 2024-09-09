@@ -754,9 +754,6 @@ void WalkAST::checkDeprecatedOrUnsafeBufferHandling(const CallExpr *CE,
   if (!filter.check_DeprecatedOrUnsafeBufferHandling)
     return;
 
-  if (!BR.getContext().getLangOpts().C11)
-    return;
-
   // Issue a warning. ArgIndex == -1: Deprecated but not unsafe (has size
   // restrictions).
   enum { DEPR_ONLY = -1, UNKNOWN_CALL = -2 };
@@ -1080,7 +1077,7 @@ public:
     walker.Visit(D->getBody());
   }
 };
-}
+} // namespace
 
 void ento::registerSecuritySyntaxChecker(CheckerManager &mgr) {
   mgr.registerChecker<SecuritySyntaxChecker>();

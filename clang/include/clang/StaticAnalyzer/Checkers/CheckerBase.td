@@ -85,6 +85,9 @@ class ParentPackage<Package P> { Package ParentPackage = P; }
 /// a '-help'-like command line option.
 class HelpText<string text> { string HelpText = text; }
 
+/// TODO
+class OldNames<list<string> names = []> { list<string> OldNames = names; }
+
 /// Describes what kind of documentation exists for the checker.
 class DocumentationEnum<bits<1> val> {
   bits<1> Documentation = val;
@@ -115,6 +118,7 @@ class Checker<string name = ""> {
   list<Checker>       WeakDependencies;
   bits<1>             Documentation;
   Package             ParentPackage;
+  list<string>        OldNames;
   bit                 Hidden = 0;
 }
 

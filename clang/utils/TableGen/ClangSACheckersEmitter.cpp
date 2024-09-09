@@ -12,6 +12,7 @@
 
 #include "TableGenBackends.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/ErrorHandling.h"
 #include "llvm/TableGen/Error.h"
 #include "llvm/TableGen/Record.h"
 #include "llvm/TableGen/TableGenBackend.h"
@@ -305,6 +306,28 @@ void clang::EmitClangSACheckers(RecordKeeper &Records, raw_ostream &OS) {
   }
   OS << "\n"
         "#endif // GET_CHECKER_WEAK_DEPENDENCIES\n";
+
+  // Emit old checker names.
+  //
+  // CHECKER_OLD_NAMES(NEWNAME, OLDNAME)
+  //   - FIXME
+  OS << "\n"
+        "#ifdef CHECKER_OLD_NAMES\n";
+  for (const Record *Checker : checkers) {
+    if (Checker->isValueUnset("OldNames"))
+      continue;
+
+    for (StringRef OldName : Checker->getValueAsListOfStrings("OldNames")) {
+      OS << "CHECKER_OLD_NAME(";
+      OS << '\"';
+      OS.write_escaped(getCheckerFullName(Checker)) << "\", ";
+      OS << '\"';
+      OS.write_escaped(OldName) << '\"';
+      OS << ")\n";
+    }
+  }
+  OS << "\n"
+        "#endif // CHECKER_OLD_NAMES\n";
 
   // Emit a package option.
   //

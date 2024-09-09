@@ -510,6 +510,9 @@ def note_drv_use_standard : Note<"use '%0'"
   "%select{| or '%3'|, '%3', or '%4'|, '%3', '%4', or '%5'}2 "
   "for '%1' standard">;
 
+//def warn_analyzer_checker_name_depricated : Error<
+//  "analyzer-config option '%0' has a key but no value">;
+
 def err_analyzer_config_no_value : Error<
   "analyzer-config option '%0' has a key but no value">;
 def err_analyzer_config_multiple_values : Error<
