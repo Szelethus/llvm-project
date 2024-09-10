@@ -15,6 +15,7 @@
 #include "clang/AST/OperationKinds.h"
 #include "clang/Basic/Builtins.h"
 #include "clang/Basic/CharInfo.h"
+#include "clang/Basic/IdentifierTable.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -789,9 +790,14 @@ void CStringChecker::emitOverlapBug(CheckerContext &C, const CallEvent &Call,
     BT_Overlap.reset(new BugType(Filter.CheckNameCStringBufferOverlap,
                                  categories::UnixAPI, "Improper arguments"));
 
+  std::string msg = "Arguments ";
+  if (const IdentifierInfo *II = Call.getCalleeIdentifier())
+    msg += "to '" + II->getName().str() + "' ";
+
+  msg += "must not be overlapping buffers";
   // Generate a report for this bug.
   auto report = std::make_unique<PathSensitiveBugReport>(
-      *BT_Overlap, "Arguments must not be overlapping buffers", N);
+      *BT_Overlap, msg, N);
   report->addRange(Call.getSourceRange());
 
   C.emitReport(std::move(report));
