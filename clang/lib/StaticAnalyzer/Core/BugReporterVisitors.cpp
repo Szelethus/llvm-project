@@ -2357,6 +2357,9 @@ public:
 
         // Mark both the variable region and its contents as interesting.
         SVal V = LVState->getRawSVal(loc::MemRegionVal(R));
+        llvm::errs() << "RawSVal of tracked region at the point of visitor registration: ";
+        V.dump();
+        llvm::errs() << '\n';
         Report.addVisitor<NoStoreFuncVisitor>(cast<SubRegion>(R), Opts.Kind);
 
         // When we got here, we do have something to track, and we will
