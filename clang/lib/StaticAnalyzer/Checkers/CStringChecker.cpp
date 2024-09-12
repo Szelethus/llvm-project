@@ -834,9 +834,6 @@ void CStringChecker::emitUninitializedReadBug(CheckerContext &C,
     Report->addNote("Other elements might also be undefined",
                     Report->getLocation());
     Report->addRange(E->getSourceRange());
-    llvm::errs() << "Tracking ";
-    R->dump();
-    llvm::errs() << '\n';
     bugreporter::trackExpressionValue(N, E, *Report);
     Report->addVisitor<NoStoreFuncVisitor>(R->castAs<SubRegion>());
     C.emitReport(std::move(Report));

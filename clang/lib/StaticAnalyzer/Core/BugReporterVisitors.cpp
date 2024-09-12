@@ -315,62 +315,6 @@ static bool isFunctionMacroExpansion(SourceLocation Loc,
   return EInfo.isFunctionMacroExpansion();
 }
 
-static const LocationContext *getFirstNonCtorCall(const LocationContext *LCtx) {
-  while (llvm::isa_and_nonnull<CXXConstructorDecl>(LCtx->getDecl()))
-    LCtx = LCtx->getParent();
-  return LCtx;
-}
-
-static const MemRegion *getInitializerRegion(const PostInitializer &PI) {
-  return reinterpret_cast<const MemRegion *>(PI.getLocationValue());
-}
-
-/// Based largely on isInitializationOfVar(). Checks if N initializes FR.
-static bool isInitializationOfField(const ExplodedNode *N,
-                                    const FieldRegion *FR) {
-  std::optional<PostInitializer> P = N->getLocationAs<PostInitializer>();
-  if (!P)
-    return false;
-
-  const MemRegion *InitR = getInitializerRegion(*P);
-
-  if (FR != InitR)
-    return false;
-
-  const MemSpaceRegion *FRSpace = FR->getMemorySpace();
-  const auto *FRCtx = dyn_cast<StackSpaceRegion>(FRSpace);
-
-  if (!FRCtx)
-    return true;
-
-  // The stack frame of N is the constructor, but the FieldRegion is not local
-  // to the constructor, but rather to the caller function.
-  const LocationContext *CallerCtx =
-      getFirstNonCtorCall(N->getLocationContext());
-
-  return FRCtx->getStackFrame() == CallerCtx->getStackFrame();
-}
-
-static bool isConstructorCallFor(const SubRegion *RegionOfInterest,
-                                 const ExplodedNode *N) {
-
-  if (N->getStackFrame()->inTopFrame())
-    return false;
-
-  ProgramStateRef State = N->getState();
-
-  CallEventRef<> Call =
-      State->getStateManager().getCallEventManager().getCaller(
-          N->getStackFrame(), State);
-
-  if (const CXXConstructorCall *CC = dyn_cast<CXXConstructorCall>(Call)) {
-    if (CC->getCXXThisVal().getAsRegion() == RegionOfInterest) {
-      return true;
-    }
-  }
-  return false;
-}
-
 /// \return Whether \c RegionOfInterest was modified at \p N,
 /// where \p ValueAfter is \c RegionOfInterest's value at the end of the
 /// stack frame.
@@ -380,21 +324,9 @@ static bool wasRegionOfInterestModifiedAt(const SubRegion *RegionOfInterest,
   ProgramStateRef State = N->getState();
   ProgramStateManager &Mgr = N->getState()->getStateManager();
 
-  // If the region of interest is constructed right here, it is obviously
-  // modifying. This gets rid of notes like "Retuning without writing to *this",
-  // which makes no sense right in the constructor call.
-  if (isConstructorCallFor(RegionOfInterest, N))
-    return true;
-
   if (!N->getLocationAs<PostStore>() && !N->getLocationAs<PostInitializer>() &&
       !N->getLocationAs<PostStmt>())
     return false;
-
-  // If we are tracking a field, check if we reached its initialization point
-  // in an initializer list.
-  if (const FieldRegion *FR = RegionOfInterest->getAs<FieldRegion>())
-    if (isInitializationOfField(N, FR))
-      return true;
 
   // Writing into region of interest.
   if (auto PS = N->getLocationAs<PostStmt>())
@@ -403,12 +335,8 @@ static bool wasRegionOfInterestModifiedAt(const SubRegion *RegionOfInterest,
                                       N->getSVal(BO->getLHS()).getAsRegion()))
         return true;
 
+  // SVal after the state is possibly different.
   SVal ValueAtN = N->getState()->getSVal(RegionOfInterest);
-
-  // If ValueAtN and ValueAfter are different, then RegionOfInterest was
-  // modified. We also need to handle the special case of undefined values,
-  // we need to check that the other value is not undefined, only then was
-  // the region modified.
   if (!Mgr.getSValBuilder()
            .areEqual(State, ValueAtN, ValueAfter)
            .isConstrainedTrue() &&
@@ -593,10 +521,6 @@ PathDiagnosticPieceRef NoStateChangeFuncVisitor::VisitNode(
 
   return maybeEmitNoteForParameters(R, *Call, N);
 }
-
-//===----------------------------------------------------------------------===//
-// Implementation of NoStoreFuncVisitor.
-//===----------------------------------------------------------------------===//
 
 /// \return Whether the method declaration \p Parent
 /// syntactically has a binary operation writing into the ivar \p Ivar.
@@ -2357,9 +2281,6 @@ public:
 
         // Mark both the variable region and its contents as interesting.
         SVal V = LVState->getRawSVal(loc::MemRegionVal(R));
-        llvm::errs() << "RawSVal of tracked region at the point of visitor registration: ";
-        V.dump();
-        llvm::errs() << '\n';
         Report.addVisitor<NoStoreFuncVisitor>(cast<SubRegion>(R), Opts.Kind);
 
         // When we got here, we do have something to track, and we will
