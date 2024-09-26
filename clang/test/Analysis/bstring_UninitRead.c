@@ -1,5 +1,5 @@
 // RUN: %clang_analyze_cc1 -verify %s \
-// RUN: -analyzer-checker=core,alpha.unix.cstring
+// RUN: -analyzer-checker=core,unix.cstring.UninitializedRead
 
 //===----------------------------------------------------------------------===//
 // mempcpy() using character array. This is the easiest case, as memcpy
@@ -18,6 +18,8 @@ void memcpy_array_fully_uninit(char *dst) {
   memcpy(dst, buf, 10); // expected-warning{{The first element of the 2nd argument is undefined}}
                         // expected-note@-1{{Other elements might also be undefined}}
   (void)buf;
+  int i = 0;
+  (void)(10 / i);
 }
 
 void memcpy_array_partially_uninit(char *dst) {

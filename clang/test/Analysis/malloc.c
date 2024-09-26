@@ -1095,6 +1095,8 @@ void doNotInvalidateWhenPassedToSystemCalls(char *s) {
   strlen(p);
   strcpy(p, s);
   strcpy(s, p);
+  // FIXME: We should stop analysis here, even if we emit no warnings, since
+  // overlapping buffers for strycpy is a fatal error.
   strcpy(p, p);
   memcpy(p, s, 1);
   memcpy(s, p, 1);
