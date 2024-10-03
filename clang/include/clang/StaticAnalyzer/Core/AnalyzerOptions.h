@@ -258,6 +258,7 @@ public:
   unsigned AnalyzeAll : 1;
   unsigned AnalyzerDisplayProgress : 1;
   unsigned AnalyzerFocusedTaint : 1;
+  unsigned AnalyzerInlineTaintOnly : 1;
   unsigned AnalyzerNoteAnalysisEntryPoints : 1;
 
   unsigned TrimGraph : 1;
@@ -321,9 +322,9 @@ public:
         ShowCheckerOptionDeveloperList(false), ShowEnabledCheckerList(false),
         ShowConfigOptionsList(false),
         ShouldEmitErrorsOnInvalidConfigValue(false), AnalyzeAll(false),
-        AnalyzerDisplayProgress(false),
-        AnalyzerFocusedTaint(false), AnalyzerNoteAnalysisEntryPoints(false),
-        TrimGraph(false),
+        AnalyzerDisplayProgress(false), AnalyzerNoteAnalysisEntryPoints(false),
+        AnalyzerFocusedTaint(false),
+        AnalyzerInlineTaintOnly(false), TrimGraph(false),
         visualizeExplodedGraphWithGraphViz(false), UnoptimizedCFG(false),
         PrintStats(false), NoRetryExhausted(false), AnalyzerWerror(false) {}
 
