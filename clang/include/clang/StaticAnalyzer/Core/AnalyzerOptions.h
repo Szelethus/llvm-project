@@ -323,6 +323,7 @@ public:
         AnalyzerDisplayProgress(false), AnalyzerNoteAnalysisEntryPoints(false),
         AnalyzerFocusedTaint(false),
         AnalyzerInlineTaintOnly(false), TrimGraph(false),
+        AnalyzerAlwaysInlineTainted(false),
         visualizeExplodedGraphWithGraphViz(false), UnoptimizedCFG(false),
         PrintStats(false), NoRetryExhausted(false), AnalyzerWerror(false) {}
 
