@@ -580,7 +580,8 @@ ProgramStateRef CStringChecker::CheckLocation(CheckerContext &C,
     // explicitly or implicitly by the Malloc checker.
     // In the latter case we only do modeling but do not emit warning.
     if (!Filter.CheckCStringOutOfBounds)
-      return nullptr;
+      return state;
+    // alma
 
     // Emit a bug report.
     ErrorMessage Message =
@@ -962,10 +963,17 @@ ProgramStateRef CStringChecker::checkAdditionOverflow(CheckerContext &C,
     std::tie(stateOverflow, stateOkay) =
       state->assume(willOverflow.castAs<DefinedOrUnknownSVal>());
 
-    if (Filter.CheckCStringOutOfBounds && stateOverflow && !stateOkay) {
+    if (stateOverflow && !stateOkay) {
       // We have an overflow. Emit a bug report.
-      emitAdditionOverflowBug(C, stateOverflow);
-      return nullptr;
+      if (Filter.CheckCStringOutOfBounds)
+        emitAdditionOverflowBug(C, stateOverflow);
+
+      // FIXME: We detected a fatal error here, we should stop analysis even if we
+      // chose not to emit a report here. However, as long as our overlap checker
+      // is in alpha, lets just pretend nothing happened.
+      //C.addSink();
+      //return nullptr;
+      return state;
     }
 
     // From now on, assume an overflow didn't occur.
