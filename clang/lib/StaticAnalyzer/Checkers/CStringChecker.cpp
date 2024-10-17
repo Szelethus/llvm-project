@@ -579,9 +579,13 @@ ProgramStateRef CStringChecker::CheckLocation(CheckerContext &C,
     // These checks are either enabled by the CString out-of-bounds checker
     // explicitly or implicitly by the Malloc checker.
     // In the latter case we only do modeling but do not emit warning.
+    // FIXME: We detected a fatal error here, we should stop analysis even if we
+    // chose not to emit a report here. However, as long as our out-of-bounds
+    // checker is in alpha, lets just pretend nothing happened.
     if (!Filter.CheckCStringOutOfBounds)
       return state;
-    // alma
+      // C.addSink();
+      // return nullptr;
 
     // Emit a bug report.
     ErrorMessage Message =
