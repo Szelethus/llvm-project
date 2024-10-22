@@ -54,6 +54,7 @@
 // CHECK-NEXT: unix.Vfork
 // CHECK-NEXT: unix.cstring.BadSizeArg
 // CHECK-NEXT: unix.cstring.NullArg
+// CHECK-NEXT: unix.cstring.UninitializedRead
 
 int main() {
   int i;

@@ -1,9 +1,16 @@
 // Given code 'struct aa { char s1[4]; char * s2;} a; memcpy(a.s1, ...);',
-// this test checks that the CStringChecker only invalidates the destination buffer array a.s1 (instead of a.s1 and a.s2).
+// this test checks that the CStringChecker only invalidates the destination
+// buffer array a.s1 (instead of a.s1 and a.s2).
 // At the moment the whole of the destination array content is invalidated.
 // If a.s1 region has a symbolic offset, the whole region of 'a' is invalidated.
 // Specific triple set to test structures of size 0.
-// RUN: %clang_analyze_cc1 -triple x86_64-pc-linux-gnu -analyzer-checker=core,unix.Malloc,debug.ExprInspection -Wno-error=int-conversion -verify -analyzer-config eagerly-assume=false %s
+
+// RUN: %clang_analyze_cc1 -triple x86_64-pc-linux-gnu %s -verify \
+// RUN:  -analyzer-checker=core \
+// RUN:  -analyzer-checker=unix.Malloc \
+// RUN:  -analyzer-checker=debug.ExprInspection \
+// RUN:  -analyzer-config eagerly-assume=false \
+// RUN:  -Wno-error=int-conversion
 
 typedef __typeof(sizeof(int)) size_t;
 
