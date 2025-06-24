@@ -1084,8 +1084,9 @@ bool ExprEngine::shouldInlineCall(const CallEvent &Call, const Decl *D,
   AnalysisDeclContext *CalleeADC = ADCMgr.getContext(D);
 
   bool TaintRelatedFun=false;
+  bool SlicingRelatedFun=false;
 
-  if (Opts.AnalyzerInlineTaintOnly) {
+   if (Opts.AnalyzerInlineTaintOnly) {
       std::set<FunctionDecl*> TaintedFunctions = AMgr.getTaintRelatedFunctions();
       // if the function is not taint related skip it.
       auto *FD = dyn_cast<FunctionDecl>(const_cast<Decl*>(D));
@@ -1104,6 +1105,32 @@ bool ExprEngine::shouldInlineCall(const CallEvent &Call, const Decl *D,
         //return true;
       }
   }
+  // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  {
+    std::set<FunctionDecl*> SlicingFunctions = AMgr.getSlicingRelatedFunctions();
+    // if the function is not slicing related skip it.
+    auto *FD = dyn_cast<FunctionDecl>(const_cast<Decl*>(D));
+    if (SlicingFunctions.find(FD) == SlicingFunctions.end()) {
+      llvm::errs()
+          << "Skipping inlining of not slicing related function:\n";
+      llvm::errs() << FD->getNameInfo().getAsString() << "\n";
+      return false;
+    }
+
+    SlicingRelatedFun = true;
+    llvm::errs() << "tyring to inline slicing related function:\n";
+    llvm::errs() << FD->getNameInfo().getAsString() << "\n";
+    // leave the other budget limits to kick in
+    // otherwise the analysis may hang
+    // return true;
+  }
+  // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
   // The auto-synthesized bodies are essential to inline as they are
   // usually small and commonly used. Note: we should do this check early on to
   // ensure we always inline these calls.
@@ -1148,7 +1175,7 @@ bool ExprEngine::shouldInlineCall(const CallEvent &Call, const Decl *D,
   bool IsRecursive = false;
   unsigned StackDepth = 0;
   examineStackFrames(D, Pred->getLocationContext(), IsRecursive, StackDepth);
-  if (!(Opts.AnalyzerAlwaysInlineTainted && TaintRelatedFun && (StackDepth < 3*Opts.InlineMaxStackDepth))
+  if (!SlicingRelatedFun
       && (StackDepth >= Opts.InlineMaxStackDepth) &&
       (!isSmall(CalleeADC) || IsRecursive))
     return false;

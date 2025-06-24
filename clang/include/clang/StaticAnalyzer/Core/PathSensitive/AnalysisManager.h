@@ -43,6 +43,7 @@ class AnalysisManager : public BugReporterData {
 
   CheckerManager *CheckerMgr;
   std::set<FunctionDecl*> TaintRelatedFunctions;
+  std::set<FunctionDecl*> SlicingRelatedFunctions;
 
 public:
   AnalyzerOptions &options;
@@ -65,6 +66,13 @@ public:
   }
   std::set<FunctionDecl*> getTaintRelatedFunctions(){
     return TaintRelatedFunctions;
+  }
+
+  void setSlicingRelatedFunctions(std::set<FunctionDecl*> Fns){
+    SlicingRelatedFunctions = Fns;
+  }
+  std::set<FunctionDecl*> getSlicingRelatedFunctions(){
+    return SlicingRelatedFunctions;
   }
 
   AnalysisDeclContextManager& getAnalysisDeclContextManager() {
