@@ -1114,15 +1114,15 @@ bool ExprEngine::shouldInlineCall(const CallEvent &Call, const Decl *D,
     // if the function is not slicing related skip it.
     auto *FD = dyn_cast<FunctionDecl>(const_cast<Decl*>(D));
     if (SlicingFunctions.find(FD) == SlicingFunctions.end()) {
-      llvm::errs()
-          << "Skipping inlining of not slicing related function:\n";
+      //llvm::errs()
+      //    << "Skipping inlining of not slicing related function:\n";
       llvm::errs() << FD->getNameInfo().getAsString() << "\n";
       return false;
     }
 
     SlicingRelatedFun = true;
-    llvm::errs() << "tyring to inline slicing related function:\n";
-    llvm::errs() << FD->getNameInfo().getAsString() << "\n";
+    //llvm::errs() << "tyring to inline slicing related function:\n";
+    //llvm::errs() << FD->getNameInfo().getAsString() << "\n";
     // leave the other budget limits to kick in
     // otherwise the analysis may hang
     // return true;

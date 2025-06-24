@@ -36,6 +36,7 @@
 #include <llvm/ADT/DepthFirstIterator.h>
 #include "clang/StaticAnalyzer/Core/PathSensitive/FunctionSummary.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Support/FileSystem.h"
@@ -507,7 +508,7 @@ void AnalysisConsumer::getDeclsForTaintAnalysis(CallGraph &CG) {
     if (!FD)
       continue;
     if (FD->getDefinition()) {
-      llvm::errs() << "Visiting function: " << FD->getNameInfo().getAsString() << "\n";
+      //llvm::errs() << "Visiting function: " << FD->getNameInfo().getAsString() << "\n";
     }
 
     for (auto Callee : N->callees()){
@@ -531,10 +532,10 @@ void AnalysisConsumer::getDeclsForTaintAnalysis(CallGraph &CG) {
     }
 
     /*if (isTaintSource(FD)||isTaintSink(FD)){
-      llvm::errs()<<"Called Function "<<FD->getCanonicalDecl()->getNameAsString()<<" is tainted\n";
+      //llvm::errs()<<"Called Function "<<FD->getCanonicalDecl()->getNameAsString()<<" is tainted\n";
       TaintedFunctions.insert(FD);
     } else
-      llvm::errs()<<"Called Function "<<FD->getCanonicalDecl()->getNameAsString()<<" is NOT tainted\n";*/
+      //llvm::errs()<<"Called Function "<<FD->getCanonicalDecl()->getNameAsString()<<" is NOT tainted\n";*/
 
   }
 }
@@ -551,7 +552,7 @@ void AnalysisConsumer::getDeclsForSlicingAnalysis(CallGraph &CG) {
     if (!FD)
       continue;
     if (FD->getDefinition()) {
-      llvm::errs() << "Visiting function: " << FD->getNameInfo().getAsString() << "\n";
+      //llvm::errs() << "Visiting function: " << FD->getNameInfo().getAsString() << "\n";
     }
 
     for (auto Callee : N->callees()){
@@ -603,32 +604,32 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
         TaintedTopLevelFunctions.insert(D);
     }
 
-    llvm::errs()<<"Taint Sources:\n";
+    //llvm::errs()<<"Taint Sources:\n";
     for (auto FD:TaintSources){
-      llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
+      //llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
     }
 
-    llvm::errs()<<"Taint Sinks:\n";
+    //llvm::errs()<<"Taint Sinks:\n";
     for (auto FD:TaintSinks){
-      llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
+      //llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
     }
 
     TaintPropagatingFunctions.insert(TaintSourcePropagators.begin(),TaintSourcePropagators.end());
     TaintPropagatingFunctions.insert(TaintSinkPropagators.begin(),TaintSinkPropagators.end());
     Mgr->setTaintRelatedFunctions(TaintPropagatingFunctions);
-    llvm::errs()<<"Taint propagating TopLevel functions:\n";
+    //llvm::errs()<<"Taint propagating TopLevel functions:\n";
     for (FunctionDecl* FD:TaintedTopLevelFunctions){
-      llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
+      //llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
     }
 
-    llvm::errs()<<"Taint Source propagating functions:\n";
+    //llvm::errs()<<"Taint Source propagating functions:\n";
     for (FunctionDecl* FD:TaintSourcePropagators){
-      llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
+      //llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
     }
 
-    llvm::errs()<<"Taint Sink propagating functions:\n";
+    //llvm::errs()<<"Taint Sink propagating functions:\n";
     for (FunctionDecl* FD:TaintSinkPropagators){
-      llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
+      //llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
     }
 
   }
@@ -695,6 +696,10 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
       auto *FD = dyn_cast<FunctionDecl>(D);
       MustAnalyze = TaintedTopLevelFunctions.find(FD)!=TaintedTopLevelFunctions.end();
     }
+    {
+      auto *FD = dyn_cast<FunctionDecl>(D);
+      MustAnalyze = SlicingTopLevelFunctions.find(FD)!=SlicingTopLevelFunctions.end();
+    }
 
     // Skip the functions which have been processed already or previously
     // inlined.
@@ -717,9 +722,20 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
       // if the function is not taint related skip it.
       auto *FD = dyn_cast<FunctionDecl>(D);
       if (TaintedTopLevelFunctions.find(FD) == TaintedTopLevelFunctions.end()) {
-        llvm::errs()
-            << "Skipping not taint related function from the analysis:\n";
-        llvm::errs() << FD->getNameInfo().getAsString() << "\n";
+        //llvm::errs()
+        //    << "Skipping not taint related function from the analysis:\n";
+        //llvm::errs() << FD->getNameInfo().getAsString() << "\n";
+        continue;
+      }
+    }
+
+    {
+      // if the function is not slicing related skip it.
+      auto *FD = dyn_cast<FunctionDecl>(D);
+      if (SlicingTopLevelFunctions.find(FD) == SlicingTopLevelFunctions.end()) {
+        //llvm::errs()
+        //    << "Skipping not slicing related function from the analysis:\n";
+        //llvm::errs() << FD->getNameInfo().getAsString() << "\n";
         continue;
       }
     }
