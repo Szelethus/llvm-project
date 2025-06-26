@@ -42,7 +42,6 @@ class AnalysisManager : public BugReporterData {
   ConstraintManagerCreator CreateConstraintMgr;
 
   CheckerManager *CheckerMgr;
-  std::set<FunctionDecl*> TaintRelatedFunctions;
   std::set<FunctionDecl*> SlicingRelatedFunctions;
 
 public:
@@ -59,13 +58,6 @@ public:
 
   void ClearContexts() {
     AnaCtxMgr.clear();
-  }
-
-  void setTaintRelatedFunctions(std::set<FunctionDecl*> TaintedFunctions){
-    TaintRelatedFunctions = TaintedFunctions;
-  }
-  std::set<FunctionDecl*> getTaintRelatedFunctions(){
-    return TaintRelatedFunctions;
   }
 
   void setSlicingRelatedFunctions(std::set<FunctionDecl*> Fns){

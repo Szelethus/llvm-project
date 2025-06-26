@@ -2928,10 +2928,10 @@ std::optional<PathDiagnosticBuilder> PathDiagnosticBuilder::findValidReport(
           break;
         }
       }
-      for (auto I : lines) {
-        std::cout << I << ' ';
-      }
-      std::cout << '\n';
+      //for (auto I : lines) {
+      //  std::cout << I << ' ';
+      //}
+      //std::cout << '\n';
       assert(R->isValid());
       return PathDiagnosticBuilder(std::move(BRC), std::move(BugPath->BugPath),
                                    BugPath->Report, BugPath->ErrorNode,

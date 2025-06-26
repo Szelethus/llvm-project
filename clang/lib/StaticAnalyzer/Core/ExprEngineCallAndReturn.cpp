@@ -1083,28 +1083,8 @@ bool ExprEngine::shouldInlineCall(const CallEvent &Call, const Decl *D,
   AnalysisDeclContextManager &ADCMgr = AMgr.getAnalysisDeclContextManager();
   AnalysisDeclContext *CalleeADC = ADCMgr.getContext(D);
 
-  bool TaintRelatedFun=false;
   bool SlicingRelatedFun=false;
 
-   if (Opts.AnalyzerInlineTaintOnly) {
-      std::set<FunctionDecl*> TaintedFunctions = AMgr.getTaintRelatedFunctions();
-      // if the function is not taint related skip it.
-      auto *FD = dyn_cast<FunctionDecl>(const_cast<Decl*>(D));
-      if (TaintedFunctions.find(FD) == TaintedFunctions.end()) {
-        llvm::errs()
-            << "Skipping inlining of not taint related function from the analysis:\n";
-        llvm::errs() << FD->getNameInfo().getAsString() << "\n";
-        return false;
-      } else {
-        TaintRelatedFun=true;
-        llvm::errs()
-            << "tyring to inline taint related function:\n";
-        llvm::errs() << FD->getNameInfo().getAsString() << "\n";
-        //leave the other budget limits to kick in
-        //otherwise the analysis may hang
-        //return true;
-      }
-  }
   // ---------------------------------------------------------------------------
   // ---------------------------------------------------------------------------
   // ---------------------------------------------------------------------------
@@ -1116,7 +1096,7 @@ bool ExprEngine::shouldInlineCall(const CallEvent &Call, const Decl *D,
     if (SlicingFunctions.find(FD) == SlicingFunctions.end()) {
       //llvm::errs()
       //    << "Skipping inlining of not slicing related function:\n";
-      llvm::errs() << FD->getNameInfo().getAsString() << "\n";
+      //llvm::errs() << FD->getNameInfo().getAsString() << "\n";
       return false;
     }
 

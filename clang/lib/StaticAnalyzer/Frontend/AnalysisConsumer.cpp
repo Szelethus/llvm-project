@@ -86,13 +86,6 @@ class AnalysisConsumer : public AnalysisASTConsumer,
 
   std::vector<std::function<void(CheckerRegistry &)>> CheckerRegistrationFns;
 
-  // Functions that propagate taintedness
-  std::set<FunctionDecl*> TaintSinkPropagators;
-  std::set<FunctionDecl*> TaintSourcePropagators;
-  //actual taint sources and sinks
-  std::set<FunctionDecl*> TaintSinks;
-  std::set<FunctionDecl*> TaintSources;
-
   // Functions that propagate slicing
   std::set<FunctionDecl*> SlicingSinkPropagators;
   std::set<FunctionDecl*> SlicingSourcePropagators;
@@ -263,10 +256,6 @@ public:
   ExprEngine::InliningModes
     getInliningModeForFunction(const Decl *D, const SetOfConstDecls &Visited);
 
-
-  void getDeclsForTaintAnalysis(CallGraph &CG);
-  bool isTaintSource(const FunctionDecl* FD);
-  bool isTaintSink(const FunctionDecl* FD);
 
   void getDeclsForSlicingAnalysis(CallGraph &CG);
   bool isTopLevel(const FunctionDecl* FD);
@@ -475,71 +464,6 @@ bool AnalysisConsumer::isSlicingSink(const FunctionDecl *FD) {
   return LineBegin <= SlicingLine && SlicingLine <= LineEnd;
 }
 
-bool AnalysisConsumer::isTaintSource(const FunctionDecl* FD){
-  std::set<std::string> sources = {"scanf","gets","getch","read","fopen","fdopen","freopen","getchar",
-  "gets_s","scanf_s","getcwd","readlink","gethostname","getnameinfo","readlinkat","get_current_dir_name",
-  "getseuserbyname","getgroups","getlogin","getlogin_r","popen","getenv"};
-  if (!FD || !FD->getCanonicalDecl())
-    return false;
-  std::string FN = FD->getCanonicalDecl()->getNameAsString();
-  //llvm::errs()<<"Inspecting function if tainted " << FN << "\n";
-  return (sources.count(FN));
-}
-
-bool AnalysisConsumer::isTaintSink(const FunctionDecl* FD){
-  std::set<std::string> sinks = {"system", "execv","popen","malloc","calloc","memcpy","strcpy","strncpy"};
-  if (!FD || !FD->getCanonicalDecl())
-    return false;
-  std::string FN = FD->getCanonicalDecl()->getNameAsString();
-  //llvm::errs()<<"Inspecting function if tainted " << FN << "\n";
-  return (sinks.count(FN));
-}
-
-// returns functions declarations required for taint analysis
-void AnalysisConsumer::getDeclsForTaintAnalysis(CallGraph &CG) {
-  std::set<FunctionDecl*> TaintedFunctions;
-  for (auto N = llvm::df_begin(&CG), EI = llvm::df_end(&CG); N != EI; N++) {
-    Decl *D = N->getDecl();
-    // Skip the abstract root node.
-    if (!D)
-      continue;
-
-    auto *FD = dyn_cast<FunctionDecl>(D);
-    if (!FD)
-      continue;
-    if (FD->getDefinition()) {
-      //llvm::errs() << "Visiting function: " << FD->getNameInfo().getAsString() << "\n";
-    }
-
-    for (auto Callee : N->callees()){
-      FunctionDecl *CFD = dyn_cast<FunctionDecl>(Callee.Callee->getDecl());
-      if (!CFD)
-        continue;
-      if (isTaintSource(CFD)){
-        TaintSourcePropagators.insert(FD);
-        TaintSources.insert(CFD);
-      }
-      if (isTaintSink(CFD)){
-        TaintSinkPropagators.insert(FD);
-        TaintSinks.insert(CFD);
-      }
-
-      if (TaintSinkPropagators.find(CFD)!=TaintSinkPropagators.end())//if child is tainted, the parent is also tainted
-        TaintSinkPropagators.insert(FD);
-
-      if (TaintSourcePropagators.find(CFD)!=TaintSourcePropagators.end())//if child is tainted, the parent is also tainted
-        TaintSourcePropagators.insert(FD);
-    }
-
-    /*if (isTaintSource(FD)||isTaintSink(FD)){
-      //llvm::errs()<<"Called Function "<<FD->getCanonicalDecl()->getNameAsString()<<" is tainted\n";
-      TaintedFunctions.insert(FD);
-    } else
-      //llvm::errs()<<"Called Function "<<FD->getCanonicalDecl()->getNameAsString()<<" is NOT tainted\n";*/
-
-  }
-}
-
 void AnalysisConsumer::getDeclsForSlicingAnalysis(CallGraph &CG) {
   std::set<FunctionDecl*> SlicingFunctions;
   for (auto N = llvm::df_begin(&CG), EI = llvm::df_end(&CG); N != EI; N++) {
@@ -595,44 +519,10 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
     CG.addToCallGraph(LocalTUDecls[i]);
   }
 
-  std::set<FunctionDecl*> TaintedTopLevelFunctions;
-  std::set<FunctionDecl*> TaintPropagatingFunctions;
-  if (Opts.AnalyzerFocusedTaint||Opts.AnalyzerInlineTaintOnly){
-    getDeclsForTaintAnalysis(CG);
-    for (auto D:TaintSourcePropagators){ // We only analyze functions which can reach both a source and a sink
-      if (TaintSinkPropagators.find(D)!=TaintSinkPropagators.end())
-        TaintedTopLevelFunctions.insert(D);
-    }
-
-    //llvm::errs()<<"Taint Sources:\n";
-    for (auto FD:TaintSources){
-      //llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
-    }
-
-    //llvm::errs()<<"Taint Sinks:\n";
-    for (auto FD:TaintSinks){
-      //llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
-    }
-
-    TaintPropagatingFunctions.insert(TaintSourcePropagators.begin(),TaintSourcePropagators.end());
-    TaintPropagatingFunctions.insert(TaintSinkPropagators.begin(),TaintSinkPropagators.end());
-    Mgr->setTaintRelatedFunctions(TaintPropagatingFunctions);
-    //llvm::errs()<<"Taint propagating TopLevel functions:\n";
-    for (FunctionDecl* FD:TaintedTopLevelFunctions){
-      //llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
-    }
-
-    //llvm::errs()<<"Taint Source propagating functions:\n";
-    for (FunctionDecl* FD:TaintSourcePropagators){
-      //llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
-    }
-
-    //llvm::errs()<<"Taint Sink propagating functions:\n";
-    for (FunctionDecl* FD:TaintSinkPropagators){
-      //llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
-    }
-
-  }
+  // --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
   std::set<FunctionDecl*> SlicingTopLevelFunctions;
   std::set<FunctionDecl*> SlicingFunctions;
   {
@@ -642,12 +532,16 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
         SlicingTopLevelFunctions.insert(D);
     }
 
+    llvm::errs()<<"===----------===\n";
     llvm::errs()<<"Slicing Sources:\n";
+    llvm::errs()<<"===----------===\n";
     for (auto *FD:SlicingSources){
       llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
     }
 
+    llvm::errs()<<"===----------===\n";
     llvm::errs()<<"Slicing Sinks:\n";
+    llvm::errs()<<"===----------===\n";
     for (auto *FD:SlicingSinks){
       llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
     }
@@ -655,22 +549,32 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
     SlicingFunctions.insert(SlicingSourcePropagators.begin(),SlicingSourcePropagators.end());
     SlicingFunctions.insert(SlicingSinkPropagators.begin(),SlicingSinkPropagators.end());
     Mgr->setSlicingRelatedFunctions(SlicingFunctions);
+    llvm::errs()<<"===----------===\n";
     llvm::errs()<<"Slicing propagating TopLevel functions:\n";
+    llvm::errs()<<"===----------===\n";
     for (FunctionDecl* FD:SlicingTopLevelFunctions){
       llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
     }
 
+    llvm::errs()<<"===----------===\n";
     llvm::errs()<<"Slicing Source propagating functions:\n";
+    llvm::errs()<<"===----------===\n";
     for (FunctionDecl* FD:SlicingSourcePropagators){
       llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
     }
 
+    llvm::errs()<<"===----------===\n";
     llvm::errs()<<"Slicing Sink propagating functions:\n";
+    llvm::errs()<<"===----------===\n";
     for (FunctionDecl* FD:SlicingSinkPropagators){
       llvm::errs()<<FD->getNameInfo().getAsString() << "\n";
     }
 
   }
+  // --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // --------------------------------------------------------------------------
 
   // Walk over all of the call graph nodes in topological order, so that we
   // analyze parents before the children. Skip the functions inlined into
@@ -692,14 +596,17 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
 
 
     bool MustAnalyze=false;
-    if (Opts.AnalyzerFocusedTaint){
-      auto *FD = dyn_cast<FunctionDecl>(D);
-      MustAnalyze = TaintedTopLevelFunctions.find(FD)!=TaintedTopLevelFunctions.end();
-    }
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
     {
       auto *FD = dyn_cast<FunctionDecl>(D);
       MustAnalyze = SlicingTopLevelFunctions.find(FD)!=SlicingTopLevelFunctions.end();
     }
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
+    //--------------------------------------------------------------------------
 
     // Skip the functions which have been processed already or previously
     // inlined.
@@ -718,27 +625,22 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
         continue;
     }
 
-    if (Opts.AnalyzerFocusedTaint) {
-      // if the function is not taint related skip it.
-      auto *FD = dyn_cast<FunctionDecl>(D);
-      if (TaintedTopLevelFunctions.find(FD) == TaintedTopLevelFunctions.end()) {
-        //llvm::errs()
-        //    << "Skipping not taint related function from the analysis:\n";
-        //llvm::errs() << FD->getNameInfo().getAsString() << "\n";
-        continue;
-      }
-    }
-
+    // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
     {
       // if the function is not slicing related skip it.
       auto *FD = dyn_cast<FunctionDecl>(D);
       if (SlicingTopLevelFunctions.find(FD) == SlicingTopLevelFunctions.end()) {
-        //llvm::errs()
-        //    << "Skipping not slicing related function from the analysis:\n";
-        //llvm::errs() << FD->getNameInfo().getAsString() << "\n";
+        llvm::errs()
+            << "Skipping not slicing related function from the analysis:\n";
+        llvm::errs() << FD->getNameInfo().getAsString() << "\n";
         continue;
       }
     }
+    // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
 
     // Analyze the function.
     SetOfConstDecls VisitedCallees;
