@@ -123,6 +123,20 @@ static std::optional<const Expr *> namedExpressionPresentInStmt(const Stmt *S,
   return *ExWithTheNameIt;
 }
 
+class SlicingCriterionReport : public PathSensitiveBugReport {
+  int x = 0;
+public:
+  SlicingCriterionReport(const BugType &bt, StringRef desc,
+                         const ExplodedNode *errorNode)
+      : PathSensitiveBugReport(bt, desc, errorNode) {}
+
+  void Profile(llvm::FoldingSetNodeID &hash) const override {
+    this->PathSensitiveBugReport::Profile(hash);
+    hash.AddPointer(&x);
+  }
+  
+};
+
 class SlicingCriterionChecker : public Checker<check::PreStmt<Stmt>> {
 public:
   SlicingCriterionOptions Opts;
@@ -162,7 +176,7 @@ public:
     //llvm::errs() << "Entering Slicing Criterion checker for stmt: "
     //             << S->getStmtClassName() << "\n";
     //std::vector<const Expr *> ExpressionsInStmt = findNamedExprsInStmt(S);
-    auto R = std::make_unique<PathSensitiveBugReport>(SlicingCriterionFound, OS.str(),
+    auto R = std::make_unique<SlicingCriterionReport>(SlicingCriterionFound, OS.str(),
                                                       ErrNode);
     bugreporter::trackExpressionValue(ErrNode, *Ex, *R);
     C.emitReport(std::move(R));

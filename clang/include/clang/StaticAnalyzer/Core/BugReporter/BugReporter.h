@@ -558,6 +558,8 @@ public:
 
   void Profile(llvm::FoldingSetNodeID& ID) const {
     assert(!Reports.empty());
+    int x;
+    ID.AddPointer(&x);
     Reports.front()->Profile(ID);
   }
 };

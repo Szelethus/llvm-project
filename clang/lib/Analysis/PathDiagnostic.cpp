@@ -109,7 +109,15 @@ void PathPieces::flattenTo(PathPieces &Primary, PathPieces &Current,
   }
 }
 
-PathDiagnostic::~PathDiagnostic() = default;
+PathDiagnostic::~PathDiagnostic() {
+  if (CheckerName != "alpha.core.SlicingCriterion")
+    return;
+  for (auto filenumbers : *ExecutedLines) {
+    for (int line : filenumbers.second) {
+      llvm::errs() << line << " Executed" << '\n';
+    }
+  }
+}
 
 PathDiagnostic::PathDiagnostic(
     StringRef CheckerName, const Decl *declWithIssue, StringRef bugtype,
