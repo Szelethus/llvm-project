@@ -25,23 +25,57 @@ def check_line_in_file(file_path, line_number):
 
 def check_variable_on_line(file_path, line_number, variable):
     line = list(open(file_path, "r"))[line_number - 1].rstrip()
-    if variable not in line.split():
+    if variable not in str(line):
         eprint(f"Error: Variable '{variable}' not found on line {line_number}.")
+        eprint(f"{line}")
         sys.exit(1)
     return line
+
+import tempfile
 
 def check_clang_format(file_path):
     if shutil.which("clang-format") is None:
         eprint("Error: clang-format is not installed.")
         sys.exit(1)
+
+    # Define the desired style
+    style_content = """\
+BasedOnStyle: LLVM
+IndentWidth: 4
+BinPackArguments: false
+BinPackParameters: false
+AllowShortFunctionsOnASingleLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortLambdasOnASingleLine: false
+"""
+
+    # Create a temporary file with the style
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as style_file:
+        style_file.write(style_content)
+        style_file_path = style_file.name
+
+    # Run clang-format with the temporary style
     result = subprocess.run(
-        ["clang-format", "-output-replacements-xml", file_path],
+        ["clang-format", f"-style=file:{style_file_path}", file_path],
         capture_output=True, text=True
     )
-    if "<replacement " in result.stdout:
-        eprint(f"Error: File '{file_path}' is not properly clang-formatted.")
+
+    # Read the original file
+    original_lines = open(file_path, "r").readlines()
+    formatted_lines = result.stdout.splitlines(keepends=True)
+
+    # Compare formatted vs original
+    if original_lines != formatted_lines:
+        eprint(f"Error: File '{file_path}' is not properly clang-formatted with the required style.")
+        eprint("To fix it, run:")
+        eprint(f"    clang-format -i -style=file:{style_file_path} {file_path}")
         sys.exit(1)
-    eprint(f"File '{file_path}' is properly clang-formatted.")
+
+    eprint(f"File '{file_path}' is properly clang-formatted with the required style.")
+
 
 def check_clang_and_checker(clang_bin):
     if shutil.which(clang_bin) is None:
@@ -68,12 +102,15 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable):
         "-Xclang", "-analyzer-disable-checker=optin"
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
-    if "SLICING CRITERION FOUND" not in result.stdout:
+    # Combine stdout and stderr to capture the slice output
+    analyzer_output = (result.stdout or "") + (result.stderr or "")
+    if "SLICING CRITERION FOUND" not in analyzer_output:
         eprint("Error: Slicing criterion not found.")
         eprint(result.stdout)
+        eprint("Command: " + ' '.join(cmd))
         sys.exit(1)
     eprint("Slicing criterion found by Clang static analyzer.")
-    return result.stdout
+    return analyzer_output
 
 def extract_slice_locations(analyzer_output):
     lines = [line.replace("Slicing loc: ", "") for line in analyzer_output.splitlines() if "Slicing loc:" in line]
