@@ -112,9 +112,17 @@ void PathPieces::flattenTo(PathPieces &Primary, PathPieces &Current,
 PathDiagnostic::~PathDiagnostic() {
   if (CheckerName != "alpha.core.SlicingCriterion")
     return;
+  if (!Loc.isValid())
+    return;
   for (auto filenumbers : *ExecutedLines) {
+    llvm::errs() << "a\n";
+    if (filenumbers.first.isInvalid())
+      continue;
     for (int line : filenumbers.second) {
-      llvm::errs() << line << " Executed" << '\n';
+      llvm::errs() << "Slicing loc: " << this->Loc.getManager()
+                          .getFileEntryRefForID(filenumbers.first)
+                          ->getName()
+                   << ' ' << line << '\n';
     }
   }
 }
