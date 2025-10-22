@@ -169,7 +169,7 @@ def print_slice_content(slice_locations, output_handle):
 
 def check_framac_available():
     if shutil.which("frama-c") is None:
-        eprint("Error: frama-c is not installed or not in PATH.")
+        eprint("Error: frama-c is not installed or not in PATH. Try: eval $(opam env)")
         sys.exit(1)
 
 def run_framac_slicer(function_name, file_path):
@@ -183,7 +183,7 @@ def run_framac_slicer(function_name, file_path):
         "-kernel-warn-key", "CERT:MSC:38=inactive",
         "-main", function_name,
         file_path,
-        "-slice-pragma", "objValue",
+        "-slice-pragma", function_name,
         "-slicing-level=2",
         "-then-on", "Slicing export",
         "-print"
@@ -191,6 +191,38 @@ def run_framac_slicer(function_name, file_path):
     result = subprocess.run(cmd, capture_output=True, text=True)
     output = (result.stdout or "") + (result.stderr or "")
     return result.returncode, output, cmd
+
+# --- New: run wrappers that perform the run + write the output file ---
+def run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_output_file):
+    """
+    Run the Clang analyzer, extract slice locations, and write the program slice lines
+    to clang_output_file (Path or str).
+    """
+    analyzer_output = run_clang_analyzer(clang_bin, input_path, line_no, var_name)
+    slice_locations = extract_slice_locations(analyzer_output)
+    try:
+        with open(clang_output_file, "w", encoding="utf-8") as outf:
+            print_slice_content(slice_locations, outf)
+        eprint(f"Clang program slice written to '{clang_output_file}'.")
+    except Exception as exc:
+        eprint(f"Error: Could not write clang slice to '{clang_output_file}': {exc}")
+        sys.exit(1)
+
+def run_and_write_framac(slice_function, input_path, framac_output_file):
+    """
+    Run Frama-C slicer and write its combined output to framac_output_file.
+    """
+    retcode, framac_output, framac_cmd = run_framac_slicer(slice_function, input_path)
+    try:
+        with open(framac_output_file, "w", encoding="utf-8") as outf:
+            outf.write(framac_output)
+        eprint(f"Frama-C slice output written to '{framac_output_file}'. (exit code: {retcode})")
+        if retcode != 0:
+            eprint("Warning: Frama-C returned a non-zero exit code. See output file for details.")
+            eprint("Command: " + ' '.join(framac_cmd))
+    except Exception as exc:
+        eprint(f"Error: Could not write Frama-C output to '{framac_output_file}': {exc}")
+        sys.exit(1)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Program slicing driver using Clang static analyzer and Frama-C")
@@ -218,6 +250,7 @@ def main():
     slice_function = args.slice_function
     output_dir = args.output
 
+    # --- initial checks (moved Frama-C binary+function checks here) ---
     check_file_exists(input_path)
     check_positive_int(line_no_str, "Line number")
     line_no = int(line_no_str)
@@ -225,6 +258,17 @@ def main():
     check_variable_on_line(input_path, line_no, var_name)
     check_clang_format(input_path)
     check_clang_and_checker(clang_bin)
+
+    # Frama-C checks are now part of initial checks
+    check_framac_available()
+    try:
+        file_text = open(input_path, "r", encoding="utf-8", errors="ignore").read()
+    except Exception as exc:
+        eprint(f"Error: Could not read input file '{input_path}' for Frama-C validation: {exc}")
+        sys.exit(1)
+    if slice_function not in file_text:
+        eprint(f"Error: slice function '{slice_function}' not found in input file '{input_path}'.")
+        sys.exit(1)
 
     # Ensure output directory exists
     outdir_path = Path(output_dir)
@@ -240,42 +284,10 @@ def main():
     framac_output_file = outdir_path / f"{input_basename}_framac_slice.txt"
 
     # Run Clang slicer and write the program slice to file
-    analyzer_output = run_clang_analyzer(clang_bin, input_path, line_no, var_name)
-    slice_locations = extract_slice_locations(analyzer_output)
+    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_output_file)
 
-    try:
-        with open(clang_output_file, "w", encoding="utf-8") as outf:
-            print_slice_content(slice_locations, outf)
-        eprint(f"Clang program slice written to '{clang_output_file}'.")
-    except Exception as exc:
-        eprint(f"Error: Could not write clang slice to '{clang_output_file}': {exc}")
-        sys.exit(1)
-
-    # Run Frama-C slicer
-    # Validate function name exists in file (simple substring check)
-    try:
-        file_text = open(input_path, "r", encoding="utf-8", errors="ignore").read()
-    except Exception as exc:
-        eprint(f"Error: Could not read input file '{input_path}' for Frama-C validation: {exc}")
-        sys.exit(1)
-
-    if slice_function not in file_text:
-        eprint(f"Error: slice function '{slice_function}' not found in input file '{input_path}'.")
-        sys.exit(1)
-
-    check_framac_available()
-    retcode, framac_output, framac_cmd = run_framac_slicer(slice_function, input_path)
-
-    try:
-        with open(framac_output_file, "w", encoding="utf-8") as outf:
-            outf.write(framac_output)
-        eprint(f"Frama-C slice output written to '{framac_output_file}'. (exit code: {retcode})")
-        if retcode != 0:
-            eprint("Warning: Frama-C returned a non-zero exit code. See output file for details.")
-            eprint("Command: " + ' '.join(framac_cmd))
-    except Exception as exc:
-        eprint(f"Error: Could not write Frama-C output to '{framac_output_file}': {exc}")
-        sys.exit(1)
+    # Run Frama-C slicer and write the output to file
+    run_and_write_framac(slice_function, input_path, framac_output_file)
 
 if __name__ == "__main__":
     main()
