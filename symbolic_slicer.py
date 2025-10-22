@@ -24,11 +24,35 @@ def check_line_in_file(file_path, line_number):
         sys.exit(1)
 
 def check_variable_on_line(file_path, line_number, variable):
-    line = list(open(file_path, "r"))[line_number - 1].rstrip()
-    if variable not in str(line):
-        eprint(f"Error: Variable '{variable}' not found on line {line_number}.")
-        eprint(f"{line}")
+    lines = open(file_path, "r").read().splitlines()
+
+    # Safety: ensure line number is valid
+    if line_number < 1 or line_number > len(lines):
+        eprint(f"Error: Line number {line_number} is out of range for '{file_path}'.")
         sys.exit(1)
+
+    # Check variable on the specified line
+    line = lines[line_number - 1].rstrip()
+    if variable not in line:
+        eprint(f"Error: Variable '{variable}' not found on line {line_number}.")
+        sys.exit(1)
+
+    # Check preceding line for the slice pragma comment
+    if line_number == 1:
+        eprint(f"Error: No preceding line for line {line_number}; missing slice pragma comment.")
+        sys.exit(1)
+
+    preceding_line = lines[line_number - 2].strip()
+    expected_comment = f"/*@ slice pragma expr {variable}; */"
+
+    if preceding_line != expected_comment:
+        eprint(
+            f"Error: Missing or incorrect slice pragma before line {line_number}.\n"
+            f"Expected (ignoring leading/trailing spaces):\n    {expected_comment}"
+        )
+        sys.exit(1)
+
+    eprint(f"Variable '{variable}' and required slice pragma found correctly at line {line_number}.")
     return line
 
 import tempfile
