@@ -2,6 +2,9 @@
 import sys
 import subprocess
 import shutil
+import argparse
+import tempfile
+import os
 from pathlib import Path
 
 def eprint(*args, **kwargs):
@@ -55,8 +58,6 @@ def check_variable_on_line(file_path, line_number, variable):
     eprint(f"Variable '{variable}' and required slice pragma found correctly at line {line_number}.")
     return line
 
-import tempfile
-
 def check_clang_format(file_path):
     if shutil.which("clang-format") is None:
         eprint("Error: clang-format is not installed.")
@@ -77,29 +78,40 @@ AllowShortLambdasOnASingleLine: false
 """
 
     # Create a temporary file with the style
-    with tempfile.NamedTemporaryFile(mode="w+", delete=False) as style_file:
-        style_file.write(style_content)
-        style_file_path = style_file.name
+    style_file_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as style_file:
+            style_file.write(style_content)
+            style_file_path = style_file.name
 
-    # Run clang-format with the temporary style
-    result = subprocess.run(
-        ["clang-format", f"-style=file:{style_file_path}", file_path],
-        capture_output=True, text=True
-    )
+        # Run clang-format with the temporary style
+        result = subprocess.run(
+            ["clang-format", f"-style=file:{style_file_path}", file_path],
+            capture_output=True, text=True
+        )
 
-    # Read the original file
-    original_lines = open(file_path, "r").readlines()
-    formatted_lines = result.stdout.splitlines(keepends=True)
+        # Read the original file
+        original_lines = open(file_path, "r").readlines()
+        formatted_lines = result.stdout.splitlines(keepends=True)
 
-    # Compare formatted vs original
-    if original_lines != formatted_lines:
-        eprint(f"Error: File '{file_path}' is not properly clang-formatted with the required style.")
-        eprint("To fix it, run:")
-        eprint(f"    clang-format -i -style=file:{style_file_path} {file_path}")
-        sys.exit(1)
+        # Compare formatted vs original
+        if original_lines != formatted_lines:
+            eprint(f"Error: File '{file_path}' is not properly clang-formatted with the required style.")
+            eprint("To fix it, run:")
+            eprint(f"    clang-format -i -style=file:{style_file_path} {file_path}")
+            # intentionally keep the style file so user can run the exact command shown
+            sys.exit(1)
 
-    eprint(f"File '{file_path}' is properly clang-formatted with the required style.")
-
+        eprint(f"File '{file_path}' is properly clang-formatted with the required style.")
+    finally:
+        # If formatting succeeded, remove the temporary style file; otherwise leave it for the user
+        if style_file_path and os.path.exists(style_file_path):
+            try:
+                # If we already concluded formatting matched, remove the style file
+                if 'result' in locals() and original_lines == formatted_lines:
+                    os.unlink(style_file_path)
+            except Exception:
+                pass
 
 def check_clang_and_checker(clang_bin):
     if shutil.which(clang_bin) is None:
@@ -144,7 +156,7 @@ def extract_slice_locations(analyzer_output):
         eprint(loc)
     return unique_sorted
 
-def print_slice_content(slice_locations):
+def print_slice_content(slice_locations, output_handle):
     for loc in slice_locations:
         file_name, line_number = loc.split()
         line_number = int(line_number)
@@ -153,28 +165,51 @@ def print_slice_content(slice_locations):
             eprint(f"Warning: File '{file_name}' not found, skipping.")
             continue
         line_content = list(open(file_path, "r"))[line_number - 1].rstrip()
-        print(f"{file_name}:{line_number}: {line_content}")
+        print(f"{file_name}:{line_number}: {line_content}", file=output_handle)
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Program slicing driver using Clang static analyzer")
+    parser.add_argument("-i", "--input", dest="input", required=True,
+                        help="Path to input source file")
+    parser.add_argument("-l", "--line_no", dest="line_no", required=True,
+                        help="Line number (1-based) for slicing criterion")
+    parser.add_argument("-v", "--var_name", dest="var_name", required=True,
+                        help="Variable name for slicing criterion")
+    parser.add_argument("-c", "--clang_bin", dest="clang_bin", default="clang",
+                        help="Clang binary to use (default: clang)")
+    parser.add_argument("-o", "--output", dest="output",
+                        help="If provided, write the program slice to this file (otherwise stdout)")
+    return parser.parse_args()
 
 def main():
-    if len(sys.argv) < 4 or len(sys.argv) > 5:
-        eprint("Usage: slice.py <file_location> <line_number> <variable_name> [clang_binary]")
-        sys.exit(1)
+    args = parse_args()
 
-    file_path = sys.argv[1]
-    line_number = sys.argv[2]
-    variable = sys.argv[3]
-    clang_bin = sys.argv[4] if len(sys.argv) == 5 else "clang"
+    input_path = args.input
+    line_no_str = args.line_no
+    var_name = args.var_name
+    clang_bin = args.clang_bin
+    output_path = args.output
 
-    check_file_exists(file_path)
-    check_positive_int(line_number, "Line number")
-    line_number = int(line_number)
-    check_line_in_file(file_path, line_number)
-    check_variable_on_line(file_path, line_number, variable)
-    check_clang_format(file_path)
+    check_file_exists(input_path)
+    check_positive_int(line_no_str, "Line number")
+    line_no = int(line_no_str)
+    check_line_in_file(input_path, line_no)
+    check_variable_on_line(input_path, line_no, var_name)
+    check_clang_format(input_path)
     check_clang_and_checker(clang_bin)
-    analyzer_output = run_clang_analyzer(clang_bin, file_path, line_number, variable)
+    analyzer_output = run_clang_analyzer(clang_bin, input_path, line_no, var_name)
     slice_locations = extract_slice_locations(analyzer_output)
-    print_slice_content(slice_locations)
+
+    if output_path:
+        try:
+            with open(output_path, "w", encoding="utf-8") as outf:
+                print_slice_content(slice_locations, outf)
+            eprint(f"Program slice written to '{output_path}'.")
+        except Exception as exc:
+            eprint(f"Error: Could not write to output file '{output_path}': {exc}")
+            sys.exit(1)
+    else:
+        print_slice_content(slice_locations, sys.stdout)
 
 if __name__ == "__main__":
     main()
