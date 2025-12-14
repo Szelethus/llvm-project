@@ -183,6 +183,21 @@ public:
   }
 };
 
+static StringRef rsplit2(StringRef str, StringRef sep1, StringRef sep2) {
+  StringRef tmp;
+  auto splits = str.rsplit(sep1);
+  if (splits.second.empty())
+    tmp = splits.first;
+  else
+    tmp = splits.second;
+  splits = tmp.rsplit(sep2);
+  if (splits.second.empty())
+    tmp = splits.first;
+  else
+    tmp = splits.second;
+  return tmp;
+}
+
 void clang::ento::registerSlicingCriterionChecker(
     clang::ento::CheckerManager &Mgr) {
   auto *Chk = Mgr.registerChecker<SlicingCriterionChecker>();
@@ -190,7 +205,11 @@ void clang::ento::registerSlicingCriterionChecker(
   const AnalyzerOptions &AnOpts = Mgr.getAnalyzerOptions();
   SlicingCriterionOptions &ChOpts = Chk->Opts;
   ChOpts.LineNumber = AnOpts.getCheckerIntegerOption(Chk, "LineNumber");
-  ChOpts.ExpressionName = AnOpts.getCheckerStringOption(Chk, "ExpressionName");
+  ChOpts.ExpressionName =
+      rsplit2(AnOpts.getCheckerStringOption(Chk, "ExpressionName"), ".", "->");
+
+  llvm::errs() << "note: Actual expression checked: " << ChOpts.ExpressionName
+               << '\n';
 }
 
 bool clang::ento::shouldRegisterSlicingCriterionChecker(

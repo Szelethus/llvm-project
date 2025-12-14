@@ -135,7 +135,8 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable):
         f"-Xclang", f"alpha.core.SlicingCriterion:ExpressionName={variable}",
         "-Xclang", "-analyzer-output=html",
         "-o", "htmloutput",
-        "-Xclang", "-analyzer-disable-checker=optin"
+        "-Xclang", "-analyzer-disable-checker=optin",
+        "-Wno-incompatible-function-pointer-types"
     ]
     result = subprocess.run(cmd, capture_output=True, text=True)
     # Combine stdout and stderr to capture the slice output
