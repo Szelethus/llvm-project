@@ -2801,46 +2801,12 @@ void ExprEngine::processBranch(
       continue;
 
     ProgramStateRef PrevState = PredN->getState();
-
-    ProgramStateRef StTrue = PrevState, StFalse = PrevState;
-    if (const auto KnownCondValueAssumption = assumeCondition(Condition, PredN))
-      std::tie(StTrue, StFalse) = *KnownCondValueAssumption;
-
-    if (StTrue && StFalse)
-      assert(!isa<ObjCForCollectionStmt>(Condition));
-
-    if (StTrue) {
-      // If we are processing a loop condition where two iterations have
-      // already been completed and the false branch is also feasible, then
-      // don't assume a third iteration because it is a redundant execution
-      // path (unlikely to be different from earlier loop exits) and can cause
-      // false positives if e.g. the loop iterates over a two-element structure
-      // with an opaque condition.
-      //
-      // The iteration count "2" is hardcoded because it's the natural limit:
-      // * the fact that the programmer wrote a loop (and not just an `if`)
-      //   implies that they thought that the loop body might be executed twice;
-      // * however, there are situations where the programmer knows that there
-      //   are at most two iterations but writes a loop that appears to be
-      //   generic, because there is no special syntax for "loop with at most
-      //   two iterations". (This pattern is common in FFMPEG and appears in
-      //   many other projects as well.)
-      bool CompletedTwoIterations = IterationsCompletedInLoop.value_or(0) >= 2;
-      bool FalseAlsoFeasible =
-          StFalse ||
-          didEagerlyAssumeBifurcateAt(PrevState, dyn_cast<Expr>(Condition));
-      bool SkipTrueBranch = CompletedTwoIterations && FalseAlsoFeasible;
-
-      // FIXME: This "don't assume third iteration" heuristic partially
-      // conflicts with the widen-loop analysis option (which is off by
-      // default). If we intend to support and stabilize the loop widening,
-      // we must ensure that it 'plays nicely' with this logic.
-      if (!SkipTrueBranch || AMgr.options.ShouldWidenLoops)
-        Builder.generateNode(StTrue, true, PredN);
-    }
-
-    if (StFalse)
-      Builder.generateNode(StFalse, false, PredN);
+    // Unconditionally generate both the true and the false branches to
+    // "eliminate path sensitivity" in some sense.
+    // NOTE: This may break Objective-C 'for' loops and perhaps some other
+    // things as well.
+    Builder.generateNode(PrevState, true, PredN);
+    Builder.generateNode(PrevState, false, PredN);
   }
   currBldrCtx = nullptr;
 }
