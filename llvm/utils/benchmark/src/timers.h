@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef BENCHMARK_TIMERS_H
 #define BENCHMARK_TIMERS_H
 

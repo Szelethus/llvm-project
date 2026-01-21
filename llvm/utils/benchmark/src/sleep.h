@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef BENCHMARK_SLEEP_H_
 #define BENCHMARK_SLEEP_H_
 

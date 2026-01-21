@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #include "benchmark/benchmark.h"
 
 void BM_empty(benchmark::State& state) {

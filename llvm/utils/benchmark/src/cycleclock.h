@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 // ----------------------------------------------------------------------
 // CycleClock
 //    A CycleClock tells you the current time in Cycles.  The "time"

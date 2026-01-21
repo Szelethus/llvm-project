@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef BENCHMARK_COMMANDLINEFLAGS_H_
 #define BENCHMARK_COMMANDLINEFLAGS_H_
 

@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef BENCHMARK_MUTEX_H_
 #define BENCHMARK_MUTEX_H_
 

@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #undef NDEBUG
 #include <cassert>
 #include <cstddef>

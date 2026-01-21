@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 // Testing:
 //   State::PauseTiming()
 //   State::ResumeTiming()

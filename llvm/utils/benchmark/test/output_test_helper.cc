@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <memory>
