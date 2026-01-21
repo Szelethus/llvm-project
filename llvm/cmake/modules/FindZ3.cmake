@@ -1,5 +1,7 @@
 INCLUDE(CheckCXXSourceRuns)
 
+set(Z3_VERSION_STRING "4.13.3")
+
 # Function to check Z3's version
 function(check_z3_version z3_include z3_lib)
   # The program that will be executed to print Z3's version.
