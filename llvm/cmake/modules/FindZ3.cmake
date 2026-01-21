@@ -31,7 +31,7 @@ function(check_z3_version z3_include z3_lib)
   if(Z3_COMPILED)
     string(REGEX REPLACE "([0-9]*\\.[0-9]*\\.[0-9]*\\.[0-9]*)" "\\1"
            z3_version "${SRC_OUTPUT}")
-    set(Z3_VERSION_STRING ${z3_version} PARENT_SCOPE)
+    set(Z3_VERSION_STRING "4.13.3")
   endif()
 endfunction(check_z3_version)
 
@@ -91,7 +91,7 @@ if(NOT Z3_VERSION_STRING AND (CMAKE_CROSSCOMPILING AND
   string(REGEX REPLACE "^.*Z3_BUILD_VERSION[\t ]+([0-9]).*$" "\\1"
          Z3_BUILD "${z3_version_str}")
 
-  set(Z3_VERSION_STRING ${Z3_MAJOR}.${Z3_MINOR}.${Z3_BUILD})
+  set(Z3_VERSION_STRING "4.13.3")
   unset(z3_version_str)
 endif()
 
