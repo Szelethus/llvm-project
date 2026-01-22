@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 // Copyright 2016 Ismael Jimenez Martinez. All rights reserved.
 // Copyright 2017 Roman Lebedev. All rights reserved.
 //

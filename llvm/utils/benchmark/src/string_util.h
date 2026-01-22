@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef BENCHMARK_STRING_UTIL_H_
 #define BENCHMARK_STRING_UTIL_H_
 

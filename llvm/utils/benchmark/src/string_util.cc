@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #include "string_util.h"
 
 #include <array>

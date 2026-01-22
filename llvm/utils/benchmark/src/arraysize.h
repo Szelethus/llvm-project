@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef BENCHMARK_ARRAYSIZE_H_
 #define BENCHMARK_ARRAYSIZE_H_
 

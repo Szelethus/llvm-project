@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #include <vector>
 
 #include "../src/benchmark_register.h"

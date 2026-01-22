@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef CHECK_H_
 #define CHECK_H_
 

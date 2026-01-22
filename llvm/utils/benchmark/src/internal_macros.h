@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef BENCHMARK_INTERNAL_MACROS_H_
 #define BENCHMARK_INTERNAL_MACROS_H_
 

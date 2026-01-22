@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef BENCHMARK_COLORPRINT_H_
 #define BENCHMARK_COLORPRINT_H_
 

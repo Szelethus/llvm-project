@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef TEST_OUTPUT_TEST_H
 #define TEST_OUTPUT_TEST_H
 

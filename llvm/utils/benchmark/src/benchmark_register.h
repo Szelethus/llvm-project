@@ -1,3 +1,5 @@
+#include <limits>
+#include <cstdint>
 #ifndef BENCHMARK_REGISTER_H
 #define BENCHMARK_REGISTER_H
 
