@@ -82,6 +82,10 @@ ANALYZER_OPTION(
 // Boolean analyzer options.
 //===----------------------------------------------------------------------===//
 
+ANALYZER_OPTION(bool, IsPathSensitive, "path-sensitive",
+                "Whether the analysis should be path-sensitive",
+                true)
+
 ANALYZER_OPTION(bool, ShouldIncludeImplicitDtorsInCFG, "cfg-implicit-dtors",
                 "Whether or not implicit destructors for C++ objects "
                 "should be included in the CFG.",

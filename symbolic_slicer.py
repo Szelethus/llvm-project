@@ -40,22 +40,7 @@ def check_variable_on_line(file_path, line_number, variable):
         eprint(f"Error: Variable '{variable}' not found on line {line_number}.")
         sys.exit(1)
 
-    # Check preceding line for the slice pragma comment
-    #if line_number == 1:
-    #    eprint(f"Error: No preceding line for line {line_number}; missing slice pragma comment.")
-    #    sys.exit(1)
-
-    #preceding_line = lines[line_number - 2].strip()
-    #expected_comment = f"/*@ slice pragma expr {variable}; */"
-
-    #if preceding_line != expected_comment:
-    #    eprint(
-    #        f"Error: Missing or incorrect slice pragma before line {line_number}.\n"
-    #        f"Expected (ignoring leading/trailing spaces):\n    {expected_comment}"
-    #    )
-    #    sys.exit(1)
-
-    eprint(f"Variable '{variable}' and required slice pragma found correctly at line {line_number}.")
+    eprint(f"Variable '{variable}' found correctly at line {line_number}.")
     return line
 
 def check_clang_format(file_path):
@@ -125,7 +110,7 @@ def check_clang_and_checker(clang_bin):
         eprint(f"Error: alpha.core.SlicingCriterion checker is not available in '{clang_bin}'.")
         sys.exit(1)
 
-def run_clang_analyzer(clang_bin, file_path, line_number, variable):
+def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensitive):
     cmd = [
         clang_bin, "-c", "--analyze", file_path,
         "-Xclang", "-analyzer-checker=alpha.core.SlicingCriterion",
@@ -133,12 +118,13 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable):
         f"-Xclang", f"alpha.core.SlicingCriterion:LineNumber={line_number}",
         "-Xclang", "-analyzer-config",
         f"-Xclang", f"alpha.core.SlicingCriterion:ExpressionName={variable}",
+        "-Xclang", "-analyzer-config",
+        f"-Xclang", f"path-sensitive={path_sensitive}",
         "-Xclang", "-analyzer-output=html",
         "-o", "htmloutput",
         "-Xclang", "-analyzer-disable-checker=optin",
         "-Wno-incompatible-function-pointer-types"
     ]
-    print("Running command: " + ' '.join(cmd))
     result = subprocess.run(cmd, capture_output=True, text=True)
     # Combine stdout and stderr to capture the slice output
     analyzer_output = (result.stdout or "") + (result.stderr or "")
@@ -164,14 +150,15 @@ def print_slice_content(slice_locations, output_handle):
             eprint(f"Warning: File '{file_name}' not found, skipping.")
             continue
         line_content = list(open(file_path, "r"))[line_number - 1].rstrip()
-        print(f"{file_name}:{line_number}: {line_content}", file=output_handle)
+        # Modified to print only the line number and content
+        print(f"{line_number}: {line_content}", file=output_handle)
 
-def run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_output_file):
+def run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_output_file, path_sensitive):
     """
     Run the Clang analyzer, extract slice locations, and write the program slice lines
     to clang_output_file (Path or str).
     """
-    analyzer_output = run_clang_analyzer(clang_bin, input_path, line_no, var_name)
+    analyzer_output = run_clang_analyzer(clang_bin, input_path, line_no, var_name, path_sensitive)
     slice_locations = extract_slice_locations(analyzer_output)
     try:
         with open(clang_output_file, "w", encoding="utf-8") as outf:
@@ -193,6 +180,8 @@ def parse_args():
                         help="Clang binary to use (default: clang)")
     parser.add_argument("-o", "--output", dest="output", required=True,
                         help="Output directory where slicer outputs will be written")
+    parser.add_argument("--path-sensitive", dest="path_sensitive", choices=["true", "false"], default="true",
+                        help="Enable or disable path-sensitive slicing (true/false, default: true)")
     return parser.parse_args()
 
 def main():
@@ -203,6 +192,7 @@ def main():
     var_name = args.var_name
     clang_bin = args.clang_bin
     output_dir = args.output
+    path_sensitive = args.path_sensitive
 
     # --- initial checks ---
     check_file_exists(input_path)
@@ -226,7 +216,7 @@ def main():
     clang_output_file = outdir_path / f"{input_basename}_clang_slice.txt"
 
     # Run Clang slicer and write the program slice to file
-    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_output_file)
+    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_output_file, path_sensitive)
 
 if __name__ == "__main__":
     main()
