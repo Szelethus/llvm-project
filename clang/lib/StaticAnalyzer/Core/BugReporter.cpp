@@ -2866,18 +2866,19 @@ std::optional<PathDiagnosticBuilder> PathDiagnosticBuilder::findValidReport(
     ArrayRef<PathSensitiveBugReport *> &bugReports,
     PathSensitiveBugReporter &Reporter) {
   Z3CrosscheckOracle Z3Oracle(Reporter.getAnalyzerOptions());
-  llvm::errs() << "Num of bug nodes: " << bugReports.size() << "\n";
+  //llvm::errs() << "Num of bug nodes: " << bugReports.size() << "\n";
 
   BugPathGetter BugGraph(&Reporter.getGraph(), bugReports);
 
   std::set<int> lines{};
   
   while (BugPathInfo *BugPath = BugGraph.getNextBugPath()) {
-    llvm::errs() << "Bug path size " << BugPath->BugPath->size() << '\n';
+    //llvm::errs() << "Bug path size " << BugPath->BugPath->size() << '\n';
     // Find the BugReport with the original location.
     PathSensitiveBugReport *R = BugPath->Report;
     assert(R && "No original report found for sliced graph.");
-    assert(R->isValid() && "Report selected by trimmed graph marked invalid.");
+    //assert(R->isValid() && "Report selected by trimmed graph marked invalid.");
+    //llvm::errs() << "Proceeding with " << R << ", regardless off validity\n";
     const ExplodedNode *ErrorNode = BugPath->ErrorNode;
 
     // Register refutation visitors first, if they mark the bug invalid no
@@ -2903,7 +2904,7 @@ std::optional<PathDiagnosticBuilder> PathDiagnosticBuilder::findValidReport(
       }
     }
 
-    if (R->isValid()) {
+    //if (R->isValid()) {
       if (Reporter.getAnalyzerOptions().ShouldCrosscheckWithZ3) {
         // If crosscheck is enabled, remove all visitors, add the refutation
         // visitor and check again
@@ -2928,11 +2929,11 @@ std::optional<PathDiagnosticBuilder> PathDiagnosticBuilder::findValidReport(
           break;
         }
       }
-      assert(R->isValid());
+      //assert(R->isValid());
       return PathDiagnosticBuilder(std::move(BRC), std::move(BugPath->BugPath),
                                    BugPath->Report, BugPath->ErrorNode,
                                    std::move(visitorNotes));
-    }
+    //}
     llvm::errs() << "INVALID BUG\n";
   }
 

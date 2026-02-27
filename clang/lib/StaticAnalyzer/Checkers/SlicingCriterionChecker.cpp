@@ -147,6 +147,7 @@ public:
     unsigned line = SM.getSpellingLineNumber(S->getBeginLoc());
     if (line != (unsigned)Opts.LineNumber)
       return;
+    llvm::errs() << "lineno found\n";
 
     // We know that we are in the correct line.
     std::optional<const Expr *> Ex = namedExpressionPresentInStmt(S, Opts.ExpressionName);

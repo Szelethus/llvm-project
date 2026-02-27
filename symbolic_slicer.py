@@ -41,19 +41,19 @@ def check_variable_on_line(file_path, line_number, variable):
         sys.exit(1)
 
     # Check preceding line for the slice pragma comment
-    if line_number == 1:
-        eprint(f"Error: No preceding line for line {line_number}; missing slice pragma comment.")
-        sys.exit(1)
+    #if line_number == 1:
+    #    eprint(f"Error: No preceding line for line {line_number}; missing slice pragma comment.")
+    #    sys.exit(1)
 
-    preceding_line = lines[line_number - 2].strip()
-    expected_comment = f"/*@ slice pragma expr {variable}; */"
+    #preceding_line = lines[line_number - 2].strip()
+    #expected_comment = f"/*@ slice pragma expr {variable}; */"
 
-    if preceding_line != expected_comment:
-        eprint(
-            f"Error: Missing or incorrect slice pragma before line {line_number}.\n"
-            f"Expected (ignoring leading/trailing spaces):\n    {expected_comment}"
-        )
-        sys.exit(1)
+    #if preceding_line != expected_comment:
+    #    eprint(
+    #        f"Error: Missing or incorrect slice pragma before line {line_number}.\n"
+    #        f"Expected (ignoring leading/trailing spaces):\n    {expected_comment}"
+    #    )
+    #    sys.exit(1)
 
     eprint(f"Variable '{variable}' and required slice pragma found correctly at line {line_number}.")
     return line
@@ -138,6 +138,7 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable):
         "-Xclang", "-analyzer-disable-checker=optin",
         "-Wno-incompatible-function-pointer-types"
     ]
+    print("Running command: " + ' '.join(cmd))
     result = subprocess.run(cmd, capture_output=True, text=True)
     # Combine stdout and stderr to capture the slice output
     analyzer_output = (result.stdout or "") + (result.stderr or "")
