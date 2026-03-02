@@ -15,6 +15,7 @@
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/Support/VirtualFileSystem.h"
 #include <algorithm>
 #include <iterator>
 #include <optional>
@@ -28,21 +29,18 @@
 using namespace clang;
 using namespace ento;
 
-struct FileIDLine : public llvm::FoldingSetNode {
+struct FileIDLine {
   FileID FID;
   unsigned LineNo;
 
   FileIDLine(FileID FID, unsigned LineNo) : FID(FID), LineNo(LineNo) {}
-
-
-  void Profile(llvm::FoldingSetNodeID &ID) const {
-    // FileID provides a convenient getHashValue() method that returns an unsigned
-    ID.AddInteger(FID.getHashValue());
-    ID.AddInteger(LineNo);
-  }
 };
 
-REGISTER_LIST_WITH_PROGRAMSTATE(LineList, FileIDLine);
+static bool operator<(const FileIDLine &lhs, const FileIDLine &rhs) {
+  if (lhs.FID == rhs.FID)
+    return lhs.LineNo < rhs.LineNo;
+  return lhs.FID < rhs.FID;
+}
 
 namespace slicing {
 class NamedExprVisitor : public RecursiveASTVisitor<NamedExprVisitor> {
@@ -162,6 +160,7 @@ static void printFileAndLine(llvm::raw_ostream &out, const SourceManager &SM,
 }
 
 class SlicingCriterionChecker : public Checker<check::PreStmt<Stmt>> {
+  mutable std::set<FileIDLine> s;
 public:
   SlicingCriterionOptions Opts;
   BugType SlicingCriterionFound{this, "SlicingCriterionFound", "SlicingCriterionFound"};
@@ -171,7 +170,7 @@ public:
     clang::FileID FID = SM.getFileID(SM.getSpellingLoc(S->getBeginLoc()));
     unsigned line = SM.getSpellingLineNumber(S->getBeginLoc());
   
-    C.addTransition(C.getState()->add<LineList>({FID, line}));
+    s.insert({FID, line});
 
     if (line != (unsigned)Opts.LineNumber)
       return;
@@ -207,7 +206,7 @@ public:
     auto R = std::make_unique<SlicingCriterionReport>(SlicingCriterionFound, OS.str(),
                                                       ErrNode);
     bugreporter::trackExpressionValue(ErrNode, *Ex, *R);
-    for (auto data : C.getState()->get<LineList>()) {
+    for (auto data : s) {
       llvm::errs() << "Executed: ";
       printFileAndLine(llvm::errs(), C.getSourceManager(), data.FID,
                        data.LineNo);
