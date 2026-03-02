@@ -119,10 +119,10 @@ PathDiagnostic::~PathDiagnostic() {
     if (filenumbers.first.isInvalid())
       continue;
     for (int line : filenumbers.second) {
-      llvm::errs() << "Slicing loc: " << this->Loc.getManager()
-                          .getFileEntryRefForID(filenumbers.first)
-                          ->getName()
-                   << ' ' << line << '\n';
+      llvm::StringRef fullPath =
+          Loc.getManager().getFileEntryRefForID(filenumbers.first)->getName();
+      //llvm::StringRef fileName = llvm::sys::path::filename(fullPath);
+      llvm::errs() << "Slicing loc: " << fullPath << ' ' << line << '\n';
     }
   }
 }
