@@ -221,8 +221,6 @@ def run_and_write_clang(clang_bin, input_path, line_no, var_name, slice_out_file
     exec_set = set(exec_locations)
     if not slice_set.issubset(exec_set):
         eprint(f"Warning: Slicing lines are NOT a strict subset of executed lines (path-sensitive={path_sensitive})!")
-        missing_from_exec = slice_set - exec_set
-        eprint(f"Lines in slice but missing from executed: {missing_from_exec}")
     else:
         eprint(f"Sanity Check Passed: Executed lines are a superset of slicing lines (path-sensitive={path_sensitive}).")
 
@@ -235,6 +233,8 @@ def run_and_write_clang(clang_bin, input_path, line_no, var_name, slice_out_file
     except Exception as exc:
         eprint(f"Error: Could not write output files: {exc}")
         sys.exit(1)
+        
+    return slice_locations, exec_locations
 
 def get_line_numbers(file_path):
     lines = set()
@@ -400,19 +400,30 @@ def main():
     clang_exec_pi = outdir_path / f"{input_basename}_clang_exec_path_insensitive.txt"
 
     # Run CodeChecker twice (path-sensitive and path-insensitive)
-    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_ps, clang_exec_ps, "true", compile_commands, extra_args)
-    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_pi, clang_exec_pi, "false", compile_commands, extra_args)
+    ps_slice_locs, ps_exec_locs = run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_ps, clang_exec_ps, "true", compile_commands, extra_args)
+    pi_slice_locs, pi_exec_locs = run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_pi, clang_exec_pi, "false", compile_commands, extra_args)
 
     # --- Analysis Output ---
     eprint("\n--- Analysis ---")
-    files_to_check = [clang_slice_ps, clang_slice_pi, clang_exec_ps, clang_exec_pi]
-    for out_file in files_to_check:
-        if out_file.exists():
-            with open(out_file, "r", encoding="utf-8") as f:
-                line_count = sum(1 for _ in f)
-            eprint(f"{out_file.name}: {line_count} lines")
-        else:
-            eprint(f"{out_file.name}: File not found.")
+    
+    def count_stats(locations_list):
+        size = len(locations_list)
+        file_count = len(set(loc.split()[0] for loc in locations_list if loc.strip()))
+        return size, file_count
+
+    pi_exec_size, pi_exec_files = count_stats(pi_exec_locs)
+    ps_exec_size, ps_exec_files = count_stats(ps_exec_locs)
+    pi_slice_size, pi_slice_files = count_stats(pi_slice_locs)
+    ps_slice_size, ps_slice_files = count_stats(ps_slice_locs)
+    
+    union_slices = set(ps_slice_locs) | set(pi_slice_locs)
+    union_size, union_files = count_stats(list(union_slices))
+
+    eprint(f"Insensitive exec size: {pi_exec_size}, file count: {pi_exec_files}")
+    eprint(f"Sensitive exec size: {ps_exec_size}, file count: {ps_exec_files}")
+    eprint(f"Insensitive slice size: {pi_slice_size}, file count: {pi_slice_files}")
+    eprint(f"Sensitive slice size: {ps_slice_size}, file count: {ps_slice_files}")
+    eprint(f"Union of sensitive and insensitive slices size: {union_size}, file count: {union_files}")
 
     # --- Generate HTML Report ---
     ps_slice_lines = get_line_numbers(clang_slice_ps)
@@ -425,4 +436,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
