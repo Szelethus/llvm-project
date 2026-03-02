@@ -6,6 +6,7 @@ import argparse
 import tempfile
 import os
 import html
+import json
 from pathlib import Path
 
 def eprint(*args, **kwargs):
@@ -113,6 +114,34 @@ def check_clang_and_checker(clang_bin):
         eprint(f"Error: alpha.core.SlicingCriterion checker is not available in '{clang_bin}'.")
         sys.exit(1)
 
+def check_codechecker_analyzer_path(clang_bin):
+    resolved_clang = shutil.which(clang_bin)
+    if not resolved_clang:
+        return  # Already caught by check_clang_and_checker
+
+    env = os.environ.copy()
+    env["CC_ANALYZER_BIN"] = f"clangsa:{resolved_clang}"
+
+    cmd = ["CodeChecker", "analyzers", "-o", "json"]
+    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    
+    try:
+        analyzers = json.loads(result.stdout)
+        for analyzer in analyzers:
+            if analyzer.get("name") == "clangsa":
+                cc_path = analyzer.get("path")
+                if Path(cc_path).resolve() != Path(resolved_clang).resolve():
+                    eprint(f"Error: CodeChecker 'clangsa' path '{cc_path}' does not match requested '{resolved_clang}'.")
+                    sys.exit(1)
+                eprint(f"Sanity check passed: CodeChecker matches provided clangsa binary at '{cc_path}'.")
+                return
+        eprint("Error: 'clangsa' analyzer not found in CodeChecker output.")
+        sys.exit(1)
+    except Exception as e:
+        eprint(f"Error checking CodeChecker analyzers: {e}")
+        eprint(f"Raw output: {result.stdout}")
+        sys.exit(1)
+
 def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensitive, extra_args):
     # Assemble the build command, interpolating the file path, extra args, and previous warnings
     extra_flags = " ".join(extra_args)
@@ -131,9 +160,12 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensiti
         "--verbose=debug_analyzer"
     ]
     
-    # Pass the clang binary via the environment variable
+    # Grab the absolute path to prevent CodeChecker version parsing errors
+    resolved_clang = shutil.which(clang_bin)
+    
+    # Pass the fully resolved path via the environment variable
     env = os.environ.copy()
-    env["CC_ANALYZER_BIN"] = f"clangsa:{clang_bin}"
+    env["CC_ANALYZER_BIN"] = f"clangsa:{resolved_clang}"
 
     result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     
@@ -276,6 +308,7 @@ def main():
     check_variable_on_line(input_path, line_no, var_name)
     check_clang_format(input_path)
     check_clang_and_checker(clang_bin)
+    check_codechecker_analyzer_path(clang_bin)
 
     # Ensure output directory exists
     outdir_path = Path(output_dir)
@@ -312,3 +345,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
