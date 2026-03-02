@@ -2,6 +2,7 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/Type.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/StaticAnalyzer/Checkers/BuiltinCheckerRegistration.h"
 #include "clang/StaticAnalyzer/Core/BugReporter/BugType.h"
 #include "clang/StaticAnalyzer/Core/Checker.h"
@@ -26,6 +27,22 @@
 // test.c -o outp
 using namespace clang;
 using namespace ento;
+
+struct FileIDLine : public llvm::FoldingSetNode {
+  FileID FID;
+  unsigned LineNo;
+
+  FileIDLine(FileID FID, unsigned LineNo) : FID(FID), LineNo(LineNo) {}
+
+
+  void Profile(llvm::FoldingSetNodeID &ID) const {
+    // FileID provides a convenient getHashValue() method that returns an unsigned
+    ID.AddInteger(FID.getHashValue());
+    ID.AddInteger(LineNo);
+  }
+};
+
+REGISTER_LIST_WITH_PROGRAMSTATE(LineList, FileIDLine);
 
 namespace slicing {
 class NamedExprVisitor : public RecursiveASTVisitor<NamedExprVisitor> {
@@ -137,6 +154,13 @@ public:
   
 };
 
+static void printFileAndLine(llvm::raw_ostream &out, const SourceManager &SM,
+                             FileID FID, int line) {
+  llvm::StringRef fullPath =
+      SM.getFileEntryRefForID(FID)->getName();
+  out << fullPath << ' ' << line;
+}
+
 class SlicingCriterionChecker : public Checker<check::PreStmt<Stmt>> {
 public:
   SlicingCriterionOptions Opts;
@@ -144,10 +168,13 @@ public:
 
   void checkPreStmt(const Stmt *S, CheckerContext &C) const {
     const SourceManager &SM = C.getSourceManager();
+    clang::FileID FID = SM.getFileID(SM.getSpellingLoc(S->getBeginLoc()));
     unsigned line = SM.getSpellingLineNumber(S->getBeginLoc());
+  
+    C.addTransition(C.getState()->add<LineList>({FID, line}));
+
     if (line != (unsigned)Opts.LineNumber)
       return;
-    llvm::errs() << "lineno found\n";
 
     // We know that we are in the correct line.
     std::optional<const Expr *> Ex = namedExpressionPresentInStmt(S, Opts.ExpressionName);
@@ -180,6 +207,12 @@ public:
     auto R = std::make_unique<SlicingCriterionReport>(SlicingCriterionFound, OS.str(),
                                                       ErrNode);
     bugreporter::trackExpressionValue(ErrNode, *Ex, *R);
+    for (auto data : C.getState()->get<LineList>()) {
+      llvm::errs() << "Executed: ";
+      printFileAndLine(llvm::errs(), C.getSourceManager(), data.FID,
+                       data.LineNo);
+      llvm::errs() << '\n';
+    }
     C.emitReport(std::move(R));
   }
 };

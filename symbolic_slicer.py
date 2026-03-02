@@ -179,13 +179,13 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensiti
     eprint(f"Slicing criterion found by CodeChecker (path-sensitive={path_sensitive}).")
     return analyzer_output
 
-def extract_slice_locations(analyzer_output):
-    lines = [line.replace("Slicing loc: ", "") for line in analyzer_output.splitlines() if "Slicing loc:" in line]
+def extract_locations(analyzer_output, marker):
+    lines = [line.replace(marker, "") for line in analyzer_output.splitlines() if marker in line]
     unique_sorted = sorted(set(lines), key=lambda x: (x.split()[0], int(x.split()[1])))
     return unique_sorted
 
-def print_slice_content(slice_locations, output_handle):
-    for loc in slice_locations:
+def print_locations(locations, output_handle):
+    for loc in locations:
         file_name, line_number = loc.split()
         line_number = int(line_number)
         file_path = Path(file_name)
@@ -195,22 +195,37 @@ def print_slice_content(slice_locations, output_handle):
         line_content = list(open(file_path, "r"))[line_number - 1].rstrip()
         print(f"{line_number}: {line_content}", file=output_handle)
 
-def run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_output_file, path_sensitive, extra_args):
+def run_and_write_clang(clang_bin, input_path, line_no, var_name, slice_out_file, exec_out_file, path_sensitive, extra_args):
     analyzer_output = run_clang_analyzer(clang_bin, input_path, line_no, var_name, path_sensitive, extra_args)
-    slice_locations = extract_slice_locations(analyzer_output)
+    
+    slice_locations = extract_locations(analyzer_output, "Slicing_loc: ")
+    exec_locations = extract_locations(analyzer_output, "Executed: ")
+
+    # Sanity check: Ensure slice is a subset of executed lines
+    slice_set = set(slice_locations)
+    exec_set = set(exec_locations)
+    if not slice_set.issubset(exec_set):
+        eprint(f"Warning: Slicing lines are NOT a strict subset of executed lines (path-sensitive={path_sensitive})!")
+        missing_from_exec = slice_set - exec_set
+        eprint(f"Lines in slice but missing from executed: {missing_from_exec}")
+    else:
+        eprint(f"Sanity Check Passed: Executed lines are a superset of slicing lines (path-sensitive={path_sensitive}).")
+
     try:
-        with open(clang_output_file, "w", encoding="utf-8") as outf:
-            print_slice_content(slice_locations, outf)
-        eprint(f"CodeChecker program slice written to '{clang_output_file}'.")
+        with open(slice_out_file, "w", encoding="utf-8") as outf:
+            print_locations(slice_locations, outf)
+        with open(exec_out_file, "w", encoding="utf-8") as outf:
+            print_locations(exec_locations, outf)
+        eprint(f"CodeChecker slice & execution files written for path-sensitive={path_sensitive}.")
     except Exception as exc:
-        eprint(f"Error: Could not write slice to '{clang_output_file}': {exc}")
+        eprint(f"Error: Could not write output files: {exc}")
         sys.exit(1)
 
-def get_slice_line_numbers(slice_file_path):
+def get_line_numbers(file_path):
     lines = set()
-    if not os.path.exists(slice_file_path):
+    if not os.path.exists(file_path):
         return lines
-    with open(slice_file_path, "r", encoding="utf-8") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
             if ":" in line:
                 try:
@@ -219,7 +234,7 @@ def get_slice_line_numbers(slice_file_path):
                     continue
     return lines
 
-def generate_html_report(input_path, ps_lines, pi_lines, html_output_path):
+def generate_html_report(input_path, ps_slice, pi_slice, ps_exec, pi_exec, html_output_path):
     with open(input_path, "r", encoding="utf-8", errors="replace") as f:
         source_lines = f.readlines()
 
@@ -230,7 +245,7 @@ def generate_html_report(input_path, ps_lines, pi_lines, html_output_path):
         "<meta charset=\"utf-8\">",
         "<title>Slice Comparison Report</title>",
         "<style>",
-        "  body { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background-color: #f5f5f5; padding: 20px; }",
+        "  body { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; background-color: #f5f5f5; padding: 20px; margin-right: 320px; }",
         "  .code-container { background: white; border: 1px solid #ddd; border-radius: 4px; padding: 10px; overflow-x: auto; }",
         "  .line-row { display: flex; }",
         "  .line-num { width: 45px; flex-shrink: 0; text-align: right; padding-right: 15px; color: #888; user-select: none; border-right: 1px solid #eee; margin-right: 15px; }",
@@ -238,39 +253,78 @@ def generate_html_report(input_path, ps_lines, pi_lines, html_output_path):
         "  .pi-only { background-color: #ffcdd2; } /* Soft Red */",
         "  .ps-only { background-color: #bbdefb; } /* Soft Blue */",
         "  .both { background-color: #81c784; } /* Stronger Green */",
-        "  .legend span { padding: 4px 8px; border-radius: 3px; margin-right: 10px; border: 1px solid #ccc; font-size: 14px; }",
+        "  .legend { position: fixed; top: 20px; right: 20px; width: 280px; background: white; padding: 15px; border: 1px solid #ccc; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; flex-direction: column; gap: 10px; }",
+        "  .toggle-btn { width: 100%; padding: 10px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-bottom: 5px; }",
+        "  .toggle-btn:hover { background: #555; }",
+        "  .legend-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.1); font-size: 14px; font-weight: bold; }",
+        "  .nav-btn { cursor: pointer; padding: 2px 8px; border: 1px solid #999; border-radius: 4px; background: #fff; margin-left: 6px; font-size: 12px; }",
+        "  .nav-btn:hover { background: #e0e0e0; }",
         "</style>",
         "</head>",
         "<body>",
         f"<h2>Slice Comparison: {html.escape(Path(input_path).name)}</h2>",
-        "<div class='legend' style='margin-bottom: 20px;'>",
-        "  <span class='pi-only'>Path-Insensitive Only</span>",
-        "  <span class='ps-only'>Path-Sensitive Only</span>",
-        "  <span class='both'>Both Slices</span>",
+        "<div class='legend'>",
+        "  <button id='modeToggle' class='toggle-btn' onclick='toggleMode()'>Switch to Executed Lines</button>",
+        "  <div class='legend-item pi-only'><span>Insensitive Only</span>",
+        "    <div><button class='nav-btn' onclick='jump(\"pi-only\", -1)'>▲</button><button class='nav-btn' onclick='jump(\"pi-only\", 1)'>▼</button></div>",
+        "  </div>",
+        "  <div class='legend-item ps-only'><span>Sensitive Only</span>",
+        "    <div><button class='nav-btn' onclick='jump(\"ps-only\", -1)'>▲</button><button class='nav-btn' onclick='jump(\"ps-only\", 1)'>▼</button></div>",
+        "  </div>",
+        "  <div class='legend-item both'><span>Both</span>",
+        "    <div><button class='nav-btn' onclick='jump(\"both\", -1)'>▲</button><button class='nav-btn' onclick='jump(\"both\", 1)'>▼</button></div>",
+        "  </div>",
         "</div>",
         "<div class='code-container'>"
     ]
 
-    for i, line_content in enumerate(source_lines, start=1):
-        in_ps = i in ps_lines
-        in_pi = i in pi_lines
+    def get_css_class(ps_set, pi_set, idx):
+        if idx in ps_set and idx in pi_set: return "both"
+        if idx in ps_set: return "ps-only"
+        if idx in pi_set: return "pi-only"
+        return ""
 
-        css_class = ""
-        if in_ps and in_pi:
-            css_class = "both"
-        elif in_ps:
-            css_class = "ps-only"
-        elif in_pi:
-            css_class = "pi-only"
+    for i, line_content in enumerate(source_lines, start=1):
+        slice_css = get_css_class(ps_slice, pi_slice, i)
+        exec_css = get_css_class(ps_exec, pi_exec, i)
 
         escaped_code = html.escape(line_content.rstrip('\n\r'))
         if not escaped_code:
             escaped_code = " "
 
-        row = f"<div class='line-row {css_class}'><div class='line-num'>{i}</div><div class='code'>{escaped_code}</div></div>"
+        # Write data attributes so JS can easily swap them
+        row = f"<div class='line-row {slice_css}' data-slice='{slice_css}' data-exec='{exec_css}'><div class='line-num'>{i}</div><div class='code'>{escaped_code}</div></div>"
         html_content.append(row)
 
-    html_content.extend(["</div>", "</body>", "</html>"])
+    html_content.extend([
+        "</div>",
+        "<script>",
+        "let isExecMode = false;",
+        "function toggleMode() {",
+        "  isExecMode = !isExecMode;",
+        "  document.getElementById('modeToggle').innerText = isExecMode ? 'Switch to Slicing Lines' : 'Switch to Executed Lines';",
+        "  const modeAttr = isExecMode ? 'data-exec' : 'data-slice';",
+        "  document.querySelectorAll('.line-row').forEach(row => {",
+        "    row.className = 'line-row ' + row.getAttribute(modeAttr);",
+        "  });",
+        "}",
+        "function jump(cls, dir) {",
+        "  const elements = Array.from(document.querySelectorAll('.' + cls + '.line-row'));",
+        "  if (!elements.length) return;",
+        "  let target = null;",
+        "  if (dir === 1) {",
+        "    target = elements.find(el => el.getBoundingClientRect().top > 60);",
+        "    if (!target) target = elements[0];",
+        "  } else {",
+        "    target = elements.slice().reverse().find(el => el.getBoundingClientRect().top < -10);",
+        "    if (!target) target = elements[elements.length - 1];",
+        "  }",
+        "  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });",
+        "}",
+        "</script>",
+        "</body>",
+        "</html>"
+    ])
 
     with open(html_output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(html_content))
@@ -320,16 +374,19 @@ def main():
 
     # Prepare output file paths
     input_basename = Path(input_path).name
-    clang_output_file_ps = outdir_path / f"{input_basename}_clang_slice_path_sensitive.txt"
-    clang_output_file_pi = outdir_path / f"{input_basename}_clang_slice_path_insensitive.txt"
+    clang_slice_ps = outdir_path / f"{input_basename}_clang_slice_path_sensitive.txt"
+    clang_slice_pi = outdir_path / f"{input_basename}_clang_slice_path_insensitive.txt"
+    clang_exec_ps = outdir_path / f"{input_basename}_clang_exec_path_sensitive.txt"
+    clang_exec_pi = outdir_path / f"{input_basename}_clang_exec_path_insensitive.txt"
 
-    # Run CodeChecker twice (path-sensitive and path-insensitive), passing extra_args
-    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_output_file_ps, "true", extra_args)
-    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_output_file_pi, "false", extra_args)
+    # Run CodeChecker twice (path-sensitive and path-insensitive)
+    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_ps, clang_exec_ps, "true", extra_args)
+    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_pi, clang_exec_pi, "false", extra_args)
 
     # --- Analysis Output ---
     eprint("\n--- Analysis ---")
-    for out_file in [clang_output_file_ps, clang_output_file_pi]:
+    files_to_check = [clang_slice_ps, clang_slice_pi, clang_exec_ps, clang_exec_pi]
+    for out_file in files_to_check:
         if out_file.exists():
             with open(out_file, "r", encoding="utf-8") as f:
                 line_count = sum(1 for _ in f)
@@ -338,11 +395,13 @@ def main():
             eprint(f"{out_file.name}: File not found.")
 
     # --- Generate HTML Report ---
-    ps_lines = get_slice_line_numbers(clang_output_file_ps)
-    pi_lines = get_slice_line_numbers(clang_output_file_pi)
+    ps_slice_lines = get_line_numbers(clang_slice_ps)
+    pi_slice_lines = get_line_numbers(clang_slice_pi)
+    ps_exec_lines = get_line_numbers(clang_exec_ps)
+    pi_exec_lines = get_line_numbers(clang_exec_pi)
+    
     html_report_file = outdir_path / f"{input_basename}_comparison.html"
-    generate_html_report(input_path, ps_lines, pi_lines, html_report_file)
+    generate_html_report(input_path, ps_slice_lines, pi_slice_lines, ps_exec_lines, pi_exec_lines, html_report_file)
 
 if __name__ == "__main__":
     main()
-

@@ -109,6 +109,13 @@ void PathPieces::flattenTo(PathPieces &Primary, PathPieces &Current,
   }
 }
 
+static void printFileAndLine(llvm::raw_ostream &out, const SourceManager &SM,
+                             FileID FID, int line) {
+  llvm::StringRef fullPath =
+      SM.getFileEntryRefForID(FID)->getName();
+  out << fullPath << ' ' << line;
+}
+
 PathDiagnostic::~PathDiagnostic() {
   if (CheckerName != "alpha.core.SlicingCriterion")
     return;
@@ -119,10 +126,10 @@ PathDiagnostic::~PathDiagnostic() {
     if (filenumbers.first.isInvalid())
       continue;
     for (int line : filenumbers.second) {
-      llvm::StringRef fullPath =
-          Loc.getManager().getFileEntryRefForID(filenumbers.first)->getName();
-      //llvm::StringRef fileName = llvm::sys::path::filename(fullPath);
-      llvm::errs() << "Slicing loc: " << fullPath << ' ' << line << '\n';
+      // llvm::StringRef fileName = llvm::sys::path::filename(fullPath);
+      llvm::errs() << "Slicing_loc: ";
+      printFileAndLine(llvm::errs(), Loc.getManager(), filenumbers.first, line);
+      llvm::errs() << '\n';
     }
   }
 }
