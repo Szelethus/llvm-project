@@ -169,6 +169,16 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensiti
 
     result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     
+    # Check if CodeChecker/Clang crashed or exited with error code 1
+    if result.returncode == 1:
+        eprint(f"Error: CodeChecker command failed with exit code {result.returncode}.")
+        eprint("Command: " + ' '.join(cmd))
+        eprint("\n--- stderr ---")
+        eprint(result.stderr.strip() if result.stderr else "(no stderr output)")
+        eprint("\n--- stdout ---")
+        eprint(result.stdout.strip() if result.stdout else "(no stdout output)")
+        sys.exit(result.returncode)
+    
     analyzer_output = (result.stdout or "") + (result.stderr or "")
     if "SLICING CRITERION FOUND" not in analyzer_output:
         eprint("Error: Slicing criterion not found.")
@@ -180,7 +190,8 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensiti
     return analyzer_output
 
 def extract_locations(analyzer_output, marker):
-    lines = [line.replace(marker, "") for line in analyzer_output.splitlines() if marker in line]
+    # Strictly check if the line starts with the marker to prevent false positives from code/warnings
+    lines = [line.strip().replace(marker, "") for line in analyzer_output.splitlines() if line.strip().startswith(marker)]
     unique_sorted = sorted(set(lines), key=lambda x: (x.split()[0], int(x.split()[1])))
     return unique_sorted
 
@@ -198,7 +209,7 @@ def print_locations(locations, output_handle):
 def run_and_write_clang(clang_bin, input_path, line_no, var_name, slice_out_file, exec_out_file, path_sensitive, extra_args):
     analyzer_output = run_clang_analyzer(clang_bin, input_path, line_no, var_name, path_sensitive, extra_args)
     
-    slice_locations = extract_locations(analyzer_output, "Slicing_loc: ")
+    slice_locations = extract_locations(analyzer_output, "Slicing loc: ")
     exec_locations = extract_locations(analyzer_output, "Executed: ")
 
     # Sanity check: Ensure slice is a subset of executed lines

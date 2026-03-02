@@ -127,7 +127,7 @@ PathDiagnostic::~PathDiagnostic() {
       continue;
     for (int line : filenumbers.second) {
       // llvm::StringRef fileName = llvm::sys::path::filename(fullPath);
-      llvm::errs() << "Slicing_loc: ";
+      llvm::errs() << "Slicing loc: ";
       printFileAndLine(llvm::errs(), Loc.getManager(), filenumbers.first, line);
       llvm::errs() << '\n';
     }

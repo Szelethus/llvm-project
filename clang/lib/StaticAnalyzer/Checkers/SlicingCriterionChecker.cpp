@@ -154,6 +154,8 @@ public:
 
 static void printFileAndLine(llvm::raw_ostream &out, const SourceManager &SM,
                              FileID FID, int line) {
+  assert(FID.isValid());
+  assert(SM.getFileEntryRefForID(FID).has_value());
   llvm::StringRef fullPath =
       SM.getFileEntryRefForID(FID)->getName();
   out << fullPath << ' ' << line;
@@ -207,6 +209,10 @@ public:
                                                       ErrNode);
     bugreporter::trackExpressionValue(ErrNode, *Ex, *R);
     for (auto data : s) {
+      if (data.FID.isInvalid())
+        continue;
+      if (!SM.getFileEntryRefForID(data.FID).has_value())
+        continue;
       llvm::errs() << "Executed: ";
       printFileAndLine(llvm::errs(), C.getSourceManager(), data.FID,
                        data.LineNo);
