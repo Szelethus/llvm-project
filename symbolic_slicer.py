@@ -142,24 +142,7 @@ def check_codechecker_analyzer_path(clang_bin):
         eprint(f"Raw output: {result.stdout}")
         sys.exit(1)
 
-def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensitive, extra_args):
-    # Assemble the build command, interpolating the file path, extra args, and previous warnings
-    extra_flags = " ".join(extra_args)
-    build_cmd = f"g++ {file_path} -c -Wno-incompatible-function-pointer-types {extra_flags}".strip()
-
-    cmd = [
-        "CodeChecker", "check",
-        "-b", build_cmd,
-        "-e", "alpha.core.SlicingCriterion",
-        "--checker-config", f"clangsa:alpha.core.SlicingCriterion:LineNumber={line_number}",
-        "--checker-config", f"clangsa:alpha.core.SlicingCriterion:ExpressionName={variable}",
-        "--analyzer-config", f"clangsa:path-sensitive={path_sensitive}",
-        "-d", "optin",
-        "-d", "unix",
-        "--analyzers", "clangsa",
-        "--verbose=debug_analyzer"
-    ]
-    
+def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensitive, compile_commands, extra_args):
     # Grab the absolute path to prevent CodeChecker version parsing errors
     resolved_clang = shutil.which(clang_bin)
     
@@ -167,7 +150,28 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensiti
     env = os.environ.copy()
     env["CC_ANALYZER_BIN"] = f"clangsa:{resolved_clang}"
 
-    result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    with tempfile.TemporaryDirectory() as temp_out_dir:
+        common_args = [
+            "-o", temp_out_dir,
+            "-e", "alpha.core.SlicingCriterion",
+            "--checker-config", f"clangsa:alpha.core.SlicingCriterion:LineNumber={line_number}",
+            "--checker-config", f"clangsa:alpha.core.SlicingCriterion:ExpressionName={variable}",
+            "--analyzer-config", f"clangsa:path-sensitive={path_sensitive}",
+            "-d", "optin",
+            "-d", "unix",
+            "--analyzers", "clangsa",
+            "--verbose=debug_analyzer"
+        ]
+
+        if compile_commands:
+            cmd = ["CodeChecker", "analyze", compile_commands, "--file", file_path] + common_args
+        else:
+            # Assemble the build command, interpolating the file path, extra args, and previous warnings
+            extra_flags = " ".join(extra_args)
+            build_cmd = f"g++ {file_path} -c -Wno-incompatible-function-pointer-types {extra_flags}".strip()
+            cmd = ["CodeChecker", "check", "-b", build_cmd] + common_args
+
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     
     # Check if CodeChecker/Clang crashed or exited with error code 1
     if result.returncode == 1:
@@ -206,8 +210,8 @@ def print_locations(locations, output_handle):
         line_content = list(open(file_path, "r"))[line_number - 1].rstrip()
         print(f"{line_number}: {line_content}", file=output_handle)
 
-def run_and_write_clang(clang_bin, input_path, line_no, var_name, slice_out_file, exec_out_file, path_sensitive, extra_args):
-    analyzer_output = run_clang_analyzer(clang_bin, input_path, line_no, var_name, path_sensitive, extra_args)
+def run_and_write_clang(clang_bin, input_path, line_no, var_name, slice_out_file, exec_out_file, path_sensitive, compile_commands, extra_args):
+    analyzer_output = run_clang_analyzer(clang_bin, input_path, line_no, var_name, path_sensitive, compile_commands, extra_args)
     
     slice_locations = extract_locations(analyzer_output, "Slicing loc: ")
     exec_locations = extract_locations(analyzer_output, "Executed: ")
@@ -354,6 +358,8 @@ def parse_args():
                         help="Clang binary to use (default: clang)")
     parser.add_argument("-o", "--output", dest="output", required=True,
                         help="Output directory where slicer outputs will be written")
+    parser.add_argument("--compile_commands", dest="compile_commands", default=None,
+                        help="Path to compile_commands.json (uses CodeChecker analyze if provided)")
     return parser.parse_known_args()
 
 def main():
@@ -364,9 +370,12 @@ def main():
     var_name = args.var_name
     clang_bin = args.clang_bin
     output_dir = args.output
+    compile_commands = args.compile_commands
 
     # --- initial checks ---
     check_file_exists(input_path)
+    if compile_commands:
+        check_file_exists(compile_commands)
     check_positive_int(line_no_str, "Line number")
     line_no = int(line_no_str)
     check_line_in_file(input_path, line_no)
@@ -391,8 +400,8 @@ def main():
     clang_exec_pi = outdir_path / f"{input_basename}_clang_exec_path_insensitive.txt"
 
     # Run CodeChecker twice (path-sensitive and path-insensitive)
-    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_ps, clang_exec_ps, "true", extra_args)
-    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_pi, clang_exec_pi, "false", extra_args)
+    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_ps, clang_exec_ps, "true", compile_commands, extra_args)
+    run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_pi, clang_exec_pi, "false", compile_commands, extra_args)
 
     # --- Analysis Output ---
     eprint("\n--- Analysis ---")
@@ -416,3 +425,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
