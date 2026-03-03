@@ -28,29 +28,11 @@ def check_line_in_file(file_path, line_number):
         eprint(f"Error: Line number {line_number} exceeds total lines ({total_lines}) in file.")
         sys.exit(1)
 
-def check_variable_on_line(file_path, line_number, variable):
-    lines = open(file_path, "r").read().splitlines()
-
-    # Safety: ensure line number is valid
-    if line_number < 1 or line_number > len(lines):
-        eprint(f"Error: Line number {line_number} is out of range for '{file_path}'.")
-        sys.exit(1)
-
-    # Check variable on the specified line
-    line = lines[line_number - 1].rstrip()
-    if variable not in line:
-        eprint(f"Error: Variable '{variable}' not found on line {line_number}.")
-        sys.exit(1)
-
-    eprint(f"Variable '{variable}' found correctly at line {line_number}.")
-    return line
-
-def check_clang_format(file_path):
+def auto_format_and_track_criterion(file_path, line_number, variable):
     if shutil.which("clang-format") is None:
         eprint("Error: clang-format is not installed.")
         sys.exit(1)
 
-    # Define the desired style
     style_content = """\
 BasedOnStyle: LLVM
 IndentWidth: 4
@@ -63,39 +45,80 @@ AllowShortBlocksOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortLambdasOnASingleLine: false
 """
+    tag = "/* CRITERION_TAG */"
 
-    # Create a temporary file with the style
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    # Safety: ensure line number is valid and variable is present
+    if line_number < 1 or line_number > len(lines):
+        eprint(f"Error: Line number {line_number} is out of range for '{file_path}'.")
+        sys.exit(1)
+        
+    if variable not in lines[line_number - 1]:
+        eprint(f"Error: Variable '{variable}' not found on line {line_number} before formatting.")
+        sys.exit(1)
+
+    # Append tracking tag
+    lines[line_number - 1] = lines[line_number - 1].rstrip('\n\r') + f" {tag}\n"
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
     style_file_path = None
     try:
         with tempfile.NamedTemporaryFile(mode="w+", delete=False) as style_file:
             style_file.write(style_content)
             style_file_path = style_file.name
 
-        # Run clang-format with the temporary style
-        result = subprocess.run(
-            ["clang-format", f"-style=file:{style_file_path}", file_path],
-            capture_output=True, text=True
+        # Format in-place
+        subprocess.run(
+            ["clang-format", "-i", f"-style=file:{style_file_path}", file_path],
+            capture_output=True, text=True, check=True
         )
-
-        # Read the original file
-        original_lines = open(file_path, "r").readlines()
-        formatted_lines = result.stdout.splitlines(keepends=True)
-
-        # Compare formatted vs original
-        if original_lines != formatted_lines:
-            eprint(f"Error: File '{file_path}' is not properly clang-formatted with the required style.")
-            eprint("To fix it, run:")
-            eprint(f"    clang-format -i -style=file:{style_file_path} {file_path}")
-            sys.exit(1)
-
-        eprint(f"File '{file_path}' is properly clang-formatted with the required style.")
+    except subprocess.CalledProcessError as e:
+        eprint(f"Error running clang-format: {e.stderr}")
+        sys.exit(1)
     finally:
         if style_file_path and os.path.exists(style_file_path):
             try:
-                if 'result' in locals() and original_lines == formatted_lines:
-                    os.unlink(style_file_path)
+                os.unlink(style_file_path)
             except Exception:
                 pass
+
+    # Read formatted file to locate the tag
+    with open(file_path, "r", encoding="utf-8") as f:
+        formatted_lines = f.readlines()
+
+    new_line_no = None
+    for i, line in enumerate(formatted_lines):
+        if tag in line:
+            # Strip the tag to clean up the source code
+            formatted_lines[i] = line.replace(f" {tag}", "").replace(tag, "")
+            
+            # If clang-format wrapped the line due to length, the variable might be on the line above
+            if variable in line:
+                new_line_no = i + 1
+            elif i > 0 and variable in formatted_lines[i - 1]:
+                new_line_no = i
+            else:
+                new_line_no = i + 1
+            break
+
+    if new_line_no is None:
+        eprint("Error: Could not find criterion tag after formatting. Auto-formatting failed.")
+        sys.exit(1)
+
+    # Write the cleaned lines back
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.writelines(formatted_lines)
+
+    if new_line_no != line_number:
+        eprint(f"File auto-formatted. Criterion moved from line {line_number} to {new_line_no}.")
+    else:
+        eprint("File auto-formatted. Criterion line number remained the same.")
+        
+    return new_line_no
 
 def check_clang_and_checker(clang_bin):
     if shutil.which("CodeChecker") is None:
@@ -189,8 +212,18 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensiti
     return analyzer_output
 
 def extract_locations(analyzer_output, marker):
-    lines = [line.strip().replace(marker, "") for line in analyzer_output.splitlines() if line.strip().startswith(marker)]
-    unique_sorted = sorted(set(lines), key=lambda x: (x.split()[0], int(x.split()[1])))
+    unique_dict = {}
+    for line in analyzer_output.splitlines():
+        line = line.strip()
+        if line.startswith(marker):
+            content = line.replace(marker, "", 1).strip()
+            parts = content.split()
+            if len(parts) >= 2:
+                key = (parts[0], int(parts[1]))
+                if key not in unique_dict:
+                    unique_dict[key] = content
+                    
+    unique_sorted = sorted(unique_dict.values(), key=lambda x: (x.split()[0], int(x.split()[1])))
     return unique_sorted
 
 def print_locations(locations, output_handle):
@@ -211,8 +244,9 @@ def run_and_write_clang(clang_bin, input_path, line_no, var_name, slice_out_file
     slice_locations = extract_locations(analyzer_output, "Slicing loc: ")
     exec_locations = extract_locations(analyzer_output, "Executed: ")
 
-    slice_set = set(slice_locations)
-    exec_set = set(exec_locations)
+    slice_set = set((loc.split()[0], int(loc.split()[1])) for loc in slice_locations)
+    exec_set = set((loc.split()[0], int(loc.split()[1])) for loc in exec_locations)
+    
     if not slice_set.issubset(exec_set):
         eprint(f"Warning: Slicing lines are NOT a strict subset of executed lines (path-sensitive={path_sensitive})!")
     else:
@@ -230,17 +264,14 @@ def run_and_write_clang(clang_bin, input_path, line_no, var_name, slice_out_file
         
     return slice_locations, exec_locations
 
-def get_line_numbers(file_path):
+def get_lines_for_file(locs, target_file):
     lines = set()
-    if not os.path.exists(file_path):
-        return lines
-    with open(file_path, "r", encoding="utf-8") as f:
-        for line in f:
-            if ":" in line:
-                try:
-                    lines.add(int(line.split(":")[0]))
-                except ValueError:
-                    continue
+    target_resolved = str(Path(target_file).resolve())
+    for loc in locs:
+        parts = loc.split()
+        if len(parts) >= 2:
+            if str(Path(parts[0]).resolve()) == target_resolved:
+                lines.add(int(parts[1]))
     return lines
 
 def generate_html_report(input_path, ps_slice, pi_slice, ps_exec, pi_exec, html_output_path):
@@ -371,8 +402,10 @@ def main():
     check_positive_int(line_no_str, "Line number")
     line_no = int(line_no_str)
     check_line_in_file(input_path, line_no)
-    check_variable_on_line(input_path, line_no, var_name)
-    check_clang_format(input_path)
+    
+    # Auto-format file and retrieve updated line number
+    line_no = auto_format_and_track_criterion(input_path, line_no, var_name)
+    
     check_clang_and_checker(clang_bin)
     check_codechecker_analyzer_path(clang_bin)
 
@@ -396,7 +429,8 @@ def main():
     
     def count_stats(locations_list):
         valid_locs = [loc.split() for loc in locations_list if loc.strip()]
-        size = len(valid_locs)
+        unique_lines = set((parts[0], int(parts[1])) for parts in valid_locs if len(parts) >= 2)
+        size = len(unique_lines)
         file_count = len(set(parts[0] for parts in valid_locs))
         func_count = len(set(parts[2] for parts in valid_locs if len(parts) >= 3))
         return size, file_count, func_count
@@ -415,10 +449,10 @@ def main():
     eprint(f"Sensitive slice size: {ps_slice_size}, file count: {ps_slice_files}, function count: {ps_slice_funcs}")
     eprint(f"Union of sensitive and insensitive slices size: {union_size}, file count: {union_files}, function count: {union_funcs}")
 
-    ps_slice_lines = get_line_numbers(clang_slice_ps)
-    pi_slice_lines = get_line_numbers(clang_slice_pi)
-    ps_exec_lines = get_line_numbers(clang_exec_ps)
-    pi_exec_lines = get_line_numbers(clang_exec_pi)
+    ps_slice_lines = get_lines_for_file(ps_slice_locs, input_path)
+    pi_slice_lines = get_lines_for_file(pi_slice_locs, input_path)
+    ps_exec_lines = get_lines_for_file(ps_exec_locs, input_path)
+    pi_exec_lines = get_lines_for_file(pi_exec_locs, input_path)
     
     html_report_file = outdir_path / f"{input_basename}_comparison.html"
     generate_html_report(input_path, ps_slice_lines, pi_slice_lines, ps_exec_lines, pi_exec_lines, html_report_file)

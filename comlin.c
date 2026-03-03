@@ -874,7 +874,7 @@ static ComlinStatus refresh_multi_line(ComlinState *const l,
 
         // Move the cursor up to the correct row if necessary
         size_t const rpos2 = (l->plen + l->pos + l->cols) / l->cols;
-        if (rows > rpos2) {
+        if (rows > rpos2) { /*slicing criterion*/
             buf_append_vtesc(&update, rows - rpos2, 'A');
         }
 
