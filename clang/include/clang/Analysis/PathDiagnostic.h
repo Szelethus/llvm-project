@@ -757,6 +757,10 @@ public:
 /// File IDs mapped to sets of line numbers.
 using FilesToLineNumsMap = std::map<FileID, std::set<unsigned>>;
 
+
+// The result map: FileID -> (Line Number -> Function Name)
+using LineToFunctionMap = std::map<clang::FileID, std::map<unsigned, std::string>>;
+
 /// PathDiagnostic - PathDiagnostic objects represent a single path-sensitive
 ///  diagnostic.  It represents an ordered-collection of PathDiagnosticPieces,
 ///  each which represent the pieces of the path.
@@ -787,6 +791,9 @@ class PathDiagnostic : public llvm::FoldingSetNode {
   std::unique_ptr<FilesToLineNumsMap> ExecutedLines;
 
 public:
+  LineToFunctionMap FunctionNames;
+  const ASTContext *Context;
+
   PathDiagnostic() = delete;
   PathDiagnostic(StringRef CheckerName, const Decl *DeclWithIssue,
                  StringRef bugtype, StringRef verboseDesc, StringRef shortDesc,

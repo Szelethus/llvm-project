@@ -32,8 +32,10 @@ using namespace ento;
 struct FileIDLine {
   FileID FID;
   unsigned LineNo;
+  std::string FnName;
 
-  FileIDLine(FileID FID, unsigned LineNo) : FID(FID), LineNo(LineNo) {}
+  FileIDLine(FileID FID, unsigned LineNo, std::string FnName)
+      : FID(FID), LineNo(LineNo), FnName(FnName) {}
 };
 
 static bool operator<(const FileIDLine &lhs, const FileIDLine &rhs) {
@@ -171,8 +173,14 @@ public:
     const SourceManager &SM = C.getSourceManager();
     clang::FileID FID = SM.getFileID(SM.getSpellingLoc(S->getBeginLoc()));
     unsigned line = SM.getSpellingLineNumber(S->getBeginLoc());
-  
-    s.insert({FID, line});
+ 
+    // Assuming 'SFC' is a const clang::StackFrameContext *
+    const clang::Decl *D = C.getStackFrame()->getDecl();
+    
+    // Automatically handles functions, methods, and blocks
+    std::string FuncName = clang::AnalysisDeclContext::getFunctionName(D);
+
+    s.insert({FID, line, FuncName});
 
     if (line != (unsigned)Opts.LineNumber)
       return;
@@ -216,7 +224,7 @@ public:
       llvm::errs() << "Executed: ";
       printFileAndLine(llvm::errs(), C.getSourceManager(), data.FID,
                        data.LineNo);
-      llvm::errs() << '\n';
+      llvm::errs() << ' ' << data.FnName << '\n';
     }
     C.emitReport(std::move(R));
   }

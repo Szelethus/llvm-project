@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/StaticAnalyzer/Core/BugReporter/BugReporter.h"
+#include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTTypeTraits.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
@@ -1968,8 +1969,64 @@ static void dropFunctionEntryEdge(const PathDiagnosticConstruct &C,
   Path.pop_front();
 }
 
+// The result map: FileID -> (Line Number -> Function Name)
+using LineToFunctionMap = std::map<clang::FileID, std::map<unsigned, std::string>>;
+
+#include "clang/AST/RecursiveASTVisitor.h"
+
+class LineToFunctionVisitor : public clang::RecursiveASTVisitor<LineToFunctionVisitor> {
+private:
+  const clang::SourceManager &SM;
+  const FilesToLineNumsMap &TargetMap;
+  LineToFunctionMap &Results;
+
+public:
+  LineToFunctionVisitor(const clang::SourceManager &SourceMgr,
+                        const FilesToLineNumsMap &Targets,
+                        LineToFunctionMap &OutResults)
+      : SM(SourceMgr), TargetMap(Targets), Results(OutResults) {}
+
+  // This method is called automatically for every function/method in the AST
+  bool VisitFunctionDecl(clang::FunctionDecl *FD) {
+    // We only care about actual function bodies, not forward declarations
+    if (!FD->isThisDeclarationADefinition() || !FD->hasBody())
+      return true; // Return true to continue the traversal
+
+    clang::SourceLocation Begin = FD->getBeginLoc();
+    clang::SourceLocation End = FD->getEndLoc();
+
+    if (Begin.isInvalid() || End.isInvalid())
+      return true;
+
+    // Get the physical file ID to avoid macro weirdness
+    clang::FileID FID = SM.getFileID(SM.getSpellingLoc(Begin));
+
+    // 1. Is this file even in our target list?
+    auto FileIt = TargetMap.find(FID);
+    if (FileIt == TargetMap.end())
+      return true; // Skip this function, it's in a file we don't care about
+
+    // 2. Get the line boundaries of the function
+    unsigned StartLine = SM.getSpellingLineNumber(Begin);
+    unsigned EndLine = SM.getSpellingLineNumber(End);
+
+    // 3. Check if any of our target line numbers fall inside this function
+    const std::set<unsigned> &TargetLines = FileIt->second;
+    for (unsigned Line : TargetLines) {
+      if (Line >= StartLine && Line <= EndLine) {
+        // We found a match! Store the fully qualified name (e.g., MyClass::MyFunc)
+        Results[FID][Line] = FD->getQualifiedNameAsString();
+      }
+    }
+
+    return true; // Continue traversing to find the rest
+  }
+};
+
 /// Populate executes lines with lines containing at least one diagnostics.
-static void updateExecutedLinesWithDiagnosticPieces(PathDiagnostic &PD) {
+static void updateExecutedLinesWithDiagnosticPieces(PathDiagnostic &PD,
+    const ASTContext &Context) {
+
 
   PathPieces path = PD.path.flatten(/*ShouldFlattenMacros=*/true);
   FilesToLineNumsMap &ExecutedLines = PD.getExecutedLines();
@@ -1981,6 +2038,19 @@ static void updateExecutedLinesWithDiagnosticPieces(PathDiagnostic &PD) {
     assert(FID.isValid());
     ExecutedLines[FID].insert(LineNo);
   }
+
+  // Assuming 'Context' is your clang::ASTContext
+  // Assuming 'TargetLines' is your populated FilesToLineNumsMap
+  
+  LineToFunctionMap FunctionNames;
+  LineToFunctionVisitor Visitor(Context.getSourceManager(), ExecutedLines, FunctionNames);
+  
+  // Start the magic sweep from the top of the AST
+  Visitor.TraverseDecl(Context.getTranslationUnitDecl());
+
+  PD.FunctionNames = FunctionNames;
+  
+  // Now 'FunctionNames' is populated with the matching names!
 }
 
 PathDiagnosticConstruct::PathDiagnosticConstruct(
@@ -3186,7 +3256,7 @@ void BugReporter::FlushReport(BugReportEquivClass& EQ) {
     for (const auto &I : report->getFixits())
       Pieces.back()->addFixit(I);
 
-    updateExecutedLinesWithDiagnosticPieces(*PD);
+    updateExecutedLinesWithDiagnosticPieces(*PD, getContext());
 
     // If we are debugging, let's have the entry point as the first note.
     if (getAnalyzerOptions().AnalyzerDisplayProgress ||

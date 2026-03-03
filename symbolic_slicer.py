@@ -86,7 +86,6 @@ AllowShortLambdasOnASingleLine: false
             eprint(f"Error: File '{file_path}' is not properly clang-formatted with the required style.")
             eprint("To fix it, run:")
             eprint(f"    clang-format -i -style=file:{style_file_path} {file_path}")
-            # intentionally keep the style file so user can run the exact command shown
             sys.exit(1)
 
         eprint(f"File '{file_path}' is properly clang-formatted with the required style.")
@@ -117,7 +116,7 @@ def check_clang_and_checker(clang_bin):
 def check_codechecker_analyzer_path(clang_bin):
     resolved_clang = shutil.which(clang_bin)
     if not resolved_clang:
-        return  # Already caught by check_clang_and_checker
+        return
 
     env = os.environ.copy()
     env["CC_ANALYZER_BIN"] = f"clangsa:{resolved_clang}"
@@ -143,10 +142,8 @@ def check_codechecker_analyzer_path(clang_bin):
         sys.exit(1)
 
 def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensitive, compile_commands, extra_args):
-    # Grab the absolute path to prevent CodeChecker version parsing errors
     resolved_clang = shutil.which(clang_bin)
     
-    # Pass the fully resolved path via the environment variable
     env = os.environ.copy()
     env["CC_ANALYZER_BIN"] = f"clangsa:{resolved_clang}"
 
@@ -166,14 +163,12 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensiti
         if compile_commands:
             cmd = ["CodeChecker", "analyze", compile_commands, "--file", file_path] + common_args
         else:
-            # Assemble the build command, interpolating the file path, extra args, and previous warnings
             extra_flags = " ".join(extra_args)
             build_cmd = f"g++ {file_path} -c -Wno-incompatible-function-pointer-types {extra_flags}".strip()
             cmd = ["CodeChecker", "check", "-b", build_cmd] + common_args
 
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
     
-    # Check if CodeChecker/Clang crashed or exited with error code 1
     if result.returncode == 1:
         eprint(f"Error: CodeChecker command failed with exit code {result.returncode}.")
         eprint("Command: " + ' '.join(cmd))
@@ -194,15 +189,15 @@ def run_clang_analyzer(clang_bin, file_path, line_number, variable, path_sensiti
     return analyzer_output
 
 def extract_locations(analyzer_output, marker):
-    # Strictly check if the line starts with the marker to prevent false positives from code/warnings
     lines = [line.strip().replace(marker, "") for line in analyzer_output.splitlines() if line.strip().startswith(marker)]
     unique_sorted = sorted(set(lines), key=lambda x: (x.split()[0], int(x.split()[1])))
     return unique_sorted
 
 def print_locations(locations, output_handle):
     for loc in locations:
-        file_name, line_number = loc.split()
-        line_number = int(line_number)
+        parts = loc.split()
+        file_name = parts[0]
+        line_number = int(parts[1])
         file_path = Path(file_name)
         if not file_path.is_file():
             eprint(f"Warning: File '{file_name}' not found, skipping.")
@@ -216,7 +211,6 @@ def run_and_write_clang(clang_bin, input_path, line_no, var_name, slice_out_file
     slice_locations = extract_locations(analyzer_output, "Slicing loc: ")
     exec_locations = extract_locations(analyzer_output, "Executed: ")
 
-    # Sanity check: Ensure slice is a subset of executed lines
     slice_set = set(slice_locations)
     exec_set = set(exec_locations)
     if not slice_set.issubset(exec_set):
@@ -307,7 +301,6 @@ def generate_html_report(input_path, ps_slice, pi_slice, ps_exec, pi_exec, html_
         if not escaped_code:
             escaped_code = " "
 
-        # Write data attributes so JS can easily swap them
         row = f"<div class='line-row {slice_css}' data-slice='{slice_css}' data-exec='{exec_css}'><div class='line-num'>{i}</div><div class='code'>{escaped_code}</div></div>"
         html_content.append(row)
 
@@ -372,7 +365,6 @@ def main():
     output_dir = args.output
     compile_commands = args.compile_commands
 
-    # --- initial checks ---
     check_file_exists(input_path)
     if compile_commands:
         check_file_exists(compile_commands)
@@ -384,7 +376,6 @@ def main():
     check_clang_and_checker(clang_bin)
     check_codechecker_analyzer_path(clang_bin)
 
-    # Ensure output directory exists
     outdir_path = Path(output_dir)
     try:
         outdir_path.mkdir(parents=True, exist_ok=True)
@@ -392,40 +383,38 @@ def main():
         eprint(f"Error: Could not create output directory '{output_dir}': {exc}")
         sys.exit(1)
 
-    # Prepare output file paths
     input_basename = Path(input_path).name
     clang_slice_ps = outdir_path / f"{input_basename}_clang_slice_path_sensitive.txt"
     clang_slice_pi = outdir_path / f"{input_basename}_clang_slice_path_insensitive.txt"
     clang_exec_ps = outdir_path / f"{input_basename}_clang_exec_path_sensitive.txt"
     clang_exec_pi = outdir_path / f"{input_basename}_clang_exec_path_insensitive.txt"
 
-    # Run CodeChecker twice (path-sensitive and path-insensitive)
     ps_slice_locs, ps_exec_locs = run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_ps, clang_exec_ps, "true", compile_commands, extra_args)
     pi_slice_locs, pi_exec_locs = run_and_write_clang(clang_bin, input_path, line_no, var_name, clang_slice_pi, clang_exec_pi, "false", compile_commands, extra_args)
 
-    # --- Analysis Output ---
     eprint("\n--- Analysis ---")
     
     def count_stats(locations_list):
-        size = len(locations_list)
-        file_count = len(set(loc.split()[0] for loc in locations_list if loc.strip()))
-        return size, file_count
+        valid_locs = [loc.split() for loc in locations_list if loc.strip()]
+        size = len(valid_locs)
+        file_count = len(set(parts[0] for parts in valid_locs))
+        func_count = len(set(parts[2] for parts in valid_locs if len(parts) >= 3))
+        return size, file_count, func_count
 
-    pi_exec_size, pi_exec_files = count_stats(pi_exec_locs)
-    ps_exec_size, ps_exec_files = count_stats(ps_exec_locs)
-    pi_slice_size, pi_slice_files = count_stats(pi_slice_locs)
-    ps_slice_size, ps_slice_files = count_stats(ps_slice_locs)
+    pi_exec_size, pi_exec_files, pi_exec_funcs = count_stats(pi_exec_locs)
+    ps_exec_size, ps_exec_files, ps_exec_funcs = count_stats(ps_exec_locs)
+    pi_slice_size, pi_slice_files, pi_slice_funcs = count_stats(pi_slice_locs)
+    ps_slice_size, ps_slice_files, ps_slice_funcs = count_stats(ps_slice_locs)
     
     union_slices = set(ps_slice_locs) | set(pi_slice_locs)
-    union_size, union_files = count_stats(list(union_slices))
+    union_size, union_files, union_funcs = count_stats(list(union_slices))
 
-    eprint(f"Insensitive exec size: {pi_exec_size}, file count: {pi_exec_files}")
-    eprint(f"Sensitive exec size: {ps_exec_size}, file count: {ps_exec_files}")
-    eprint(f"Insensitive slice size: {pi_slice_size}, file count: {pi_slice_files}")
-    eprint(f"Sensitive slice size: {ps_slice_size}, file count: {ps_slice_files}")
-    eprint(f"Union of sensitive and insensitive slices size: {union_size}, file count: {union_files}")
+    eprint(f"Insensitive exec size: {pi_exec_size}, file count: {pi_exec_files}, function count: {pi_exec_funcs}")
+    eprint(f"Sensitive exec size: {ps_exec_size}, file count: {ps_exec_files}, function count: {ps_exec_funcs}")
+    eprint(f"Insensitive slice size: {pi_slice_size}, file count: {pi_slice_files}, function count: {pi_slice_funcs}")
+    eprint(f"Sensitive slice size: {ps_slice_size}, file count: {ps_slice_files}, function count: {ps_slice_funcs}")
+    eprint(f"Union of sensitive and insensitive slices size: {union_size}, file count: {union_files}, function count: {union_funcs}")
 
-    # --- Generate HTML Report ---
     ps_slice_lines = get_line_numbers(clang_slice_ps)
     pi_slice_lines = get_line_numbers(clang_slice_pi)
     ps_exec_lines = get_line_numbers(clang_exec_ps)
@@ -433,6 +422,16 @@ def main():
     
     html_report_file = outdir_path / f"{input_basename}_comparison.html"
     generate_html_report(input_path, ps_slice_lines, pi_slice_lines, ps_exec_lines, pi_exec_lines, html_report_file)
+
+    output_data = {
+        "file": input_basename,
+        "pi_exec": {"size": pi_exec_size, "files": pi_exec_files, "functions": pi_exec_funcs},
+        "ps_exec": {"size": ps_exec_size, "files": ps_exec_files, "functions": ps_exec_funcs},
+        "pi_slice": {"size": pi_slice_size, "files": pi_slice_files, "functions": pi_slice_funcs},
+        "ps_slice": {"size": ps_slice_size, "files": ps_slice_files, "functions": ps_slice_funcs},
+        "union": {"size": union_size, "files": union_files, "functions": union_funcs}
+    }
+    print(json.dumps(output_data))
 
 if __name__ == "__main__":
     main()

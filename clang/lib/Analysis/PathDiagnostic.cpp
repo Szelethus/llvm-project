@@ -47,6 +47,10 @@
 #include <utility>
 #include <vector>
 
+#include "clang/AST/ASTContext.h"
+#include "clang/AST/RecursiveASTVisitor.h"
+
+
 using namespace clang;
 using namespace ento;
 
@@ -116,20 +120,21 @@ static void printFileAndLine(llvm::raw_ostream &out, const SourceManager &SM,
   out << fullPath << ' ' << line;
 }
 
+
 PathDiagnostic::~PathDiagnostic() {
   if (CheckerName != "alpha.core.SlicingCriterion")
     return;
   if (!Loc.isValid())
     return;
-  for (auto filenumbers : *ExecutedLines) {
+  for (auto filenumbers : FunctionNames) {
     llvm::errs() << "a\n";
     if (filenumbers.first.isInvalid())
       continue;
-    for (int line : filenumbers.second) {
+    for (auto &[line, filename] : filenumbers.second) {
       // llvm::StringRef fileName = llvm::sys::path::filename(fullPath);
       llvm::errs() << "Slicing loc: ";
       printFileAndLine(llvm::errs(), Loc.getManager(), filenumbers.first, line);
-      llvm::errs() << '\n';
+      llvm::errs() << ' ' << filename << '\n';
     }
   }
 }
