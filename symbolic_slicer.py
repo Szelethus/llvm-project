@@ -7,6 +7,7 @@ import tempfile
 import os
 import html
 import json
+import re
 from pathlib import Path
 
 def eprint(*args, **kwargs):
@@ -17,18 +18,7 @@ def check_file_exists(file_path):
         eprint(f"Error: File '{file_path}' does not exist.")
         sys.exit(1)
 
-def check_positive_int(value, name):
-    if not value.isdigit() or int(value) <= 0:
-        eprint(f"Error: {name} must be a positive integer.")
-        sys.exit(1)
-
-def check_line_in_file(file_path, line_number):
-    total_lines = sum(1 for _ in open(file_path, "r"))
-    if line_number > total_lines:
-        eprint(f"Error: Line number {line_number} exceeds total lines ({total_lines}) in file.")
-        sys.exit(1)
-
-def auto_format_and_track_criterion(file_path, line_number, variable):
+def format_and_find_criterion(file_path, variable):
     if shutil.which("clang-format") is None:
         eprint("Error: clang-format is not installed.")
         sys.exit(1)
@@ -45,25 +35,8 @@ AllowShortBlocksOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
 AllowShortLambdasOnASingleLine: false
 """
-    tag = "/* CRITERION_TAG */"
-
-    with open(file_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    # Safety: ensure line number is valid and variable is present
-    if line_number < 1 or line_number > len(lines):
-        eprint(f"Error: Line number {line_number} is out of range for '{file_path}'.")
-        sys.exit(1)
-        
-    if variable not in lines[line_number - 1]:
-        eprint(f"Error: Variable '{variable}' not found on line {line_number} before formatting.")
-        sys.exit(1)
-
-    # Append tracking tag
-    lines[line_number - 1] = lines[line_number - 1].rstrip('\n\r') + f" {tag}\n"
-
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.writelines(lines)
+    # Use a regex to robustly match variations like /* Slicing Criterion */ or /*slicing criterion*/
+    tag_re = re.compile(r'/\*\s*slicing\s+criterion\s*\*/', re.IGNORECASE)
 
     style_file_path = None
     try:
@@ -92,32 +65,27 @@ AllowShortLambdasOnASingleLine: false
 
     new_line_no = None
     for i, line in enumerate(formatted_lines):
-        if tag in line:
-            # Strip the tag to clean up the source code
-            formatted_lines[i] = line.replace(f" {tag}", "").replace(tag, "")
-            
-            # If clang-format wrapped the line due to length, the variable might be on the line above
+        if tag_re.search(line):
+            # Check if variable is on the same line, or got wrapped to the line before
             if variable in line:
                 new_line_no = i + 1
+                break
             elif i > 0 and variable in formatted_lines[i - 1]:
                 new_line_no = i
-            else:
+                break
+
+    # Fallback if variable wasn't directly adjacent, just grab the first tag found
+    if new_line_no is None:
+        for i, line in enumerate(formatted_lines):
+            if tag_re.search(line):
                 new_line_no = i + 1
-            break
+                break
 
     if new_line_no is None:
-        eprint("Error: Could not find criterion tag after formatting. Auto-formatting failed.")
+        eprint(f"Error: Could not find '/*slicing criterion*/' tag in '{file_path}'. Did you run the annotation script?")
         sys.exit(1)
 
-    # Write the cleaned lines back
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.writelines(formatted_lines)
-
-    if new_line_no != line_number:
-        eprint(f"File auto-formatted. Criterion moved from line {line_number} to {new_line_no}.")
-    else:
-        eprint("File auto-formatted. Criterion line number remained the same.")
-        
+    eprint(f"File auto-formatted. Slicing criterion found at line {new_line_no}.")
     return new_line_no
 
 def check_clang_and_checker(clang_bin):
@@ -374,8 +342,6 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Program slicing driver using CodeChecker")
     parser.add_argument("-i", "--input", dest="input", required=True,
                         help="Path to input source file")
-    parser.add_argument("-l", "--line_no", dest="line_no", required=True,
-                        help="Line number (1-based) for slicing criterion")
     parser.add_argument("-v", "--var_name", dest="var_name", required=True,
                         help="Variable name for slicing criterion")
     parser.add_argument("-c", "--clang_bin", dest="clang_bin", default="clang",
@@ -390,7 +356,6 @@ def main():
     args, extra_args = parse_args()
 
     input_path = args.input
-    line_no_str = args.line_no
     var_name = args.var_name
     clang_bin = args.clang_bin
     output_dir = args.output
@@ -399,12 +364,9 @@ def main():
     check_file_exists(input_path)
     if compile_commands:
         check_file_exists(compile_commands)
-    check_positive_int(line_no_str, "Line number")
-    line_no = int(line_no_str)
-    check_line_in_file(input_path, line_no)
     
-    # Auto-format file and retrieve updated line number
-    line_no = auto_format_and_track_criterion(input_path, line_no, var_name)
+    # Auto-format file and retrieve line number from tag
+    line_no = format_and_find_criterion(input_path, var_name)
     
     check_clang_and_checker(clang_bin)
     check_codechecker_analyzer_path(clang_bin)

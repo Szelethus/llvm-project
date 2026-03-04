@@ -3,99 +3,149 @@
     {
       "input_file": "~/Documents/test_projects/tmux/client.c",
       "compile_commands": "~/Documents/test_projects/tmux/compile_commands.json",
-      "line_number": 310,
       "variable": "msg",
       "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
       "input_file": "~/Documents/test_projects/tmux/input.c",
       "compile_commands": "~/Documents/test_projects/tmux/compile_commands.json",
-      "line_number": 1197,
       "variable": "ictx",
       "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
       "input_file": "~/Documents/test_projects/tmux/input.c",
       "compile_commands": "~/Documents/test_projects/tmux/compile_commands.json",
-      "line_number": 1308,
       "variable": "ictx",
       "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
       "input_file": "~/Documents/test_projects/tmux/screen-write.c",
       "compile_commands": "~/Documents/test_projects/tmux/compile_commands.json",
-      "line_number": 1021,
       "variable": "xx",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/tmux/window.c",
+      "compile_commands": "~/Documents/test_projects/tmux/compile_commands.json",
+      "variable": "next",
       "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
       "input_file": "~/Documents/test_projects/tmux/cmd-set-option.c",
       "compile_commands": "~/Documents/test_projects/tmux/compile_commands.json",
-      "line_number": 285,
       "variable": "optstr",
       "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
       "input_file": "~/Documents/test_projects/xerces-c/src/xercesc/internal/DGXMLScanner.cpp",
       "compile_commands": "~/Documents/test_projects/xerces-c/build/compile_commands.json",
-      "line_number": 2827,
       "variable": "toUse",
       "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
       "input_file": "~/Documents/test_projects/xerces-c/src/xercesc/framework/XMLFormatter.cpp",
       "compile_commands": "~/Documents/test_projects/xerces-c/build/compile_commands.json",
-      "line_number": 371,
       "variable": "srcPtr",
       "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
       "input_file": "~/Documents/test_projects/xerces-c/src/xercesc/validators/schema/TraverseSchema.cpp",
       "compile_commands": "~/Documents/test_projects/xerces-c/build/compile_commands.json",
-      "line_number": 9875,
       "variable": "typeInfo",
       "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
-      "input_file": "~/Documents/llvm-project/comlin.c",
-      "line_number": 877,
+      "input_file": "~/Documents/test_projects/xerces-c/src/xercesc/validators/DTD/DTDValidator.cpp",
+      "compile_commands": "~/Documents/test_projects/xerces-c/build/compile_commands.json",
+      "variable": "lastPtr",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/xerces-c/src/xercesc/validators/DTD/DTDScanner.cpp",
+      "compile_commands": "~/Documents/test_projects/xerces-c/build/compile_commands.json",
+      "variable": "gotEncoding",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/comlin/src/comlin.c",
+      "compile_commands": "~/Documents/test_projects/comlin/compile_commands.json",
       "variable": "rows",
-      "clang_bin": "releaseBuild/bin/clang",
-      "output_dir": "slicing_results"
+      "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
-      "input_file": "~/Documents/llvm-project/slicing_files/stb_perlinCut.c",
-      "line_number": 344,
-      "variable": "n000",
-      "clang_bin": "releaseBuild/bin/clang",
-      "output_dir": "slicing_results"
-    },
-    {
-      "input_file": "~/Documents/llvm-project/slicing_files/tiny-jsonModEntryNoHeaders.c",
-      "line_number": 505,
+      "input_file": "~/Documents/test_projects/tiny-json/tiny-json.c",
       "variable": "ptr",
-      "clang_bin": "releaseBuild/bin/clang",
-      "output_dir": "slicing_results"
+      "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
-      "input_file": "~/Documents/llvm-project/slicing_files/linenoiseNoStdDef.c",
-      "line_number": 696,
+      "input_file": "~/Documents/test_projects/linenoise/linenoise.c",
+      "compile_commands": "~/Documents/test_projects/linenoise/compile_commands.json",
       "variable": "ab",
-      "clang_bin": "releaseBuild/bin/clang",
-      "output_dir": "slicing_results"
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/stb/stb_perlin.c",
+      "variable": "n000",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
       "input_file": "~/Documents/test_projects/libwebm/mkvparser.cpp",
       "compile_commands": "~/Documents/test_projects/libwebm/build/compile_commands.json",
-      "line_number": 7821,
       "variable": "pos",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/libwebm/sample_muxer.cpp",
+      "compile_commands": "~/Documents/test_projects/libwebm/build/compile_commands.json",
+      "variable": "cluster",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/libwebm/sample.cpp",
+      "compile_commands": "~/Documents/test_projects/libwebm/build/compile_commands.json",
+      "variable": "status",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/libwebm/mkvmuxerutil.cpp",
+      "compile_commands": "~/Documents/test_projects/libwebm/build/compile_commands.json",
+      "variable": "value",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/libwebm/mkvmuxer.cpp",
+      "compile_commands": "~/Documents/test_projects/libwebm/build/compile_commands.json",
+      "variable": "frames_size_",
       "output_dir": "~/Documents/llvm-project/slicing_results"
     },
     {
       "input_file": "~/Documents/test_projects/FFmpeg/libavcodec/sanm.c",
       "compile_commands": "~/Documents/test_projects/FFmpeg/compile_commands.json",
-      "line_number": 669,
       "variable": "glyph8_x",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/FFmpeg/libavcodec/rv34.c",
+      "compile_commands": "~/Documents/test_projects/FFmpeg/compile_commands.json",
+      "variable": "offset",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/FFmpeg/libavcodec/sonic.c",
+      "compile_commands": "~/Documents/test_projects/FFmpeg/compile_commands.json",
+      "variable": "avctx",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/FFmpeg/libavcodec/tiffenc.c",
+      "compile_commands": "~/Documents/test_projects/FFmpeg/compile_commands.json",
+      "variable": "ptr",
+      "output_dir": "~/Documents/llvm-project/slicing_results"
+    },
+    {
+      "input_file": "~/Documents/test_projects/FFmpeg/libavcodec/wmv2dec.c",
+      "compile_commands": "~/Documents/test_projects/FFmpeg/compile_commands.json",
+      "variable": "h",
       "output_dir": "~/Documents/llvm-project/slicing_results"
     }
   ]
